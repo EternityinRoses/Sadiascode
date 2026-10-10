@@ -336,3 +336,8 @@ dialog::backdrop { background: rgba(30, 20, 60, 0.35); }
 .settings-form label.switch input { width: 20px; height: 20px; accent-color: var(--accent); }
 .warn { color: #c0506c; }
 .chip.auto { color: #c0506c; border-color: #f2b6c6; font-weight: 700; }
+
+/* the user's side: the column holding pictures + bubble may take 85% of the row,
+   and the bubble inside it sizes to its text (short words no longer squish) */
+.user-wrap { display: flex; flex-direction: column; align-items: flex-end; max-width: 85%; min-width: 0; }
+.msg.user .bubble { max-width: 100%; }

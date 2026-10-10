@@ -104,7 +104,7 @@ function userBubble(text, files) {
     b.className = "bubble"; b.textContent = text;
     wrap.append(b);
   }
-  wrap.style.display = "flex"; wrap.style.flexDirection = "column"; wrap.style.alignItems = "flex-end";
+  wrap.className = "user-wrap";
   row.append(wrap);
   messagesEl.append(row);
   scrollDown();
