@@ -2260,6 +2260,22 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"arrived": check_mailbox()})
             except Exception as e:
                 return self.send_json({"error": str(e)})
+        if path == "/api/profile":
+            # The page may only change the USER's picture and name. Cloude changes its
+            # own by editing static/profile.json with its file tools.
+            prof_file = STATIC_DIR / "profile.json"
+            try:
+                prof = json.loads(prof_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                prof = {}
+            me = prof.setdefault("user", {})
+            if isinstance(body.get("name"), str):
+                me["name"] = body["name"].strip()[:40]
+            pic = body.get("pic")
+            if isinstance(pic, str) and (pic == "" or re.fullmatch(r"/uploads/[A-Za-z0-9._-]+", pic)):
+                me["pic"] = pic
+            write_whole(prof_file, json.dumps(prof, indent=2))
+            return self.send_json(prof)
         if path == "/api/restart":
             self.send_json({"ok": True})
             threading.Timer(0.5, restart).start()
