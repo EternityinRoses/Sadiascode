@@ -2510,7 +2510,7 @@ def commit_self_edits():
         activity("saved Cloude's own file changes to git")
 
 
-NOTES_FILES = {"memory.md", "wishlist.md", "cloud_reply.md"}
+NOTES_FILES = {"memory.md", "wishlist.md", "cloud_reply.md", "changes.md"}
 
 
 def is_notes(f):
