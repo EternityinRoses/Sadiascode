@@ -1,2 +1,0 @@
-### 336297ad game 6ba355
-ACT: FOLLOW
