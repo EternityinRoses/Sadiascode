@@ -2005,13 +2005,15 @@ def deliver_mail(from_id, to_id, text, reply):
                 chat.setdefault("inbox", []).append(text)
                 save_chat(chat)
                 return
-            got = {"text": ""}
+            got = {"text": "", "errors": []}
 
             def emit(ev):
                 if ev.get("type") == "text":
                     got["text"] += ev["text"]
                 elif ev.get("type") == "tool_start":
                     got["text"] = ""
+                elif ev.get("type") == "error":
+                    got["errors"].append(ev.get("text", ""))
 
             ACTIVE_TURNS += 1
             try:
@@ -2019,6 +2021,14 @@ def deliver_mail(from_id, to_id, text, reply):
             finally:
                 ACTIVE_TURNS -= 1
             answer = got["text"].strip()
+            if got["errors"]:
+                # errors only go to a live page, and nobody is watching this turn: keep them
+                note = "⚠ " + " ".join(got["errors"])
+                chat = load_chat(to_id)
+                chat["display"].append({"role": "assistant", "text": note, "thoughts": "", "tools": []})
+                save_chat(chat)
+                if not answer:
+                    answer = f"(This chat hit an error and couldn't answer: {' '.join(got['errors'])})"
     except Exception as e:
         if not reply:
             try:
