@@ -152,6 +152,26 @@
   </form>
 </dialog>
 
+<dialog id="profileDlg">
+  <div class="settings-form">
+    <h2>Your picture</h2>
+    <div class="prof-row">
+      <div class="avatar big" id="profPreview" data-who="user"></div>
+      <div class="prof-btns">
+        <label class="ghost-btn">Choose picture…<input type="file" id="profFile" accept="image/*" hidden></label>
+        <button type="button" class="ghost-btn" id="profClear">No picture</button>
+      </div>
+    </div>
+    <label>Name
+      <input type="text" id="profName" maxlength="40" placeholder="Your name">
+    </label>
+    <div class="actions">
+      <button type="button" class="ghost" id="profCancel">Cancel</button>
+      <button type="button" id="profSave">Save</button>
+    </div>
+  </div>
+</dialog>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

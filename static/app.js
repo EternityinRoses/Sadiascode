@@ -83,11 +83,87 @@ function markdown(src) {
   return html;
 }
 
+// ---------------------------------------------------------------- profiles --
+// Forum-style pictures with a name under them. static/profile.json holds both:
+// the user changes theirs from here (click it), Cloude edits its own in the file.
+let profile = { user: { name: "You", pic: "" }, cloude: { name: "Cloude", pic: "" } };
+let profileRaw = "";
+
+function fillAvatar(el) {
+  const who = el.dataset.who;
+  const p = who === "game" ? { name: "Game", pic: "" } : (profile[who] || {});
+  const name = p.name || (who === "user" ? "You" : "Cloude");
+  el.innerHTML = "";
+  const pic = document.createElement("div");
+  pic.className = "av-pic";
+  if (p.pic) {
+    const img = document.createElement("img"); img.src = p.pic; img.alt = name; pic.append(img);
+  } else if (who === "cloude") {
+    pic.innerHTML = MASCOT;
+  } else if (who === "game") {
+    pic.textContent = "🎲"; pic.classList.add("letter");
+  } else {
+    pic.textContent = name.trim().charAt(0).toUpperCase() || "?"; pic.classList.add("letter");
+  }
+  const label = document.createElement("div");
+  label.className = "av-name"; label.textContent = name;
+  el.append(pic, label);
+}
+
+function avatar(who) {
+  const el = document.createElement("div");
+  el.className = "avatar"; el.dataset.who = who;
+  if (who === "user") { el.title = "Change your picture and name"; el.onclick = openProfile; }
+  fillAvatar(el);
+  return el;
+}
+
+async function loadProfile() {
+  try {
+    const raw = await (await fetch("/static/profile.json", { cache: "no-store" })).text();
+    if (raw === profileRaw) return;
+    profileRaw = raw;
+    const p = JSON.parse(raw);
+    profile = { user: { ...profile.user, ...(p.user || {}) }, cloude: { ...profile.cloude, ...(p.cloude || {}) } };
+    document.querySelectorAll(".avatar").forEach(fillAvatar);
+  } catch (e) { /* keep the old one */ }
+}
+loadProfile();
+setInterval(loadProfile, 5000);      // Cloude may change its own picture mid-chat
+
+let profilePic = null;               // picture chosen in the dialog, not saved yet
+function openProfile() {
+  profilePic = null;
+  $("profName").value = profile.user.name || "";
+  const prev = $("profPreview");
+  prev.dataset.who = "user"; fillAvatar(prev);
+  $("profileDlg").showModal();
+}
+$("profFile").onchange = async (e) => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file || !file.type.startsWith("image/")) return;
+  const dataURL = await readAsDataURL(file);
+  const res = await post("/api/upload", { name: file.name, mime: file.type, data: dataURL.split(",")[1] });
+  if (res.error) return;
+  profilePic = res.url;
+  $("profPreview").querySelector(".av-pic").innerHTML = `<img src="${esc(res.url)}" alt="">`;
+};
+$("profClear").onclick = () => { profilePic = ""; const p = $("profPreview").querySelector(".av-pic"); p.innerHTML = ""; p.textContent = "?"; };
+$("profCancel").onclick = () => $("profileDlg").close();
+$("profSave").onclick = async () => {
+  const body = { name: $("profName").value };
+  if (profilePic !== null) body.pic = profilePic;
+  await post("/api/profile", body);
+  profileRaw = "";
+  await loadProfile();
+  $("profileDlg").close();
+};
+
 // ------------------------------------------------------------------ render --
 function scrollDown() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 function hideEmpty() { const e = $("empty"); if (e) e.style.display = "none"; }
 
-function userBubble(text, files) {
+function userBubble(text, files, game) {
   hideEmpty();
   const row = document.createElement("div");
   row.className = "msg user";
@@ -114,7 +190,7 @@ function userBubble(text, files) {
     wrap.append(b);
   }
   wrap.className = "user-wrap";
-  row.append(wrap);
+  row.append(wrap, avatar(game ? "game" : "user"));
   messagesEl.append(row);
   scrollDown();
 }
@@ -124,7 +200,7 @@ function assistantBubble() {
   hideEmpty();
   const row = document.createElement("div");
   row.className = "msg assistant";
-  row.innerHTML = MASCOT;
+  row.append(avatar("cloude"));
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   const thoughts = document.createElement("details");
@@ -305,7 +381,7 @@ async function openChat(id) {
   clearMessages();
   liveView = null;
   for (const d of chat.display) {
-    if (d.role === "user") userBubble(d.text, d.files);
+    if (d.role === "user") userBubble(d.text, d.files, d.game);
     else assistantBubble().setAll(d);
   }
   shownLen = chat.display.length;
@@ -339,7 +415,7 @@ setInterval(async () => {
     if (chat.display.length !== shownLen) {
       dropLive();
       for (const d of chat.display.slice(shownLen)) {
-        if (d.role === "user") userBubble(d.text, d.files);
+        if (d.role === "user") userBubble(d.text, d.files, d.game);
         else assistantBubble().setAll(d);
       }
       shownLen = chat.display.length;
@@ -556,7 +632,7 @@ async function showNewCloudReplies() {
   const chat = await (await fetch(`/api/chats/${chatId}`)).json();
   const fresh = chat.display.slice(shownLen);
   for (const d of fresh) {
-    if (d.role === "user") userBubble(d.text, d.files);
+    if (d.role === "user") userBubble(d.text, d.files, d.game);
     else assistantBubble().setAll(d);
   }
   shownLen = chat.display.length;
