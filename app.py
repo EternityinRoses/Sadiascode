@@ -1612,6 +1612,28 @@ def take_notes(seat, text):
     return re.sub(r"\n{2,}", "\n", NOTE_RE.sub("", text)).strip()
 
 
+def new_reports(chat, seat, folder):
+    """What the game added to REPORTS.md (errors, warnings, fight results) since the
+    seat was last shown it, from a byte offset kept per seat (wishlist #3)."""
+    path = folder / "REPORTS.md"
+    offsets = chat.setdefault("seat_reports", {})
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return ""
+    start = offsets.get(seat, 0)
+    if start > size:
+        start = 0                                    # the file was emptied or replaced
+    if start == size:
+        return ""
+    with path.open("rb") as f:
+        f.seek(start)
+        raw = f.read()
+    offsets[seat] = size
+    text = raw.decode("utf-8", errors="replace").strip()
+    return ("(older lines cut)\n" + text[-3000:]) if len(text) > 3000 else text
+
+
 def game_turn(folder, seat, req, wake, timeout):
     """Put one game request into the chat as a turn, and return my final words."""
     cloud_seat = load_config().get("seat_brain") == "cloud"
@@ -1647,6 +1669,9 @@ def game_turn(folder, seat, req, wake, timeout):
             parts.append("The game's instructions for this seat (they stay in force until they change):\n"
                          + brief)
         parts.append(said or "(no new line: the game gave you the floor)")
+        reports = new_reports(chat, seat, folder)
+        if reports:
+            parts.append("New in your game log (REPORTS.md: errors, warnings, fight results):\n" + reports)
         notes = notebook_lines(seat)
         parts.append("Your notebook (your own notes; the game never sees it):\n"
                      + ("\n".join(f"- {n}" for n in notes) if notes else "(empty)")

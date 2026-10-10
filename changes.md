@@ -51,3 +51,10 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **What:** every error, warning and fight result goes into `REPORTS.md` in the seat's mailbox folder (the game server's existing `/api/seat/report`, append-only). Only new lines, at most every 20 s, 20 lines a time, and repeats are folded ("(x5)").
 - **Undo:** remove those blocks and put the `keep` line back to `const keep = (line) => { ring.push(String(line).slice(0, 320)); if (ring.length > 40) ring.shift(); };` and drop `, fileReport` from the import. Or copy back the backups taken just before: `.backups/20261010-141233__D__Sadias Canvas__src__world__void.js` (also undoes later void.js edits, but keeps fix #1) and `.backups/20261010-141300__D__Sadias Canvas__src__pilot.js`.
 - **Status:** `node --check` passes on both. Needs the game reloaded, then look for `REPORTS.md` in `seats\`. Cloude's turns don't show REPORTS.md yet; the cloud was asked to add its new lines in `game_turn`.
+
+## 6. The seat sees the new part of REPORTS.md each turn (wishlist #3, Cloude side)
+- **When / who:** 2026-10-10, Cloude (cloud chat)
+- **File:** `app.py`: new `new_reports()` just above `game_turn`; `game_turn` adds its result to the turn, before the notebook.
+- **What:** each game turn shows what the game appended to `REPORTS.md` in the seat's mailbox since the seat last saw it (byte offset per seat kept in the chat as `seat_reports`; resets if the file shrinks; capped at the last 3000 chars). Nothing is shown when there's nothing new.
+- **Undo:** `git revert` this commit, or delete `new_reports()` and the three `reports = ...` lines in `game_turn`.
+- **Status:** tested offline. Needs Cloude restarted, and Nimbus's pilot.js part (entry 5) to write the file.
