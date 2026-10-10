@@ -55,6 +55,7 @@ DEFAULTS = {
     "git_sync": True,        # share memory.md through GitHub when Cloude lives in a git clone
     "compact_at": 100000,    # API brain: summarize older messages once a chat reaches this many tokens (min 50000)
     "cache_ttl": "1h",       # API brain: how long the sent chat stays cheap to resend ("5m" or "1h")
+    "auto_update": True,     # pull new versions from GitHub by itself and restart
 }
 BRAINS = ("api", "code", "cloud")
 MAX_TOOL_ROUNDS = 30        # tool calls Cloude may chain for one message
@@ -1041,7 +1042,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"has_key": bool(api_key()), "model": cfg["model"], "effort": cfg["effort"],
                                   "auto_approve": bool(cfg.get("auto_approve")), "brain": cfg["brain"],
                                   "git_sync": bool(cfg.get("git_sync")), "claude_found": bool(find_claude()),
-                                  "in_git": bool(repo_root())})
+                                  "in_git": bool(repo_root()), "auto_update": bool(cfg.get("auto_update")),
+                                  "boot_id": BOOT_ID})
         if path == "/api/chats":
             return self.send_json(list_chats())
         if path.startswith("/api/chats/"):
@@ -1069,7 +1071,7 @@ class Handler(BaseHTTPRequestHandler):
             for k in ("model", "effort"):
                 if body.get(k):
                     cfg[k] = body[k].strip()
-            for k in ("auto_approve", "git_sync"):
+            for k in ("auto_approve", "git_sync", "auto_update"):
                 if k in body:
                     cfg[k] = bool(body[k])
             if body.get("brain") in BRAINS:
@@ -1142,6 +1144,8 @@ class Handler(BaseHTTPRequestHandler):
                     pass                         # the page went away; keep working anyway
 
         emit({"type": "start", "chat_id": chat["id"], "brain": chat.get("brain", "api")})
+        global ACTIVE_TURNS
+        ACTIVE_TURNS += 1                    # the updater won't restart mid-answer
         before = memory_snapshot()
         turn = {"code": run_turn_code, "cloud": run_turn_cloud}.get(chat.get("brain"), run_turn)
         try:
@@ -1150,9 +1154,61 @@ class Handler(BaseHTTPRequestHandler):
             emit({"type": "error", "text": str(e)})
         except Exception as e:
             emit({"type": "error", "text": f"{type(e).__name__}: {e}"})
+        ACTIVE_TURNS -= 1
         if load_config().get("git_sync") and memory_snapshot() != before:
             push_memory_async()
         emit({"type": "done", "title": chat["title"]})
+
+
+# ------------------------------------------------------------ auto-update --
+# Every minute: fetch, and if the branch moved, pull. If code changed, restart
+# (after any answer in progress finishes); the page notices the new boot id
+# and reloads. Commits that only touch notes (cloud_reply.md, memory.md, docs)
+# are pulled quietly without a restart.
+
+BOOT_ID = uuid.uuid4().hex
+ACTIVE_TURNS = 0
+UPDATE_EVERY_SEC = 60
+NO_RESTART_NEEDED = {"cloud_reply.md", "memory.md", "README.md", "CLAUDE.md", ".gitignore", "test"}
+
+
+def update_once():
+    """Pull new commits. Returns True if Cloude should restart to use them."""
+    if not repo_root():
+        return False
+    if not git("fetch", "-q", timeout=60):
+        return False
+    head = git("rev-parse", "HEAD").stdout.strip()
+    upstream = git("rev-parse", "@{u}")
+    if upstream.returncode != 0 or upstream.stdout.strip() == head:
+        return False
+    changed = git("diff", "--name-only", "HEAD", "@{u}").stdout.split()
+    pulled = git("pull", "-q", "--rebase", "--autostash", timeout=120)
+    if not pulled or pulled.returncode != 0:
+        git("rebase", "--abort")
+        print("update: couldn't pull cleanly, will try again later:",
+              (pulled.stderr.strip()[-200:] if pulled else "git not found"))
+        return False
+    code = [f for f in changed if f not in NO_RESTART_NEEDED and not f.startswith("fixed/")]
+    if "requirements.txt" in code:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(APP_DIR / "requirements.txt")],
+                       cwd=APP_DIR, timeout=600)
+    if code:
+        print("update: pulled new code:", ", ".join(code))
+    return bool(code)
+
+
+def update_loop():
+    while True:
+        time.sleep(UPDATE_EVERY_SEC)
+        try:
+            if load_config().get("auto_update") and update_once():
+                while ACTIVE_TURNS > 0:          # let the current answer finish
+                    time.sleep(2)
+                print("update: restarting with the new version")
+                restart()
+        except Exception as e:
+            print(f"update check failed: {e}")
 
 
 def restart():
@@ -1199,6 +1255,7 @@ def main():
     url = f"http://{HOST}:{PORT}"
     print(f"Cloude is up at {url}  (Ctrl+C to stop)")
     threading.Thread(target=mailbox_loop, daemon=True).start()
+    threading.Thread(target=update_loop, daemon=True).start()
     if "--browser" not in sys.argv and "--no-browser" not in sys.argv:
         # Its own window: the server runs in the background and Cloude closes
         # when the window does.

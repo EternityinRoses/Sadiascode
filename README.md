@@ -44,7 +44,7 @@ cd cloude
 python app.py
 ```
 
-To get updates later: `git pull` inside `Desktop\cloude`.
+After that, Cloude **updates itself**: every minute it checks GitHub, pulls new versions, and restarts when code changed (after any answer in progress). Turn it off in ⚙ with "Update myself automatically".
 
 ### Keeping long chats cheap (API brain)
 

@@ -197,6 +197,7 @@ async function post(url, obj) {
 const BRAIN_ICON = { api: "🔑", code: "💻", cloud: "☁️" };
 const BRAIN_NAME = { api: "API", code: "Claude Code", cloud: "Cloud" };
 let status = {};
+let bootId = null;         // changes when Cloude restarts with a new version
 
 function brainHint() {
   const b = $("brainInput").value;
@@ -217,6 +218,8 @@ async function refreshStatus() {
     : `${BRAIN_ICON[s.brain]} ${BRAIN_NAME[s.brain]} · ${s.model} · ${s.effort}`;
   $("brainInput").value = s.brain;
   $("gitSyncInput").checked = s.git_sync;
+  $("autoUpdateInput").checked = s.auto_update;
+  if (!bootId) bootId = s.boot_id;
   brainHint();
   $("modelInput").value = s.model;
   $("effortInput").value = s.effort;
@@ -420,6 +423,7 @@ $("settingsForm").onsubmit = async (e) => {
       api_key: $("keyInput").value, model: $("modelInput").value, effort: $("effortInput").value,
       auto_approve: $("autoApproveInput").checked,
       brain: $("brainInput").value, git_sync: $("gitSyncInput").checked,
+      auto_update: $("autoUpdateInput").checked,
     });
     $("keyInput").value = "";
     const switched = status.brain !== $("brainInput").value;
@@ -460,6 +464,16 @@ async function showNewCloudReplies() {
   return fresh.length;
 }
 setInterval(() => { showNewCloudReplies().catch(() => {}); }, 8000);
+
+// After an auto-update the server restarts with a new boot id: reload the page
+// (when nothing is mid-send) so the new look and code show up too.
+setInterval(async () => {
+  if (busy || !bootId) return;
+  try {
+    const s = await (await fetch("/api/status")).json();
+    if (s.boot_id && s.boot_id !== bootId) location.reload();
+  } catch (e) { /* restarting right now; try again next time */ }
+}, 5000);
 
 $("cloudRefreshBtn").onclick = async () => {
   if (busy || !chatId) return;
