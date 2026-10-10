@@ -2385,6 +2385,39 @@ def commit_self_edits():
         activity("saved Cloude's own file changes to git")
 
 
+NOTES_FILES = {"memory.md", "wishlist.md", "cloud_reply.md"}
+
+
+def settle_notes_conflicts():
+    """Brains on the PC and in the cloud both add notes to memory.md, and a clash there
+    used to pause every update. A clash only in notes files is settled by keeping both
+    sides' lines (git merge-file --union), then the rebase goes on. Code clashes still
+    pause, as before. Returns the last git result (returncode 0 when settled)."""
+    for _ in range(20):                                  # one round per replayed commit
+        stuck = git("diff", "--name-only", "--diff-filter=U")
+        files = (stuck.stdout.split() if stuck else [])
+        if not files or any(f not in NOTES_FILES for f in files):
+            return stuck if files else None
+        for f in files:
+            parts = []
+            for stage in (2, 1, 3):                      # ours, base, theirs
+                r = git("show", f":{stage}:{f}")
+                parts.append(r.stdout if r and r.returncode == 0 else "")
+            tmp = [APP_DIR / f".merge-{n}.tmp" for n in ("ours", "base", "theirs")]
+            for path, text in zip(tmp, parts):
+                path.write_text(text, encoding="utf-8")
+            git("merge-file", "--union", str(tmp[0]), str(tmp[1]), str(tmp[2]))
+            write_whole(APP_DIR / f, tmp[0].read_text(encoding="utf-8"))
+            for path in tmp:
+                path.unlink(missing_ok=True)
+            git("add", f)
+        activity("kept both sides of a notes clash in " + ", ".join(files))
+        went = git("-c", "core.editor=true", "rebase", "--continue", timeout=60)
+        if went and went.returncode == 0:
+            return went
+    return None
+
+
 def update_once():
     """Pull new commits. Returns True if Cloude should restart to use them."""
     global UPDATE_NOTE
@@ -2404,6 +2437,8 @@ def update_once():
         return False
     changed = git("diff", "--name-only", "HEAD...@{u}").stdout.split()    # upstream's side only
     pulled = git("pull", "-q", "--rebase", timeout=120)
+    if pulled and pulled.returncode != 0:
+        pulled = settle_notes_conflicts()
     if not pulled or pulled.returncode != 0:
         # Both sides changed the same lines. Keep this PC's version running,
         # put it on its own branch so it can be merged by hand, and say so.
