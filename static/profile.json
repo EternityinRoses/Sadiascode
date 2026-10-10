@@ -1,4 +1,4 @@
 {
   "user": { "name": "Rose", "pic": "" },
-  "cloude": { "name": "Nimbus", "pic": "" }
+  "cloude": { "name": "Nimbus", "pic": "/static/avatars/nimbus.svg" }
 }
