@@ -478,7 +478,8 @@ def log_user(chat, user_text, attachments):
     save_chat(chat)
 
 
-def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, extra_blocks=None):
+def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, extra_blocks=None,
+             mail=False):
     """Send one user message and keep going through tool calls. `emit(dict)`
     streams events to the page. game=True: a turn the game sent (no shell commands)."""
     cfg = load_config()
@@ -600,6 +601,9 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
                         raise ToolError(f"Unknown tool {name}.")
                     if not valid_input(name, args, schemas.get(name, {})):
                         raise ToolError("The tool input came through garbled; please try again.")
+                    if mail and name in MAIL_FORBIDDEN:
+                        raise ToolError("Another chat asked for this, not the user, so you may only read and "
+                                        "answer. Say what you'd change; the user can tell you to do it.")
                     if name == "run_command" and game:
                         raise ToolError("Shell commands are off during game turns.")
                     if name == "run_command" and cfg.get("auto_approve"):
@@ -705,7 +709,7 @@ def short_label(name, args):
     return ""
 
 
-def run_turn_code(chat, user_text, attachments, emit):
+def run_turn_code(chat, user_text, attachments, emit, read_only=False):
     """One message through `claude -p` on this PC (Claude Code), streamed back."""
     exe = find_claude()
     if not exe:
@@ -723,7 +727,7 @@ def run_turn_code(chat, user_text, attachments, emit):
     args = [exe, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
             "--model", cfg["model"], "--effort", cfg["effort"],
             "--append-system-prompt-file", str(sys_file),
-            "--permission-mode", "bypassPermissions" if cfg.get("auto_approve") else "acceptEdits"]
+            "--permission-mode", "plan" if read_only else ("bypassPermissions" if cfg.get("auto_approve") else "acceptEdits")]
     if chat.get("cc_session"):
         args += ["--resume", chat["cc_session"]]
 
@@ -1947,6 +1951,10 @@ def seat_runner():
 
 CHAT_MAIL_LIMIT = 8000
 LIVE = {}      # chat id -> what a turn nobody is streaming is doing right now (the page polls it)
+# A message from another chat is not the user. Answering one is read-only: no
+# writing, no commands, no messaging on, whatever auto-run says. Otherwise one
+# chat (or anything that can steer it) could make another change the PC.
+MAIL_FORBIDDEN = {"write_file", "edit_file", "run_command", "tell_chat"}
 BRAIN_NAMES = {"api": "🔑 API", "code": "💻 Claude Code", "cloud": "☁️ cloud"}
 
 
@@ -2029,7 +2037,11 @@ def deliver_mail(from_id, to_id, text, reply):
 
             ACTIVE_TURNS += 1
             try:
-                (run_turn_code if brain == "code" else run_turn)(chat, text, [], emit)
+                if brain == "code":
+                    # Claude Code can't be held to read-only tools from here, so it answers in plan mode
+                    run_turn_code(chat, text, [], emit, read_only=True)
+                else:
+                    run_turn(chat, text, [], emit, mail=True)
             finally:
                 ACTIVE_TURNS -= 1
                 LIVE.pop(to_id, None)
