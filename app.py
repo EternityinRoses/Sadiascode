@@ -808,16 +808,15 @@ def run_turn_cloud(chat, user_text, attachments, emit):
             chat["cloud_session"] = link.group(1)
             message = chat.pop("cloud_waiting", "")
             if not message:
-                say("☁️ Linked to that cloud session! I'll pass your messages to it from now on.\n\n"
-                    f"Watch it here: https://claude.ai/code/{chat['cloud_session']}")
+                say("☁️ Linked! Press 🔄 at the top to pull in replies.")
                 return
+            first = True
         else:
-            message = user_text
+            message, first = user_text, False
         cloud_send(exe, root, chat["cloud_session"], with_handoff(chat, message, 60_000))
-        url = f"https://claude.ai/code/{chat['cloud_session']}"
-        say("☁️ Sent to your cloud session! It's working on it now, on cloud credit.\n\n"
-            f"Watch it and read its replies here: {url}\n\n"
-            "Anything it pushes to GitHub (code, memory notes) comes back to me the next time I sync.")
+        # Once linked, sending is quiet: only the first message gets a line.
+        if first:
+            say("☁️ Linked and sent! Press 🔄 at the top to pull in replies.")
     except subprocess.TimeoutExpired:
         emit({"type": "error", "text": "The `claude` program took too long to answer."})
     finally:
