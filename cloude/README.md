@@ -38,6 +38,13 @@ cd cloude
 start.bat            (or ./start.sh)
 ```
 
+### Keeping long chats cheap (API brain)
+
+The API keeps no memory between requests (the banana test proved it), so every message resends the chat. Two things keep that cheap:
+
+- **1-hour cache:** what was already sent is billed at a fraction of the price on the next message, even after a break of up to an hour. Set `"cache_ttl": "5m"` in `config.json` for the shorter, cheaper-to-write cache.
+- **Auto-compact:** once a chat reaches about 100k tokens, the API summarizes the older part and only the summary counts from then on (you'll see 🧹 in the chat). Change the point with `"compact_at"` in `config.json` (minimum 50000).
+
 ## Start it
 
 You need Python 3.10 or newer.

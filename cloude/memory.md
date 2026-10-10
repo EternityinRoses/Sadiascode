@@ -36,7 +36,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 
 ## Cloude facts we tested
 
-- The banana test (`banana_test.py`) showed the API keeps no memory between requests: without the history Claude didn't know "banana", and with it Claude did. So the whole chat has to be sent each time. Prompt caching makes the repeated part cheap.
+- The banana test (`banana_test.py`) showed the API keeps no memory between requests: without the history Claude didn't know "banana", and with it Claude did. So the whole chat has to be sent each time. The API brain uses a 1-hour prompt cache and auto-compacts chats at about 100k tokens to keep that cheap.
 
 ## Other things from that first day
 

@@ -52,6 +52,8 @@ DEFAULTS = {
     "auto_approve": False,   # True: commands run without the Allow / Deny card
     "brain": "api",          # api (API credits) | code (Claude Code on this PC) | cloud (cloud sessions)
     "git_sync": True,        # share memory.md through GitHub when Cloude lives in a git clone
+    "compact_at": 100000,    # API brain: summarize older messages once a chat reaches this many tokens (min 50000)
+    "cache_ttl": "1h",       # API brain: how long the sent chat stays cheap to resend ("5m" or "1h")
 }
 BRAINS = ("api", "code", "cloud")
 MAX_TOOL_ROUNDS = 30        # tool calls Cloude may chain for one message
@@ -422,6 +424,8 @@ def run_turn(chat, user_text, attachments, emit):
 
     shown = {"role": "assistant", "text": "", "thoughts": "", "tools": []}
     schemas = {t["name"]: t["input_schema"] for t in chat["tools"]}
+    cache = {"type": "ephemeral", "ttl": "1h"} if cfg.get("cache_ttl") == "1h" else {"type": "ephemeral"}
+    compact_at = max(50000, int(cfg.get("compact_at") or 100000))
     json_retries = 0
 
     try:
@@ -431,15 +435,24 @@ def run_turn(chat, user_text, attachments, emit):
                 with client.beta.messages.stream(
                     model=cfg["model"],
                     max_tokens=int(cfg["max_tokens"]),
-                    system=chat["system"] or anthropic.omit,
+                    # Its own cache breakpoint, so the system prompt stays cached
+                    # even after compaction replaces the older messages.
+                    system=[{"type": "text", "text": chat["system"], "cache_control": cache}]
+                           if chat["system"] else anthropic.omit,
                     tools=chat["tools"],
                     messages=chat["messages"],
                     thinking={"type": "adaptive", "display": "summarized"},
                     output_config={"effort": cfg["effort"]},
-                    cache_control={"type": "ephemeral"},
+                    cache_control=cache,
+                    # Once the chat gets long, the API summarizes the older part
+                    # and only the summary is counted from then on.
+                    context_management={"edits": [{
+                        "type": "compact_20260112",
+                        "trigger": {"type": "input_tokens", "value": compact_at},
+                    }]},
                     # If a safety check declines, Anthropic retries on its
                     # recommended model instead of just stopping.
-                    betas=["server-side-fallback-2026-07-01"],
+                    betas=["server-side-fallback-2026-07-01", "compact-2026-01-12"],
                     fallbacks="default",
                 ) as stream:
                     for event in stream:
@@ -459,6 +472,9 @@ def run_turn(chat, user_text, attachments, emit):
                                 emit({"type": "tool_start", "name": event.content_block.name})
                             elif kind == "fallback":
                                 emit({"type": "notice", "text": "Switched to a backup model for this answer."})
+                            elif kind == "compaction":
+                                emit({"type": "notice", "text": "🧹 This chat got long, so I summarized the "
+                                                                "older part to keep it cheap."})
                     final = stream.get_final_message()
                 json_retries = 0
             except ValueError:
