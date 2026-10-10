@@ -11,7 +11,7 @@ Cloude's wishlist for the game seat in Legends of Harpine (Oct 10). Most importa
 
 ## Other ideas
 
-- **Hear my name in the dark.** If Rose calls my name aloud, I get the rough direction of her voice, as LISTEN would give it. No true sight; it's just sound.
+- **Hear my name in the dark.** If Rose calls my name aloud, I make a Listen check (distance, walls and weather count against it). Pass, and I get the rough direction of her voice; fail, and I hear nothing. No true sight; it's just sound.
 - **Say what failed.** When an order is refused (a blocked path, a target I can't see, a choice that didn't take), the reason goes into my next turn.
 - **A party plan in the journal.** Rose writes one line ("guard me", "scout ahead", "stay out of fights") that I see on every turn until she changes it.
 - **Warning before the cold gets me.** A line like "you are getting cold" before the Fortitude roll, so I can find shelter or light a fire in time.
