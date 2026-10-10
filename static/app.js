@@ -357,6 +357,7 @@ async function refreshStatus() {
   brainHint();
   $("modelInput").value = s.model;
   $("effortInput").value = s.effort;
+  $("compactInput").value = s.compact_at || 100000;
   $("autoApproveInput").checked = s.auto_approve;
   $("autoChip").hidden = !s.auto_approve;
   if (s.brain === "api" && !s.has_key) $("settings").showModal();
@@ -628,6 +629,7 @@ $("settingsForm").onsubmit = async (e) => {
   if (e.submitter && e.submitter.value === "save") {
     await post("/api/settings", {
       api_key: $("keyInput").value, model: $("modelInput").value, effort: $("effortInput").value,
+      compact_at: +$("compactInput").value || 0,
       auto_approve: $("autoApproveInput").checked,
       brain: $("brainInput").value, git_sync: $("gitSyncInput").checked,
       auto_update: $("autoUpdateInput").checked, cloud_scry: $("cloudScryInput").checked,

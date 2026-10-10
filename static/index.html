@@ -126,6 +126,9 @@
         <option>low</option><option>medium</option><option>high</option><option>xhigh</option><option>max</option>
       </select>
     </label>
+    <label>Context window (tokens before an API chat summarizes its older part)
+      <input type="number" id="compactInput" min="50000" max="1000000" step="50000" placeholder="100000">
+    </label>
     <label class="switch">
       <input type="checkbox" id="autoApproveInput">
       <span>Auto-run: let Cloude run commands without asking (and act on other chats' messages)</span>

@@ -2386,7 +2386,8 @@ class Handler(BaseHTTPRequestHandler):
                                   "in_git": bool(repo_root()), "auto_update": bool(cfg.get("auto_update")),
                                   "boot_id": BOOT_ID, "update_note": UPDATE_NOTE,
                                   "cloud_scry": bool(cfg.get("cloud_scry", True)),
-                                  "seat_brain": cfg.get("seat_brain", "api")})
+                                  "seat_brain": cfg.get("seat_brain", "api"),
+                                  "compact_at": int(cfg.get("compact_at") or 100000)})
         if path == "/api/chats":
             return self.send_json(list_chats())
         if path == "/api/activity":
@@ -2429,6 +2430,11 @@ class Handler(BaseHTTPRequestHandler):
             for k in ("auto_approve", "git_sync", "auto_update", "cloud_scry"):
                 if k in body:
                     cfg[k] = bool(body[k])
+            if body.get("compact_at"):
+                try:      # API brain: tokens before older messages get summarized
+                    cfg["compact_at"] = max(50000, min(1000000, int(body["compact_at"])))
+                except (TypeError, ValueError):
+                    pass
             if body.get("seat_brain") in ("api", "cloud"):
                 cfg["seat_brain"] = body["seat_brain"]
             if body.get("brain") in BRAINS:
