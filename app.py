@@ -1984,7 +1984,9 @@ def seat_runner():
     while True:
         try:
             cfg = load_config()
-            if cfg.get("seats_on", True) and (api_key() or cfg.get("seat_brain") == "cloud"):
+            if RESTART_PENDING:
+                pass                     # an update restart is waiting; the new copy answers
+            elif cfg.get("seats_on", True) and (api_key() or cfg.get("seat_brain") == "cloud"):
                 for folder in seat_folders():
                     prove_awake(folder)
                     check_invite(folder)
@@ -2387,6 +2389,7 @@ class Handler(BaseHTTPRequestHandler):
 
 BOOT_ID = uuid.uuid4().hex
 ACTIVE_TURNS = 0
+RESTART_PENDING = False   # an update is waiting: the seat runner starts no new turns
 UPDATE_EVERY_SEC = 60
 NO_RESTART_NEEDED = {"cloud_reply.md", "memory.md", "README.md", "CLAUDE.md", ".gitignore", "test"}
 
@@ -2507,7 +2510,7 @@ def update_once():
 
 
 def update_loop():
-    global BOOT_HEAD
+    global BOOT_HEAD, RESTART_PENDING, UPDATE_NOTE
     if repo_root():
         r = git("rev-parse", "HEAD")
         BOOT_HEAD = r.stdout.strip() if r and r.returncode == 0 else ""
@@ -2515,8 +2518,18 @@ def update_loop():
         time.sleep(UPDATE_EVERY_SEC)
         try:
             if load_config().get("auto_update") and update_once():
-                while ACTIVE_TURNS > 0:          # let the current answer finish
+                # Let answers in progress finish, but take no new game turns meanwhile:
+                # while Rose plays they come back to back and would hold the update off forever.
+                # Unanswered game requests stay in the mailbox for the new copy.
+                RESTART_PENDING = True
+                waited = 0
+                while ACTIVE_TURNS > 0:
+                    if waited % 30 == 0:
+                        UPDATE_NOTE = (f"An update is ready. Restarting when {ACTIVE_TURNS} "
+                                       f"answer{'s' if ACTIVE_TURNS != 1 else ''} in progress finish.")
+                        activity(f"update waiting on {ACTIVE_TURNS} answer(s) in progress")
                     time.sleep(2)
+                    waited += 2
                 print("update: restarting with the new version")
                 activity("restarting to load the update")
                 restart()
