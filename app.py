@@ -494,6 +494,7 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
     if not content:
         return
     start_len = len(chat["messages"])
+    close_dangling_tools(chat)
     chat["messages"].append({"role": "user", "content": content})
     log_user(chat, display_text or user_text, attachments)
     if game:
@@ -647,6 +648,19 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
         if shown["text"] or shown["thoughts"] or shown["tools"]:
             chat["display"].append(shown)
         save_chat(chat)
+
+
+def close_dangling_tools(chat):
+    """If Cloude was closed while a tool ran, the history ends on tool calls with no
+    results, and the API refuses that. Answer them as interrupted so the chat goes on."""
+    msgs = chat.get("messages") or []
+    if not msgs or msgs[-1].get("role") != "assistant" or not isinstance(msgs[-1].get("content"), list):
+        return
+    ids = [b.get("id") for b in msgs[-1]["content"] if isinstance(b, dict) and b.get("type") == "tool_use"]
+    if ids:
+        msgs.append({"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": i, "is_error": True,
+             "content": "Interrupted: Cloude was closed or stopped before this finished."} for i in ids]})
 
 
 def _drop_unanswered(chat, start_len):
