@@ -34,6 +34,10 @@ A fixed copy is at `fixed/minds.js` on the branch.
 
 - Opus 5.5 in the Sadia seat hadn't been confirmed working after fixes 4 and 5. If it's still silent, check the `(no answer, …)` line in the room, the browser console (F12), and `GET /v1/models` with the key.
 
+## Cloude facts we tested
+
+- The banana test (`banana_test.py`) showed the API keeps no memory between requests: without the history Claude didn't know "banana", and with it Claude did. So the whole chat has to be sent each time. Prompt caching makes the repeated part cheap.
+
 ## Other things from that first day
 
 - Drafted a Reddit post for r/CRPG, "just testing the water", pitching an RPG where the party members are AI minds making their own choices.
