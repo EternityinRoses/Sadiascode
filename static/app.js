@@ -237,6 +237,8 @@ async function refreshStatus() {
   $("gitSyncInput").checked = s.git_sync;
   $("autoUpdateInput").checked = s.auto_update;
   if (!bootId) bootId = s.boot_id;
+  $("updateChip").hidden = !s.update_note;
+  $("updateChip").title = s.update_note || "";
   brainHint();
   $("modelInput").value = s.model;
   $("effortInput").value = s.effort;
@@ -489,6 +491,8 @@ setInterval(async () => {
   try {
     const s = await (await fetch("/api/status")).json();
     if (s.boot_id && s.boot_id !== bootId) location.reload();
+    $("updateChip").hidden = !s.update_note;
+    $("updateChip").title = s.update_note || "";
   } catch (e) { /* restarting right now; try again next time */ }
 }, 5000);
 

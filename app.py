@@ -1097,7 +1097,7 @@ class Handler(BaseHTTPRequestHandler):
                                   "auto_approve": bool(cfg.get("auto_approve")), "brain": cfg["brain"],
                                   "git_sync": bool(cfg.get("git_sync")), "claude_found": bool(find_claude()),
                                   "in_git": bool(repo_root()), "auto_update": bool(cfg.get("auto_update")),
-                                  "boot_id": BOOT_ID})
+                                  "boot_id": BOOT_ID, "update_note": UPDATE_NOTE})
         if path == "/api/chats":
             return self.send_json(list_chats())
         if path.startswith("/api/chats/"):
@@ -1242,23 +1242,54 @@ UPDATE_EVERY_SEC = 60
 NO_RESTART_NEEDED = {"cloud_reply.md", "memory.md", "README.md", "CLAUDE.md", ".gitignore", "test"}
 
 
+UPDATE_NOTE = ""     # shown on the page when an update can't go through by itself
+
+
+def commit_self_edits():
+    """Cloude edits its own files. Before pulling, save those edits as a commit
+    (code and notes only, never chats, uploads, keys or game runtime files), so
+    an update can never set them aside or lose them."""
+    git("add", "-u")
+    untracked = git("ls-files", "--others", "--exclude-standard").stdout.split()
+    keep = [f for f in untracked
+            if (f.endswith((".py", ".md", ".txt", ".json")) and "/" not in f) or f.startswith("static/")]
+    if keep:
+        git("add", "--", *keep)
+    if git("diff", "--cached", "--quiet").returncode != 0:
+        git("-c", "user.name=Cloude", "-c", "user.email=cloude@localhost",
+            "commit", "-q", "-m", "Cloude: self-edits on this PC")
+
+
 def update_once():
     """Pull new commits. Returns True if Cloude should restart to use them."""
+    global UPDATE_NOTE
     if not repo_root():
         return False
     if not git("fetch", "-q", timeout=60):
         return False
+    commit_self_edits()
     head = git("rev-parse", "HEAD").stdout.strip()
     upstream = git("rev-parse", "@{u}")
-    if upstream.returncode != 0 or upstream.stdout.strip() == head:
+    if upstream.returncode != 0:
         return False
-    changed = git("diff", "--name-only", "HEAD", "@{u}").stdout.split()
-    pulled = git("pull", "-q", "--rebase", "--autostash", timeout=120)
+    behind = git("rev-list", "--count", "HEAD..@{u}").stdout.strip() not in ("", "0")
+    if not behind:
+        if git("rev-list", "--count", "@{u}..HEAD").stdout.strip() not in ("", "0"):
+            git("push", "-q", timeout=120)              # share self-edits and notes
+        return False
+    changed = git("diff", "--name-only", "HEAD...@{u}").stdout.split()    # upstream's side only
+    pulled = git("pull", "-q", "--rebase", timeout=120)
     if not pulled or pulled.returncode != 0:
+        # Both sides changed the same lines. Keep this PC's version running,
+        # put it on its own branch so it can be merged by hand, and say so.
         git("rebase", "--abort")
-        print("update: couldn't pull cleanly, will try again later:",
-              (pulled.stderr.strip()[-200:] if pulled else "git not found"))
+        git("push", "-q", "-f", "origin", "HEAD:cloude-pc-edits", timeout=120)
+        UPDATE_NOTE = ("An update and my own edits changed the same code, so I kept my version. "
+                       "It's on the cloude-pc-edits branch for merging.")
+        print("update:", UPDATE_NOTE)
         return False
+    UPDATE_NOTE = ""
+    git("push", "-q", timeout=120)                      # self-edits reach GitHub too
     code = [f for f in changed if f not in NO_RESTART_NEEDED and not f.startswith("fixed/")]
     if "requirements.txt" in code:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(APP_DIR / "requirements.txt")],
