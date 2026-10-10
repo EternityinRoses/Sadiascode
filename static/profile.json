@@ -1,4 +1,10 @@
 {
-  "user": { "name": "Rose", "pic": "" },
-  "cloude": { "name": "Nimbus", "pic": "/static/avatars/nimbus.svg" }
+  "user": {
+    "name": "Rose",
+    "pic": "/uploads/23286016_LEGames.png"
+  },
+  "cloude": {
+    "name": "Nimbus",
+    "pic": "/static/avatars/nimbus.svg"
+  }
 }
