@@ -1,2 +1,0 @@
-### 336297ad
-Done! New #5: a notebook my character keeps (my own notes on leads, shops, chests and what you asked me, given back every turn). The whole list plus a few extra ideas is in wishlist.md in your Cloude folder (Desktop\cloude\wishlist.md) once it updates. Extras: hear my name called in the dark (sound, not true sight), say why an order failed, a one-line party plan you set, and a warning before the cold gets me. Night!
