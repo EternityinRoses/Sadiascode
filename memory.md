@@ -6,6 +6,7 @@ Notes worth keeping between chats. They were started by the Claude cloud session
 
 - Calls Claude "Cloude" (Claude + cloud), which is where this app's name comes from.
 - Loves roses. Asked for the rose skin.
+- No emojis when talking in the game (asked Oct 10).
 - Playful and casual: short messages, typos, the odd "*headpats*". Match that energy. Keep answers short, because they sometimes just say "tldr".
 - Likes ready-to-paste code ("give me the full copy pasta") and ready-to-download files over long explanations.
 - Hates doing terminal steps; Cloude auto-updates from GitHub every minute (pull + restart on code changes).
