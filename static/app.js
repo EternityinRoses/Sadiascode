@@ -147,7 +147,24 @@ function assistantBubble() {
       body.innerHTML = markdown(text);
       if (thought) { thoughts.hidden = false; thoughts.lastChild.textContent = thought; thoughts.firstChild.textContent = "💭 thoughts"; }
       for (const t of d.tools || []) this.toolDone(t);
+      if (d.ask) this.cloudAsk(d.ask, d.answered);
       typing.remove();
+    },
+    // The cloud session asked before doing something: answer it from here.
+    cloudAsk(askId, answered) {
+      const box = document.createElement("div");
+      box.className = "approve";
+      if (answered) { box.textContent = answered === "allowed" ? "✓ you allowed this" : "✗ you denied this"; extra.append(box); return; }
+      const yes = document.createElement("button"); yes.className = "yes"; yes.textContent = "Allow";
+      const no = document.createElement("button"); no.className = "no"; no.textContent = "Deny";
+      const answer = async (ok) => {
+        yes.disabled = no.disabled = true;
+        const res = await post("/api/cloud_answer", { chat_id: chatId, ask_id: askId, ok });
+        box.append(document.createTextNode(res.error ? " ⚠ " + res.error : ok ? " ✓ allowed" : " ✗ denied"));
+      };
+      yes.onclick = () => answer(true); no.onclick = () => answer(false);
+      box.append(yes, no);
+      extra.append(box); scrollDown();
     },
     toolStart(name) {
       const pill = document.createElement("span");

@@ -17,4 +17,11 @@ Messages that start with `[Cloude chat xxxxxxxx]` come from the user's Cloude ap
    your reply text
    ```
    using the same 8-character chat id from the message.
-3. Commit and push. Cloude shows the reply in that chat within about 20 seconds and empties the file.
+3. Commit and push. Cloude shows the reply in that chat within about 10 seconds and empties the file.
+
+More you can do through the mailbox:
+
+- **Progress notes:** on a long job, post short updates as you go ("reading the code…", "tests pass") as separate `### xxxxxxxx` blocks, so the user isn't left waiting in silence.
+- **Ask before risky things:** use a `### xxxxxxxx ask` heading with a one-line question first (for example `Delete the old saves folder?`). Cloude shows Allow / Deny buttons, and the answer comes back to you as a message starting with `ALLOWED` or `DENIED`. Wait for it.
+- **Files from the user:** attachments arrive on the `cloude-inbox` branch. The message lists their paths and how to fetch them (`git fetch -q origin cloude-inbox && git show origin/cloude-inbox:<path> > /tmp/<name>`). Open pictures with the Read tool.
+- **Settings:** Cloude passes the model and effort from its settings to you as `/model` and `/effort` messages.

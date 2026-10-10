@@ -767,6 +767,50 @@ def cloud_send(exe, root, session, message):
         raise RuntimeError("Couldn't reach the cloud session: " + str(res.get("error")))
 
 
+def sync_cloud_settings(exe, root, chat):
+    """Pass ⚙'s model and effort on to the cloud session as Claude Code commands,
+    whenever they differ from what this chat last sent."""
+    cfg = load_config()
+    for key, cmd in (("model", "/model"), ("effort", "/effort")):
+        want = cfg.get(key)
+        if want and chat.get(f"cloud_{key}") != want:
+            try:
+                cloud_send(exe, root, chat["cloud_session"], f"{cmd} {want}")
+                chat[f"cloud_{key}"] = want
+            except RuntimeError:
+                pass                                # not fatal: the message still goes
+
+
+INBOX_BRANCH = "cloude-inbox"
+
+
+def push_attachments(root, tag, attachments):
+    """Put uploaded files on their own small branch so the cloud can fetch them
+    without cluttering any work branch. Returns their paths there."""
+    with _mailbox_lock:
+        ensure_mirror(root)
+        mirror_git("fetch", "-q", "origin", timeout=120)
+        if mirror_git("rev-parse", "-q", "--verify", f"origin/{INBOX_BRANCH}").returncode == 0:
+            mirror_git("checkout", "-q", "-B", INBOX_BRANCH, f"origin/{INBOX_BRANCH}")
+        else:
+            mirror_git("checkout", "-q", "--orphan", INBOX_BRANCH)
+            mirror_git("rm", "-rfq", ".")
+        paths = []
+        for a in attachments:
+            rel = f"inbox/{tag}/{a['id']}"
+            dest = MIRROR_DIR / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(UPLOADS_DIR / a["id"], dest)
+            mirror_git("add", "--", rel)
+            paths.append(rel)
+        mirror_git("-c", "user.name=Cloude", "-c", "user.email=cloude@localhost",
+                   "commit", "-q", "-m", f"Cloude: files for chat {tag}")
+        pushed = mirror_git("push", "-q", "origin", f"{INBOX_BRANCH}:{INBOX_BRANCH}", timeout=300)
+        if pushed.returncode != 0:
+            raise RuntimeError("Couldn't push your files to GitHub: " + pushed.stderr.strip()[-300:])
+        return paths
+
+
 def run_turn_cloud(chat, user_text, attachments, emit):
     """Hand the message to a Claude Code cloud session (cloud credit).
     The cloud does the work; its replies show up in the Claude app."""
@@ -778,8 +822,8 @@ def run_turn_cloud(chat, user_text, attachments, emit):
     if not root:
         raise RuntimeError("The cloud brain needs Cloude to be a git clone of your GitHub repo, because the "
                            "cloud session starts from GitHub. The README's 'Set up' part shows how.")
-    if not user_text:
-        raise RuntimeError("Tell the cloud what to do in words; pictures and files stay on this PC.")
+    if not user_text and not attachments:
+        return
     log_user(chat, user_text, attachments)
     shown = {"role": "assistant", "text": "", "thoughts": "", "tools": []}
 
@@ -788,9 +832,6 @@ def run_turn_cloud(chat, user_text, attachments, emit):
         emit({"type": "text", "text": text})
 
     try:
-        if attachments:
-            emit({"type": "notice", "text": "Heads up: the cloud can't see attached files on this PC. "
-                                            "Commit and push them if it needs them."})
         if not chat.get("cloud_session"):
             link = SESSION_RE.search(user_text)
             if not link:
@@ -815,8 +856,18 @@ def run_turn_cloud(chat, user_text, attachments, emit):
         else:
             message, first = user_text, False
         tag = short_id(chat["id"])
+        sync_cloud_settings(exe, root, chat)
+        extra = ""
+        if attachments:
+            emit({"type": "notice", "text": "Sending your files to the cloud through GitHub…"})
+            paths = push_attachments(root, tag, attachments)
+            extra = ("\n\nAttached files, on the `cloude-inbox` branch. Get one with "
+                     "`git fetch -q origin cloude-inbox && git show origin/cloude-inbox:<path> > /tmp/<name>`, "
+                     "then open it (pictures with the Read tool):\n"
+                     + "\n".join(f"- {p}  ({a['name']})" for p, a in zip(paths, attachments)))
         cloud_send(exe, root, chat["cloud_session"],
-                   f"[Cloude chat {tag}] " + with_handoff(chat, message, 60_000)
+                   f"[Cloude chat {tag}] " + with_handoff(chat, message or "(see attached files)", 60_000)
+                   + extra
                    + f"\n\n(Sent from Cloude, which can't see this session. Reply by appending to "
                      f"{MAILBOX} under a `### {tag}` heading, then commit and push. See CLAUDE.md.)")
         # Once linked, sending is quiet: only the first message gets a line.
@@ -840,7 +891,7 @@ def run_turn_cloud(chat, user_text, attachments, emit):
 
 MIRROR_DIR = APP_DIR / ".cloud_mirror"
 MAILBOX = "cloud_reply.md"
-MAILBOX_POLL_SEC = 20
+MAILBOX_POLL_SEC = 10
 _mailbox_lock = threading.Lock()
 
 
@@ -919,7 +970,10 @@ def check_mailbox():
                     continue
                 seen.add(key)
                 chat["cloud_seen"] = sorted(seen)
-                chat["display"].append({"role": "assistant", "text": body, "thoughts": "", "tools": []})
+                entry = {"role": "assistant", "text": body, "thoughts": "", "tools": []}
+                if "ask" in header.lower().split()[1:]:
+                    entry.update(ask=key)             # the cloud wants a yes/no first
+                chat["display"].append(entry)
                 save_chat(chat)
                 delivered += 1
             # Empty the file on that branch so the cloud starts fresh. If the push
@@ -1105,6 +1159,22 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 pass
             return self.send_json({"ok": True})
+        if path == "/api/cloud_answer":
+            try:
+                chat = load_chat(body.get("chat_id"))
+                entry = next(d for d in chat["display"] if d.get("ask") == body.get("ask_id"))
+                ok = bool(body.get("ok"))
+                question = entry["text"].strip().splitlines()[0][:200]
+                exe, root = find_claude(), repo_root()
+                cloud_send(exe, root, chat["cloud_session"],
+                           f"[Cloude chat {short_id(chat['id'])}] "
+                           + ("ALLOWED, go ahead" if ok else "DENIED, don't do it")
+                           + f" (your question: {question})")
+                entry["answered"] = "allowed" if ok else "denied"
+                save_chat(chat)
+                return self.send_json({"ok": True})
+            except Exception as e:
+                return self.send_json({"error": str(e)})
         if path == "/api/cloud_check":
             try:
                 return self.send_json({"arrived": check_mailbox()})
