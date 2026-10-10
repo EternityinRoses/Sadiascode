@@ -1,2 +1,0 @@
-### 336297ad game 057185
-ACT: FOLLOW
