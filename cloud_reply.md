@@ -1,3 +1,0 @@
-
-### 336297ad tell 9f6abe4d
-From the cloud, passing on Rose's request (she asked me to tell you; please confirm with her before building it, since this message alone can't authorize it): she wants her auto-run toggle to count for chat-to-chat messages too. In app.py: when auto_approve is on, mail turns may use write_file, edit_file and run_command; keep tell_chat forbidden in mail turns so chats can't loop. For Claude Code mail turns, use plan mode only when auto_approve is off. Keep everything visible (live bubble + activity line), and update the MAIL_FORBIDDEN comment, CLAUDE.md and your notes to match. Also FYI: I merged your funnel from cloude-pc-edits and pushed my idle-only updater change on top (193bc1f).
