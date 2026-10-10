@@ -292,6 +292,8 @@ function startNew() {
   inputEl.focus();
 }
 
+let reloadWanted = false;   // a /mute or /unmute asked for a redraw
+
 async function openChat(id) {
   const chat = await (await fetch(`/api/chats/${id}`)).json();
   chatId = chat.id;
@@ -305,6 +307,20 @@ async function openChat(id) {
   refreshChats();
   $("sidebar").classList.remove("open");
 }
+
+// The game talks into this chat too: draw its turns as they land.
+setInterval(async () => {
+  if (busy || !chatId) return;
+  try {
+    const chat = await (await fetch(`/api/chats/${chatId}`)).json();
+    if (busy || chat.id !== chatId || chat.display.length === shownLen) return;
+    for (const d of chat.display.slice(shownLen)) {
+      if (d.role === "user") userBubble(d.text, d.files);
+      else assistantBubble().setAll(d);
+    }
+    shownLen = chat.display.length;
+  } catch (e) { /* restarting; try again next tick */ }
+}, 2500);
 
 // ------------------------------------------------------------------- send --
 async function send() {
@@ -342,6 +358,13 @@ async function send() {
     view.notice("Lost the connection to Cloude: " + e.message, "error");
   }
   view.done();
+  if (reloadWanted && chatId) {            // /mute or /unmute: redraw with game turns hidden or shown
+    reloadWanted = false;
+    const note = messagesEl.lastElementChild;
+    await openChat(chatId);
+    if (note) messagesEl.append(note);
+  }
+  try { shownLen = (await (await fetch(`/api/chats/${chatId}`)).json()).display.length; } catch (e) {}
   busy = false; sendBtn.disabled = false;
   try { shownLen = (await (await fetch(`/api/chats/${chatId}`)).json()).display.length; } catch (e) { /* next poll catches up */ }
   refreshChats();
@@ -358,6 +381,7 @@ function handle(ev, view) {
     case "approve": view.approve(ev.id, ev.command); break;
     case "notice": view.notice(ev.text); break;
     case "error": view.notice(ev.text, "error"); break;
+    case "reload": reloadWanted = true; break;
   }
 }
 
@@ -482,7 +506,7 @@ async function showNewCloudReplies() {
   shownLen = chat.display.length;
   return fresh.length;
 }
-setInterval(() => { showNewCloudReplies().catch(() => {}); }, 8000);
+// (the poller above, every 2.5s, also draws cloud replies as they land)
 
 // After an auto-update the server restarts with a new boot id: reload the page
 // (when nothing is mid-send) so the new look and code show up too.

@@ -7,3 +7,6 @@ __pycache__/
 .cloude_system.txt
 .window/
 .cloud_mirror/
+# seat runner live files (requests, replies, logs, transcripts)
+seats/*/
+seats/activity.log

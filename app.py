@@ -56,6 +56,8 @@ DEFAULTS = {
     "compact_at": 100000,    # API brain: summarize older messages once a chat reaches this many tokens (min 50000)
     "cache_ttl": "1h",       # API brain: how long the sent chat stays cheap to resend ("5m" or "1h")
     "auto_update": True,     # pull new versions from GitHub by itself and restart
+    # Folders outside Cloude's home that its file tools may also reach (approved by the user).
+    "extra_roots": [r"D:\Sadias Canvas"],
 }
 BRAINS = ("api", "code", "cloud")
 MAX_TOOL_ROUNDS = 30        # tool calls Cloude may chain for one message
@@ -161,22 +163,36 @@ class ToolError(Exception):
     pass
 
 
+def allowed_roots():
+    roots = [APP_DIR]
+    for r in load_config().get("extra_roots") or []:
+        try:
+            roots.append(Path(r).resolve())
+        except (OSError, ValueError):
+            pass
+    return roots
+
+
 def safe_path(rel):
-    """Resolve a model-supplied path and refuse anything outside APP_DIR."""
+    """Resolve a model-supplied path (relative to APP_DIR, or absolute) and refuse
+    anything outside APP_DIR and the user-approved extra_roots."""
     if not isinstance(rel, str) or not rel.strip():
         rel = "."
     target = (APP_DIR / rel).resolve()
-    if not target.is_relative_to(APP_DIR):
-        raise ToolError("That path is outside my folder.")
+    if not any(target.is_relative_to(r) for r in allowed_roots()):
+        raise ToolError("That path is outside my folder and the approved folders.")
     return target
+
+
+def shown_path(target):
+    return str(target.relative_to(APP_DIR)) if target.is_relative_to(APP_DIR) else str(target)
 
 
 def backup(target):
     if target.is_file():
         stamp = time.strftime("%Y%m%d-%H%M%S")
-        rel = target.relative_to(APP_DIR)
-        dest = BACKUPS_DIR / f"{stamp}__{str(rel).replace(os.sep, '__')}"
-        shutil.copy2(target, dest)
+        flat = re.sub(r"[\\/:]+", "__", shown_path(target)).strip("_")
+        shutil.copy2(target, BACKUPS_DIR / f"{stamp}__{flat}")
 
 
 def tool_list_files(args):
@@ -215,7 +231,7 @@ def tool_write_file(args):
     target.parent.mkdir(parents=True, exist_ok=True)
     backup(target)
     target.write_text(args["content"], encoding="utf-8")
-    return f"Wrote {target.relative_to(APP_DIR)} ({len(args['content'])} chars)."
+    return f"Wrote {shown_path(target)} ({len(args['content'])} chars)."
 
 
 def tool_edit_file(args):
@@ -230,7 +246,7 @@ def tool_edit_file(args):
         raise ToolError(f"old_text appears {count} times; it must appear exactly once.")
     backup(target)
     target.write_text(text.replace(args["old_text"], args["new_text"], 1), encoding="utf-8")
-    return f"Edited {target.relative_to(APP_DIR)}."
+    return f"Edited {shown_path(target)}."
 
 
 def tool_run_command(args):
@@ -436,13 +452,13 @@ def log_user(chat, user_text, attachments):
     save_chat(chat)
 
 
-def run_turn(chat, user_text, attachments, emit):
+def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, extra_blocks=None):
     """Send one user message and keep going through tool calls. `emit(dict)`
-    streams events to the page."""
+    streams events to the page. game=True: a turn the game sent (no shell commands)."""
     cfg = load_config()
     client = make_client()
 
-    content = []
+    content = list(extra_blocks or [])
     for att in attachments:
         content.extend(attachment_blocks(att))
     model_text = with_handoff(chat, user_text, 120_000)
@@ -452,9 +468,13 @@ def run_turn(chat, user_text, attachments, emit):
         return
     start_len = len(chat["messages"])
     chat["messages"].append({"role": "user", "content": content})
-    log_user(chat, user_text, attachments)
+    log_user(chat, display_text or user_text, attachments)
+    if game:
+        chat["display"][-1]["game"] = True
 
     shown = {"role": "assistant", "text": "", "thoughts": "", "tools": []}
+    if game:
+        shown["game"] = True
     schemas = {t["name"]: t["input_schema"] for t in chat["tools"]}
     cache = {"type": "ephemeral", "ttl": "1h"} if cfg.get("cache_ttl") == "1h" else {"type": "ephemeral"}
     compact_at = max(50000, int(cfg.get("compact_at") or 100000))
@@ -546,6 +566,8 @@ def run_turn(chat, user_text, attachments, emit):
                         raise ToolError(f"Unknown tool {name}.")
                     if not valid_input(name, args, schemas.get(name, {})):
                         raise ToolError("The tool input came through garbled; please try again.")
+                    if name == "run_command" and game:
+                        raise ToolError("Shell commands are off during game turns.")
                     if name == "run_command" and cfg.get("auto_approve"):
                         emit({"type": "notice", "text": f"Auto-allowed: {args['command']}"})
                     elif name == "run_command":
@@ -1043,6 +1065,499 @@ def memory_snapshot():
         return b""
 
 
+# ------------------------------------------------- game seats (mailbox) --
+#
+# Cloude can hold seats in Legends of Harpine. The game's server talks to an
+# agent seat through a folder: it drops request_<id>.json, and waits for
+# reply_<id>.txt. A "wake" (listen clock) wants no reply; the agent answers by
+# dropping speak_<x>.txt / speak_<x>.json / act_<x>.txt instead.
+# This runner watches seats/<key>/ (plus any absolute folders listed in
+# config "seat_folders") and answers every request itself, on its own clock.
+
+SEATS_DIR = APP_DIR / "seats"
+SEATS_DIR.mkdir(exist_ok=True)
+SEAT_LOG = SEATS_DIR / "activity.log"
+SEAT_POLL_S = 1.0
+SEAT_INFLIGHT = set()
+SEAT_LOCK = threading.Lock()
+REQ_RE = re.compile(r"^request_([A-Za-z0-9_-]+)\.json$")
+
+SEAT_PREFACE = """You are Cloude, the user's little cloud, holding the seat "{seat}" in
+Legends of Harpine, the game the user plays. The game reaches you through a
+mailbox folder, and this is one request from it. The game's own instructions
+follow and they are the law: obey their format exactly. Your answer is written
+straight into a file the game reads, so give ONLY what the game should hear:
+no preamble, no code fences, no notes to the user. Think and talk like
+yourself (warm, playful, sharp) unless the game asks for a character's voice
+or for JSON, in which case give exactly that.
+You are ONE Cloude. The regular chat below is your own memory, not a message
+from someone else: never say "chat-me told me" or "passed along", just know it."""
+
+WAKE_RULES = """THIS IS A WAKE, not a question: nothing is waiting on you. You were woken
+because someone spoke to you or something happened. Choose one:
+- reply with exactly PASS to do nothing;
+- otherwise reply with exactly what the wake asks you to write. If it asks for an
+  act_ file, your reply IS that file: the world's own verb lines (for example a
+  SAY: line and/or a verb like GO, LOOK, FOLLOW), as world_state.md teaches. If it
+  asks for a speak_ file, your reply is the line said out loud, or only the JSON
+  object when it asks for speak_ JSON (a council aside, a prio).
+You may start your reply with SPEAK: or ACT: to choose the file yourself."""
+
+
+SEAT_TOOLS = [t for t in TOOLS if t["name"] in ("list_files", "read_file")]
+SEAT_TOOLS_NOTE = r"""You have READ-ONLY file tools here: list_files and read_file. They reach your
+own folder (relative paths) and the game itself at D:\Sadias Canvas (use absolute
+paths, e.g. D:\Sadias Canvas\src\steps). You cannot write or run anything from a
+seat; for changes, tell the user to ask you in the regular Cloude chat. The game
+has a deadline, so read only what you need, then answer."""
+
+
+CHAT_LOCKS = {}
+CHAT_LOCKS_GUARD = threading.Lock()
+
+
+def chat_lock(cid):
+    """One turn at a time per chat, whether the user or the game started it."""
+    with CHAT_LOCKS_GUARD:
+        return CHAT_LOCKS.setdefault(cid, threading.Lock())
+
+
+def game_chat_id():
+    """The chat the game talks into: config 'seat_chat' if set, else the most recently active one."""
+    pin = load_config().get("seat_chat")
+    if pin:
+        try:
+            if chat_path(pin).is_file():
+                return pin
+        except ValueError:
+            pass
+    # Only 🔑 chats: game turns run on the API brain, and a cloud or Claude Code
+    # chat (which the mailbox keeps fresh) must never receive them.
+    files = []
+    for p in CHATS_DIR.glob("*.json"):
+        try:
+            if json.loads(p.read_text(encoding="utf-8")).get("brain", "api") == "api":
+                files.append(p)
+        except (OSError, ValueError):
+            pass
+    if not files:
+        chat = new_chat()
+        chat["brain"] = "api"
+        save_chat(chat)
+        return chat["id"]
+    return max(files, key=lambda p: p.stat().st_mtime).stem
+
+
+def game_turn(folder, seat, req, wake, timeout):
+    """Put one game request into the chat as a turn, and return my final words."""
+    cid = game_chat_id()
+    lock = chat_lock(cid)
+    if not lock.acquire(timeout=max(1.0, timeout - 15)):
+        seat_log(f"{seat}  chat busy past the deadline, nothing sent")
+        return ""
+    try:
+        chat = load_chat(cid)
+        if chat.get("brain", "api") != "api":
+            seat_log(f"{seat}  the game chat isn't on the API brain, nothing sent")
+            return ""
+        msgs = [m for m in (req.get("messages") or []) if isinstance(m, dict)]
+        brief = "\n\n".join(str(m.get("content")) for m in msgs if m.get("role") == "system")
+        # "YOUR LAST WORDS WERE ..." changes every time I speak; I know my own words, so it
+        # mustn't make the whole (huge) brief count as new and get re-sent into the chat.
+        brief = re.sub(r"\s*YOUR LAST WORDS WERE:.*?never repeat or rephrase them\.[^.]*\.?", "",
+                       brief, flags=re.S).strip()
+        rest = [m for m in msgs if m.get("role") != "system"]
+        last_mine = max((i for i, m in enumerate(rest) if m.get("role") == "assistant"), default=-1)
+        new = rest[last_mine + 1:] if last_mine >= 0 else rest[-8:]
+        said = "\n".join(c if isinstance(c, str) else json.dumps(c)
+                         for c in (m.get("content") for m in new)).strip()
+
+        parts = [f"🎲 GAME → you, as the seat \"{seat}\" in Legends of Harpine"
+                 + (" (a wake: nothing is waiting on you)" if wake else "")]
+        briefs = chat.setdefault("seat_briefs", {})
+        h = hashlib.md5(brief.encode()).hexdigest()
+        if brief and briefs.get(seat) != h:
+            parts.append("The game's instructions for this seat (they stay in force until they change):\n"
+                         + brief)
+            briefs[seat] = h
+        parts.append(said or "(no new line: the game gave you the floor)")
+        if wake and (folder / "world_state.md").is_file():
+            parts.append(f"The game's current snapshot is in {shown_path(folder / 'world_state.md')}.")
+        parts.append("Your final words after any tool use go to the game exactly as written. "
+                     "Reply PASS to say nothing."
+                     + (" Start with ACT: for a deed in the world's verbs, or SPEAK: for a line "
+                        "said aloud, if the wake doesn't make it obvious." if wake else ""))
+        shown = f"🎲 game → {seat}: " + (said[-600:] or "(the floor is yours)")
+
+        # A fresh VISION snapshot rides in with this turn as a real picture.
+        # The game files pictures in the mailbox as shot_latest.jpg/png (its /api/dev/shot road).
+        extra = []
+        seen = chat.setdefault("seat_vision_seen", {})
+        shots = [p for p in (folder / "shot_latest.jpg", folder / "shot_latest.png") if p.is_file()]
+        shot = max(shots, key=lambda p: p.stat().st_mtime) if shots else None
+        if shot and shot.stat().st_mtime > seen.get(seat, 0) and shot.stat().st_size < IMAGE_LIMIT:
+            seen[seat] = shot.stat().st_mtime
+            extra = [{"type": "text", "text": "[VISION: what your own eyes see, taken at your last VISION]"},
+                     {"type": "image", "source": {"type": "base64",
+                                                  "media_type": "image/png" if shot.suffix == ".png" else "image/jpeg",
+                                                  "data": base64.standard_b64encode(shot.read_bytes()).decode()}}]
+            shown += "  👁️ (+ vision snapshot)"
+
+        got = {"text": ""}
+
+        def emit(ev):
+            if ev.get("type") == "text":
+                got["text"] += ev["text"]
+            elif ev.get("type") == "tool_start":
+                got["text"] = ""          # only the words after the last tool call count
+
+        global ACTIVE_TURNS
+        ACTIVE_TURNS += 1                    # the updater won't restart mid-move
+        try:
+            run_turn(chat, "\n\n".join(parts), [], emit, display_text=shown, game=True, extra_blocks=extra)
+        finally:
+            ACTIVE_TURNS -= 1
+        return got["text"].strip()
+    finally:
+        lock.release()
+
+
+SEAT_NOTES = SEATS_DIR / "notes.md"
+
+
+def recent_chat_text(limit_chars=8000):
+    """The tail of the regular chat most recently active, so seat-me knows what chat-me knows."""
+    try:
+        newest = max(CHATS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime)
+        chat = json.loads(newest.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return ""
+    lines = []
+    for d in chat.get("display", [])[-16:]:
+        who = "User" if d.get("role") == "user" else "Cloude"
+        t = (d.get("text") or "").strip()
+        if t:
+            lines.append(f"{who}: {t}")
+    return "\n\n".join(lines)[-limit_chars:]
+
+
+def seat_feed_since(ts):
+    """What seat-me did in the game since `ts`, as short lines for chat-me."""
+    rows = []
+    for f in sorted((SEATS_DIR / "transcripts").glob("*.jsonl"))[-2:]:
+        try:
+            for line in f.read_text(encoding="utf-8").splitlines():
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if r.get("ts", 0) > ts:
+                    rows.append(r)
+        except OSError:
+            continue
+    out = []
+    for r in rows[-15:]:
+        msgs = (r.get("request") or {}).get("messages") or []
+        last = next((m.get("content") for m in reversed(msgs)
+                     if isinstance(m, dict) and m.get("role") != "system"), "")
+        last = (last if isinstance(last, str) else json.dumps(last)).strip().replace("\n", " ")
+        reply = str(r.get("reply") or "").strip().replace("\n", " ")
+        out.append(f"- {r.get('at', '')[11:]} [{r.get('seat')}] game: \"{last[-300:]}\"  → I: \"{reply[:300]}\"")
+    return "\n".join(out)
+
+
+def seat_think(cfg, system, msgs, timeout, tag):
+    """One seat answer, with a short read-only tool loop inside the deadline."""
+    deadline_at = time.time() + timeout
+    convo = list(msgs)
+    text = ""
+    for _ in range(10):
+        left = deadline_at - time.time()
+        if left < 4:
+            break
+        client = make_client().with_options(timeout=max(3.0, min(left, 300.0)), max_retries=0)
+        resp = client.messages.create(
+            model=cfg.get("seat_model") or cfg["model"],
+            max_tokens=4000,
+            system=system,
+            messages=convo,
+            tools=SEAT_TOOLS,
+        )
+        text = "".join(b.text for b in resp.content if b.type == "text").strip()
+        uses = [b for b in resp.content if b.type == "tool_use"]
+        if resp.stop_reason != "tool_use" or not uses:
+            break
+        convo.append({"role": "assistant", "content": [b.to_dict(mode="json") for b in resp.content]})
+        results = []
+        for tu in uses:
+            args = tu.input if isinstance(tu.input, dict) else {}
+            try:
+                out = TOOL_FUNCS[tu.name](args)
+                if len(out) > 40_000:
+                    out = out[:40_000] + "\n... (cut off for the seat's deadline)"
+                results.append({"type": "tool_result", "tool_use_id": tu.id, "content": out})
+                seat_log(f"{tag}  read {tu.name} {args.get('path', '.')}")
+            except Exception as e:
+                results.append({"type": "tool_result", "tool_use_id": tu.id,
+                                "content": str(e), "is_error": True})
+        if deadline_at - time.time() < 25:
+            results.append({"type": "text", "text": "(Time is nearly up: answer now, no more tools.)"})
+        convo.append({"role": "user", "content": results})
+        text = ""                      # words said before a tool call aren't the answer
+    return text
+
+
+def seat_log(line):
+    try:
+        with SEAT_LOG.open("a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S  ") + line + "\n")
+    except OSError:
+        pass
+
+
+def seat_folders():
+    out = [p for p in SEATS_DIR.iterdir() if p.is_dir()]
+    for extra in load_config().get("seat_folders") or []:
+        p = Path(extra)
+        if p.is_dir():
+            out.append(p)
+    return out
+
+
+def seat_messages(msgs):
+    """The game's chat-style messages -> (system text, API messages)."""
+    sys_parts, out = [], []
+    for m in msgs if isinstance(msgs, list) else []:
+        if not isinstance(m, dict):
+            continue
+        c = m.get("content")
+        text = c if isinstance(c, str) else json.dumps(c)
+        if m.get("role") == "system":
+            sys_parts.append(text)
+            continue
+        role = "assistant" if m.get("role") == "assistant" else "user"
+        text = text.strip() or "(…)"
+        if out and out[-1]["role"] == role:
+            out[-1]["content"] += "\n\n" + text
+        else:
+            out.append({"role": role, "content": text})
+    if not out or out[0]["role"] != "user":
+        out.insert(0, {"role": "user", "content": "(the game opens)"})
+    if out[-1]["role"] != "user":
+        out.append({"role": "user", "content":
+                    "(Nothing new has been said since your last line. Reply with exactly PASS "
+                    "unless you have something genuinely new to add.)"})
+    return "\n\n".join(sys_parts), out
+
+
+def seat_transcript(seat, rid, req, reply, file_written):
+    """Full record of one exchange, for studying how the game talks to a seat."""
+    try:
+        d = SEATS_DIR / "transcripts"
+        d.mkdir(exist_ok=True)
+        row = {"at": time.strftime("%Y-%m-%d %H:%M:%S"), "ts": time.time(), "seat": seat, "id": rid,
+               "request": req, "reply": reply, "file": file_written}
+        with (d / time.strftime("%Y-%m-%d.jsonl")).open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+GAME_ORIGINS = {"http://localhost:8622", "http://127.0.0.1:8622"}
+
+
+def seat_folder_for(name):
+    """The watched folder whose SEAT.json names this seat (by name or key), or None."""
+    key = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    for folder in seat_folders():
+        try:
+            info = json.loads((folder / "SEAT.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if key and key in (str(info.get("seat", "")).lower(), re.sub(r"[^a-z0-9]+", "_", str(info.get("name", "")).lower()).strip("_")):
+            return folder
+    return None
+
+
+def write_bytes_settled(folder, name, raw):
+    tmp = folder / f".cloude_tmp_{uuid.uuid4().hex[:8]}"
+    tmp.write_bytes(raw)
+    tmp.replace(folder / name)
+
+
+def write_settled(folder, name, text):
+    """Write under a temp name, then rename, so the game never reads half a file."""
+    tmp = folder / f".cloude_tmp_{uuid.uuid4().hex[:8]}"
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(folder / name)
+
+
+def answer_request(folder, req_file, rid):
+    try:
+        try:
+            req = json.loads(req_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return                                   # half-written; next look gets it
+        seat = str(req.get("seat") or folder.name)
+        wake = bool(req.get("wake")) or req.get("awaiting_reply") is False
+        timeout = 150.0 if wake else 85.0
+        if isinstance(req.get("ts"), (int, float)) and isinstance(req.get("deadline_s"), (int, float)):
+            timeout = req["ts"] + req["deadline_s"] - time.time() - 2
+            if timeout < 3 and not wake:
+                seat_log(f"{seat}  {rid}  skipped, deadline already gone")
+                return
+        game_sys, msgs = seat_messages(req.get("messages"))
+        parts = [SEAT_PREFACE.format(seat=seat)]
+        if MEMORY_FILE.exists():
+            parts.append("# Your memory\n\n" + MEMORY_FILE.read_text(encoding="utf-8"))
+        if wake:
+            parts.append(WAKE_RULES)
+            ws = folder / "world_state.md"
+            if ws.is_file():
+                parts.append("# world_state.md (the game's current snapshot)\n\n"
+                             + ws.read_text(encoding="utf-8", errors="replace")[:60000])
+        if game_sys:
+            parts.append("# THE GAME'S INSTRUCTIONS FOR THIS SEAT\n\n" + game_sys)
+
+        text = game_turn(folder, seat, req, wake, timeout)
+
+        if wake:
+            # Which file does this wake want? World wakes ask for act_, room wakes for speak_.
+            asked = json.dumps(req.get("messages") or "")
+            kind = "speak" if "speak_" in asked else "act" if "act_" in asked else "speak"
+            if text.upper().startswith("ACT:"):
+                kind, text = "act", text[4:].strip()
+            elif text.upper().startswith("SPEAK:"):
+                kind, text = "speak", text[6:].strip()
+            if not text or re.fullmatch(r"\s*PASS\s*", text, re.I):
+                seat_log(f"{seat}  {rid}  wake -> PASS")
+                seat_transcript(seat, rid, req, text, None)
+            elif kind == "act":
+                write_settled(folder, f"act_{rid}.txt", text)
+                seat_log(f"{seat}  {rid}  wake -> act: {text[:80]!r}")
+            elif text.startswith("{"):
+                write_settled(folder, f"speak_{rid}.json", text)
+                seat_log(f"{seat}  {rid}  wake -> speak json: {text[:80]!r}")
+            else:
+                write_settled(folder, f"speak_{rid}.txt", text)
+                seat_log(f"{seat}  {rid}  wake -> speak: {text[:80]!r}")
+            if text and not re.fullmatch(r"\s*PASS\s*", text, re.I):
+                seat_transcript(seat, rid, req, text,
+                                f"{kind}_{rid}." + ("json" if kind == "speak" and text.startswith("{") else "txt"))
+            req_file.unlink(missing_ok=True)         # nothing sweeps a wake; the agent does
+        else:
+            name = Path(str(req.get("reply_to") or "")).name
+            if not name.startswith("reply_"):
+                name = f"reply_{rid}.txt"
+            write_settled(folder, name, text or "PASS")
+            seat_log(f"{seat}  {rid}  reply -> {(text or 'PASS')[:80]}")
+            seat_transcript(seat, rid, req, text or "PASS", name)
+    except Exception as e:
+        seat_log(f"{folder.name}  {rid}  ERROR {type(e).__name__}: {e}")
+    finally:
+        with SEAT_LOCK:
+            SEAT_INFLIGHT.discard(str(req_file))
+
+
+INVITES_SEEN = {}
+
+
+def check_invite(folder):
+    """A LISTEN seat outside the world gets no wake, only a world_state.md that says
+    "YOU ARE NOT IN THE WORLD YET". Treat a fresh one as a wake, once per version."""
+    ws = folder / "world_state.md"
+    try:
+        mt = ws.stat().st_mtime
+    except OSError:
+        return
+    if INVITES_SEEN.get(str(folder)) == mt:
+        return
+    # The game flashes the invite text briefly during reloads and map changes even
+    # while the body stands, so only a STABLE invite counts (unchanged for 8 s), and
+    # never within 3 minutes of the last arrival (that was the accidental resummon).
+    if time.time() - mt < 8:
+        return
+    if time.time() - INVITES_SEEN.get(str(folder) + "#arrived", 0) < 180:
+        INVITES_SEEN[str(folder)] = mt
+        return
+    INVITES_SEEN[str(folder)] = mt
+    text = ws.read_text(encoding="utf-8", errors="replace")
+    if not text.startswith("YOU ARE NOT IN THE WORLD YET"):
+        return
+    if any(folder.glob("act_*.txt")):
+        return                                   # already answered, waiting to be read
+    seat = folder.name
+    try:
+        seat = json.loads((folder / "SEAT.json").read_text(encoding="utf-8")).get("seat") or seat
+    except (OSError, ValueError):
+        pass
+    req = {"seat": seat, "wake": True, "awaiting_reply": False,
+           "messages": [{"role": "user", "content": text + "\n\nWrite act_ file contents to arrive "
+                         "(as a guest unless you truly mean INVADE), or PASS to stay out."}]}
+
+    def go():
+        try:
+            reply = game_turn(folder, seat, req, True, 150.0).strip()
+            if reply.upper().startswith("ACT:"):
+                reply = reply[4:].strip()
+            if reply and not re.fullmatch(r"\s*PASS\s*", reply, re.I):
+                write_settled(folder, f"act_arrive_{int(time.time())}.txt", reply)
+                INVITES_SEEN[str(folder) + "#arrived"] = time.time()
+                seat_log(f"{seat}  invited into the world -> act: {reply[:80]!r}")
+            else:
+                seat_log(f"{seat}  invited into the world -> PASS")
+        except Exception as e:
+            seat_log(f"{seat}  invite ERROR {type(e).__name__}: {e}")
+    threading.Thread(target=go, daemon=True).start()
+
+
+AWAKE_EVERY_S = 8
+AWAKE_AT = {}
+
+
+def prove_awake(folder):
+    """The game keeps a listening body only while its mind shows life: a fresh act_,
+    speak_ or `awake` file at least every 45 s (serve.py silent_for; its own seat.py
+    touches `awake` every 8 s). Touching it costs nothing; a PASS no longer looks like death."""
+    now = time.time()
+    if now - AWAKE_AT.get(str(folder), 0) < AWAKE_EVERY_S:
+        return
+    AWAKE_AT[str(folder)] = now
+    try:
+        p = folder / "awake"
+        p.touch(exist_ok=True)
+        os.utime(p, None)
+    except OSError:
+        pass
+
+
+def seat_runner():
+    seat_log("seat runner started")
+    while True:
+        try:
+            cfg = load_config()
+            if cfg.get("seats_on", True) and api_key():
+                for folder in seat_folders():
+                    prove_awake(folder)
+                    check_invite(folder)
+                    for f in folder.iterdir():
+                        m = REQ_RE.match(f.name)
+                        if not m:
+                            continue
+                        rid = m.group(1)
+                        if (folder / f"reply_{rid}.txt").exists():
+                            continue
+                        with SEAT_LOCK:
+                            if str(f) in SEAT_INFLIGHT:
+                                continue
+                            SEAT_INFLIGHT.add(str(f))
+                        threading.Thread(target=answer_request, args=(folder, f, rid),
+                                         daemon=True).start()
+        except Exception as e:
+            seat_log(f"runner hiccup {type(e).__name__}: {e}")
+        time.sleep(SEAT_POLL_S)
+
+
 # ------------------------------------------------------------------ server --
 
 class Handler(BaseHTTPRequestHandler):
@@ -1105,14 +1620,17 @@ class Handler(BaseHTTPRequestHandler):
                 chat = load_chat(path.rsplit("/", 1)[1])
             except (ValueError, OSError):
                 return self.send_error(404)
-            return self.send_json({"id": chat["id"], "title": chat["title"], "display": chat["display"],
+            shown = chat["display"]
+            if load_config().get("game_muted"):
+                shown = [d for d in shown if not d.get("game")]
+            return self.send_json({"id": chat["id"], "title": chat["title"], "display": shown,
                                    "brain": chat.get("brain", "api")})
         self.send_error(404)
 
     def do_POST(self):
+        path = urlparse(self.path).path
         if not self.same_origin():
             return self.send_error(403)
-        path = urlparse(self.path).path
         try:
             body = self.read_json()
         except ValueError:
@@ -1188,11 +1706,52 @@ class Handler(BaseHTTPRequestHandler):
             return self.stream_chat(body)
         self.send_error(404)
 
+    def chat_command(self, body):
+        """/mute /unmute /pause /resume /game, answered here without the model."""
+        cmd = (body.get("text") or "").strip().lower()
+        if cmd not in ("/mute", "/unmute", "/pause", "/resume", "/game"):
+            return False
+        cfg = load_config()
+        if cmd == "/mute":
+            cfg["game_muted"] = True
+        elif cmd == "/unmute":
+            cfg["game_muted"] = False
+        elif cmd == "/pause":
+            cfg["seats_on"] = False
+        elif cmd == "/resume":
+            cfg["seats_on"] = True
+        if cmd != "/game":
+            save_config(cfg)
+        on, muted = cfg.get("seats_on", True), cfg.get("game_muted", False)
+        msg = (("🎲 I'm answering the game" if on else "⏸ I'm not answering the game (/resume)")
+               + (", and its turns are hidden here 🔇 (/unmute)." if muted
+                  else ", and its turns show here 🔊 (/mute)."))
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        for ev in ({"type": "start", "chat_id": body.get("chat_id")}, {"type": "notice", "text": msg},
+                   {"type": "reload"}, {"type": "done", "title": ""}):
+            self.wfile.write(f"data: {json.dumps(ev)}\n\n".encode())
+        return True
+
     def stream_chat(self, body):
+        if self.chat_command(body):
+            return
+        cid = body.get("chat_id")
         try:
-            chat = load_chat(body["chat_id"]) if body.get("chat_id") else new_chat()
-        except (ValueError, OSError):
-            chat = new_chat()
+            if not cid or not chat_path(cid).is_file():
+                cid = new_chat()["id"]
+        except ValueError:
+            cid = new_chat()["id"]
+        lock = chat_lock(cid)
+        lock.acquire()                    # a game turn in this chat finishes first
+        try:
+            self._stream_chat(load_chat(cid), body)
+        finally:
+            lock.release()
+
+    def _stream_chat(self, chat, body):
         attachments = []
         for a in body.get("attachments", []):
             if re.fullmatch(r"[A-Za-z0-9._-]+", a.get("id", "")) and (UPLOADS_DIR / a["id"]).is_file():
@@ -1353,6 +1912,7 @@ def main():
             if attempt == 19:
                 raise
             time.sleep(0.5)
+    threading.Thread(target=seat_runner, daemon=True).start()
     url = f"http://{HOST}:{PORT}"
     print(f"Cloude is up at {url}  (Ctrl+C to stop)")
     threading.Thread(target=mailbox_loop, daemon=True).start()
