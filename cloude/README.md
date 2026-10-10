@@ -61,6 +61,10 @@ python app.py
 
 It opens http://127.0.0.1:8640 in your browser. The first time, it asks for your API key (from https://console.anthropic.com). The key is saved in `config.json` in this folder, which `.gitignore` keeps out of git. You can also set `ANTHROPIC_API_KEY` instead.
 
+## Its own window
+
+If `pywebview` is installed (`pip install pywebview`), Cloude opens in its own app window instead of a browser tab, and closing the window quits Cloude. Without it, or with `python app.py --browser`, it opens in your browser as before.
+
 ## Good to know
 
 - It only listens on your own computer (127.0.0.1), so other devices can't reach it.

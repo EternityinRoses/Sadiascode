@@ -956,12 +956,38 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def restart():
-    """Start a fresh copy of this program, so code Cloude just edited takes effect."""
-    subprocess.Popen([sys.executable, str(APP_DIR / "app.py"), "--no-browser"], cwd=APP_DIR)
+    """Start a fresh copy of this program, so code Cloude just edited takes effect.
+    In window mode the new copy opens a fresh window; in browser mode the page
+    reloads itself, so no new tab is opened."""
+    args = [sys.executable, str(APP_DIR / "app.py")]
+    if not WINDOW_MODE:
+        args.append("--no-browser")
+    subprocess.Popen(args, cwd=APP_DIR)
     os._exit(0)
 
 
+def open_window(url):
+    """Show Cloude in its own app window (pywebview). Returns False if that
+    isn't possible here, so the caller can fall back to the browser."""
+    try:
+        import webview
+    except ImportError:
+        return False
+    try:
+        webview.create_window("Cloude", url, width=1150, height=800, min_size=(380, 500))
+        # private_mode off + a storage folder: the window remembers your skin choice
+        webview.start(private_mode=False, storage_path=str(APP_DIR / ".window"))
+    except Exception as e:                       # no GUI backend, etc.
+        print(f"Couldn't open the app window ({e}); using the browser instead.")
+        return False
+    return True
+
+
+WINDOW_MODE = False
+
+
 def main():
+    global WINDOW_MODE
     for attempt in range(20):           # after a restart the old copy may still hold the port
         try:
             server = ThreadingHTTPServer((HOST, PORT), Handler)
@@ -972,7 +998,17 @@ def main():
             time.sleep(0.5)
     url = f"http://{HOST}:{PORT}"
     print(f"Cloude is up at {url}  (Ctrl+C to stop)")
-    if "--no-browser" not in sys.argv:
+    if "--browser" not in sys.argv and "--no-browser" not in sys.argv:
+        # Its own window: the server runs in the background and Cloude closes
+        # when the window does.
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        WINDOW_MODE = True
+        if open_window(url):
+            os._exit(0)
+        WINDOW_MODE = False
+        server.shutdown()
+        threading.Timer(0.3, lambda: webbrowser.open(url)).start()
+    elif "--no-browser" not in sys.argv:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()

@@ -5,3 +5,4 @@ uploads/
 .backups/
 __pycache__/
 .cloude_system.txt
+.window/
