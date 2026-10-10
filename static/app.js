@@ -9,6 +9,7 @@ const attachmentsEl = $("attachments");
 
 let chatId = null;
 let chatBrain = null;      // brain of the open chat (the 🔄 button is for cloud chats)
+let shownLen = 0;          // how many saved entries of the open chat are on screen
 
 function setChatBrain(b) {
   chatBrain = b;
@@ -278,6 +279,7 @@ async function openChat(id) {
     if (d.role === "user") userBubble(d.text, d.files);
     else assistantBubble().setAll(d);
   }
+  shownLen = chat.display.length;
   refreshChats();
   $("sidebar").classList.remove("open");
 }
@@ -319,6 +321,7 @@ async function send() {
   }
   view.done();
   busy = false; sendBtn.disabled = false;
+  try { shownLen = (await (await fetch(`/api/chats/${chatId}`)).json()).display.length; } catch (e) { /* next poll catches up */ }
   refreshChats();
   inputEl.focus();
 }
@@ -443,22 +446,31 @@ function applySkin(skin) {
 $("skinBtn").onclick = () => applySkin(document.documentElement.dataset.skin === "rose" ? "cloud" : "rose");
 applySkin(document.documentElement.dataset.skin || "cloud");
 
+// Cloud replies arrive through GitHub; the server checks every 20s. While a
+// cloud chat is open, show whatever has landed since it was drawn.
+async function showNewCloudReplies() {
+  if (chatBrain !== "cloud" || !chatId || busy) return 0;
+  const chat = await (await fetch(`/api/chats/${chatId}`)).json();
+  const fresh = chat.display.slice(shownLen);
+  for (const d of fresh) {
+    if (d.role === "user") userBubble(d.text, d.files);
+    else assistantBubble().setAll(d);
+  }
+  shownLen = chat.display.length;
+  return fresh.length;
+}
+setInterval(() => { showNewCloudReplies().catch(() => {}); }, 8000);
+
 $("cloudRefreshBtn").onclick = async () => {
   if (busy || !chatId) return;
-  busy = true; sendBtn.disabled = true;
   const btn = $("cloudRefreshBtn"); btn.disabled = true;
-  const v = assistantBubble();
-  v.notice("Teleporting the cloud session to check for replies… a terminal window may pop up for a moment.");
   try {
-    const res = await post("/api/cloud_refresh", { chat_id: chatId });
-    if (res.error) v.notice(res.error, "error");
-    else if (res.text) v.text(res.text);
-    else v.notice("No new replies yet.");
-  } catch (e) {
-    v.notice("Refresh failed: " + e.message, "error");
-  }
-  v.done();
-  btn.disabled = false; busy = false; sendBtn.disabled = false;
+    const res = await post("/api/cloud_check", {});
+    const n = await showNewCloudReplies();
+    if (res.error) { const v = assistantBubble(); v.notice(res.error, "error"); v.done(); }
+    else if (!n) { const v = assistantBubble(); v.notice("No new replies yet."); v.done(); }
+  } catch (e) { /* ignore */ }
+  btn.disabled = false;
 };
 $("restartBtn").onclick = async () => {
   if (busy) return;

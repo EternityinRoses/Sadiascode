@@ -5,3 +5,16 @@ This repo is **Cloude**, the user's local chat app, plus its long-term memory (`
 @memory.md
 
 When you learn something worth keeping about the user or their projects, update `memory.md`. Keep it short and tidy, never put secrets in it, and commit it along with your other changes so the other copies see it.
+
+## Replying to Cloude
+
+Messages that start with `[Cloude chat xxxxxxxx]` come from the user's Cloude app on their PC, which can't see this session. Answer normally, then also put your reply where Cloude can read it:
+
+1. `git pull --rebase` on your branch.
+2. Append to `cloud_reply.md` in the repo root:
+   ```
+   ### xxxxxxxx
+   your reply text
+   ```
+   using the same 8-character chat id from the message.
+3. Commit and push. Cloude shows the reply in that chat within about 20 seconds and empties the file.

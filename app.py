@@ -808,15 +808,19 @@ def run_turn_cloud(chat, user_text, attachments, emit):
             chat["cloud_session"] = link.group(1)
             message = chat.pop("cloud_waiting", "")
             if not message:
-                say("☁️ Linked! Press 🔄 at the top to pull in replies.")
+                say("☁️ Linked! Replies will show up here by themselves.")
                 return
             first = True
         else:
             message, first = user_text, False
-        cloud_send(exe, root, chat["cloud_session"], with_handoff(chat, message, 60_000))
+        tag = short_id(chat["id"])
+        cloud_send(exe, root, chat["cloud_session"],
+                   f"[Cloude chat {tag}] " + with_handoff(chat, message, 60_000)
+                   + f"\n\n(Sent from Cloude, which can't see this session. Reply by appending to "
+                     f"{MAILBOX} under a `### {tag}` heading, then commit and push. See CLAUDE.md.)")
         # Once linked, sending is quiet: only the first message gets a line.
         if first:
-            say("☁️ Linked and sent! Press 🔄 at the top to pull in replies.")
+            say("☁️ Linked and sent! Replies will show up here by themselves.")
     except subprocess.TimeoutExpired:
         emit({"type": "error", "text": "The `claude` program took too long to answer."})
     finally:
@@ -826,152 +830,119 @@ def run_turn_cloud(chat, user_text, attachments, emit):
 
 
 
-# ------------------------------------------- cloud replies via teleport --
-# `claude -p --cloud` can only send. To read replies, "refresh" the way the
-# user suggested: teleport the session into a throwaway copy of the repo
-# (never Cloude's own folder), let Claude Code write the session's transcript
-# to ~/.claude/projects/, read the new replies out of it, and close it again.
+# ---------------------------------------- cloud replies via a GitHub file --
+# `claude -p --cloud` can only send. Replies come back through the repo: the
+# cloud session appends its answer to cloud_reply.md (CLAUDE.md tells it how)
+# and pushes. Cloude checks GitHub in the background, shows each reply in the
+# chat it belongs to, and empties the file. All git work happens in a scratch
+# clone (.cloud_mirror/), never in Cloude's own folder.
 
 MIRROR_DIR = APP_DIR / ".cloud_mirror"
+MAILBOX = "cloud_reply.md"
+MAILBOX_POLL_SEC = 20
+_mailbox_lock = threading.Lock()
+
+
+def mirror_git(*args, timeout=60):
+    return subprocess.run(["git", *args], cwd=MIRROR_DIR, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=timeout)
 
 
 def ensure_mirror(root):
-    """A scratch clone for teleport to check branches out in. Reset every time."""
+    """A scratch clone of the repo, cleaned before every use."""
     if (MIRROR_DIR / ".git").exists():
-        subprocess.run(["git", "reset", "--hard", "-q"], cwd=MIRROR_DIR, capture_output=True, timeout=60)
-        subprocess.run(["git", "clean", "-fdq"], cwd=MIRROR_DIR, capture_output=True, timeout=60)
+        mirror_git("reset", "--hard", "-q")
+        mirror_git("clean", "-fdq")
         return
     url = subprocess.run(["git", "config", "--get", "remote.origin.url"], cwd=root,
                          capture_output=True, text=True, timeout=10).stdout.strip()
     if not url:
-        raise RuntimeError("Your Cloude folder has no GitHub remote to copy for the refresh.")
+        raise RuntimeError("Your Cloude folder has no GitHub remote for cloud replies.")
     done = subprocess.run(["git", "clone", "-q", url, str(MIRROR_DIR)], capture_output=True,
                           text=True, timeout=600)
     if done.returncode != 0:
-        raise RuntimeError("Couldn't make the scratch copy for the refresh: " + done.stderr.strip()[-300:])
+        raise RuntimeError("Couldn't make the scratch copy for cloud replies: " + done.stderr.strip()[-300:])
 
 
-def transcript_dir(folder):
-    """Where Claude Code keeps transcripts for a folder: the path with every
-    non-letter/digit turned into '-' (e.g. C:\\x\\y -> C--x-y)."""
-    return Path.home() / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", str(folder))
+def short_id(chat_id):
+    return chat_id[:8]
 
 
-def launch_teleport(exe, session):
-    args = [exe, "--teleport", session]
-    if os.name == "nt":
-        # Teleport only runs in a real console. A normal (not hidden) window,
-        # so a first-time "trust this folder?" question can be answered.
-        return subprocess.Popen(args, cwd=MIRROR_DIR, creationflags=subprocess.CREATE_NEW_CONSOLE), None
-    import pty                                      # Mac / Linux: a pretend terminal
-    master, slave = pty.openpty()
-    proc = subprocess.Popen(args, cwd=MIRROR_DIR, stdin=slave, stdout=slave, stderr=slave,
-                            start_new_session=True)
-    os.close(slave)
+def parse_mailbox(text):
+    """Blocks of `### <chat id> ...` followed by the reply text."""
+    blocks, head, body = [], None, []
+    for line in text.splitlines():
+        if line.startswith("### "):
+            if head is not None:
+                blocks.append((head, "\n".join(body).strip()))
+            head, body = line[4:].strip(), []
+        elif head is not None:
+            body.append(line)
+    if head is not None:
+        blocks.append((head, "\n".join(body).strip()))
+    return [(h, b) for h, b in blocks if b]
 
-    def drain():                                    # keep its screen output flowing
+
+def chat_for_header(header):
+    """The chat a reply belongs to: the first word of the header is its short id."""
+    sid = (header.split() or [""])[0].strip("[]#:")
+    if not re.fullmatch(r"[a-f0-9]{8}", sid):
+        return None
+    matches = list(CHATS_DIR.glob(f"{sid}*.json"))
+    return load_chat(matches[0].stem) if matches else None
+
+
+def check_mailbox():
+    """Deliver any cloud replies waiting on GitHub. Returns how many arrived."""
+    root = repo_root()
+    if not root:
+        return 0
+    with _mailbox_lock:
+        ensure_mirror(root)
+        mirror_git("fetch", "-q", "--prune", "origin", timeout=120)
+        refs = mirror_git("for-each-ref", "--format=%(refname:short)", "refs/remotes/origin").stdout.split()
+        delivered = 0
+        for ref in refs:
+            if ref.endswith("/HEAD"):
+                continue
+            shown = mirror_git("show", f"{ref}:{MAILBOX}")
+            if shown.returncode != 0 or not shown.stdout.strip():
+                continue
+            for header, body in parse_mailbox(shown.stdout):
+                chat = chat_for_header(header)
+                if not chat:
+                    continue
+                key = hashlib.sha1((header + body).encode("utf-8")).hexdigest()[:16]
+                seen = set(chat.get("cloud_seen", []))
+                if key in seen:
+                    continue
+                seen.add(key)
+                chat["cloud_seen"] = sorted(seen)
+                chat["display"].append({"role": "assistant", "text": body, "thoughts": "", "tools": []})
+                save_chat(chat)
+                delivered += 1
+            # Empty the file on that branch so the cloud starts fresh. If the push
+            # loses a race with the cloud, the seen-list stops repeats next time.
+            branch = ref.split("/", 1)[1]
+            mirror_git("checkout", "-q", "-B", branch, ref)
+            (MIRROR_DIR / MAILBOX).write_text("", encoding="utf-8")
+            mirror_git("-c", "user.name=Cloude", "-c", "user.email=cloude@localhost",
+                       "commit", "-q", "-m", "Cloude: picked up cloud replies", "--", MAILBOX)
+            mirror_git("push", "-q", "origin", f"{branch}:{branch}", timeout=120)
+        return delivered
+
+
+def mailbox_loop():
+    while True:
+        time.sleep(MAILBOX_POLL_SEC)
         try:
-            while os.read(master, 4096):
-                pass
-        except OSError:
-            pass
-    threading.Thread(target=drain, daemon=True).start()
-    return proc, master
-
-
-def stop_process_tree(proc, master=None):
-    try:
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, timeout=15)
-        else:
-            os.killpg(proc.pid, 9)
-    except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
-    if master is not None:
-        try:
-            os.close(master)
-        except OSError:
-            pass
-
-
-def wait_for_transcript(folder, since, timeout=150):
-    """Wait until teleport has written a transcript and it has stopped growing."""
-    deadline = time.time() + timeout
-    last_size, stable_since = -1, None
-    while time.time() < deadline:
-        files = [p for p in folder.glob("*.jsonl") if p.stat().st_mtime >= since - 2] if folder.exists() else []
-        if files:
-            newest = max(files, key=lambda p: p.stat().st_mtime)
-            size = newest.stat().st_size
-            if size == last_size and size > 0:
-                if stable_since and time.time() - stable_since >= 4:
-                    return newest
-                stable_since = stable_since or time.time()
-            else:
-                last_size, stable_since = size, None
-        time.sleep(1)
-    return None
-
-
-def replies_from_transcript(path, seen):
-    """The session's assistant text, oldest first, skipping anything already shown.
-    Reads only the steady parts of the format: type, message.content text, timestamp."""
-    out = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        if ev.get("type") != "assistant" or ev.get("isSidechain"):
-            continue
-        msg = ev.get("message") or {}
-        # Claude Code's own notices (usage limits, API errors) aren't replies
-        if ev.get("isApiErrorMessage") or msg.get("model") == "<synthetic>":
-            continue
-        content = msg.get("content")
-        if isinstance(content, str):
-            text = content
-        else:
-            text = "".join(b.get("text", "") for b in content or [] if isinstance(b, dict) and b.get("type") == "text")
-        text = text.strip()
-        if re.match(r"(You've hit your|You have hit your).*limit|API Error:", text):
-            continue                     # same notices, caught by their wording
-        key = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
-        if text and key not in seen:
-            seen.add(key)
-            out.append(text)
-    return out
-
-
-def refresh_cloud(chat):
-    """Pull the cloud session's newest replies. Returns the new text ('' if none)."""
-    exe, root = find_claude(), repo_root()
-    if not exe or not root:
-        raise RuntimeError("The refresh needs the `claude` program and Cloude inside its git clone.")
-    session = chat.get("cloud_session")
-    if not session:
-        raise RuntimeError("This chat isn't linked to a cloud session yet.")
-    ensure_mirror(root)
-    folder = transcript_dir(MIRROR_DIR)
-    start = time.time()
-    proc, master = launch_teleport(exe, session)
-    try:
-        found = wait_for_transcript(folder, start)
-    finally:
-        stop_process_tree(proc, master)
-    if not found:
-        raise RuntimeError("Teleport didn't hand over the session in time. If its window is asking "
-                           "a question (like trusting the folder), answer it once and refresh again.")
-    seen = set(chat.get("cloud_seen", []))
-    first_time = "cloud_seen" not in chat
-    replies = replies_from_transcript(found, seen)
-    chat["cloud_seen"] = sorted(seen)
-    if first_time and len(replies) > 3:
-        replies = replies[-3:]          # a linked old session: just its latest few
-    return "\n\n---\n\n".join(replies)
+            if any(json.loads(p.read_text(encoding="utf-8")).get("cloud_session")
+                   for p in CHATS_DIR.glob("*.json")):
+                n = check_mailbox()
+                if n:
+                    print(f"{n} cloud repl{'y' if n == 1 else 'ies'} arrived")
+        except Exception as e:                       # keep polling no matter what
+            print(f"cloud mailbox check failed: {e}")
 
 
 # ------------------------------------------------------- memory via git --
@@ -1132,14 +1103,9 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 pass
             return self.send_json({"ok": True})
-        if path == "/api/cloud_refresh":
+        if path == "/api/cloud_check":
             try:
-                chat = load_chat(body.get("chat_id"))
-                text = refresh_cloud(chat)
-                if text:
-                    chat["display"].append({"role": "assistant", "text": text, "thoughts": "", "tools": []})
-                save_chat(chat)
-                return self.send_json({"text": text})
+                return self.send_json({"arrived": check_mailbox()})
             except Exception as e:
                 return self.send_json({"error": str(e)})
         if path == "/api/restart":
@@ -1232,6 +1198,7 @@ def main():
             time.sleep(0.5)
     url = f"http://{HOST}:{PORT}"
     print(f"Cloude is up at {url}  (Ctrl+C to stop)")
+    threading.Thread(target=mailbox_loop, daemon=True).start()
     if "--browser" not in sys.argv and "--no-browser" not in sys.argv:
         # Its own window: the server runs in the background and Cloude closes
         # when the window does.
