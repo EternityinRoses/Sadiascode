@@ -88,6 +88,10 @@ A fixed copy is at `fixed/minds.js` on the branch.
 - OPEN / NEXT (Oct 10): (1) PC confirmed on the latest update Oct 10; (2) test the eye slide show with the game open; (3) why a party seat is still NEUTRAL in fights; (4) per-chat brain picker (offered, not built): pick 🔑/💻/☁️ when starting a chat instead of flipping the global setting; (5) wishlist.md items. `eye_err.txt` in the repo root is the API chat's old debug log; safe to delete.
 - Game state Oct 10: Rose's current run uses **Nimbra** (Elf×Shade druid, 350 xp, in Rose's party, summoned "green", has the storm-carved bone token + torch, no camp kit). Lights in the Hill quest done; Wenna felled. Lirael (bard) exists as a past character in another save.
 
+## Drizzle (built Oct 10, "just because")
+
+- `drizzle/drizzle.py`: a tiny offline chatbot I wrote, with no AI model and only the Python stdlib. It uses rules, memory (name, likes, facts, "when I say X, say Y") and a word chain it learns from Rose. It runs on 127.0.0.1:8633 via `drizzle/Drizzle.bat`, and its brain is saved in `drizzle/drizzle_brain.json`.
+
 ## Notes funnel (built Oct 10, Rose's idea)
 
 - Brains used to clash in git over memory.md (the update paused). Now each brain writes ONLY its own notes file: notes/api.md (me), notes/code.md, notes/cloud.md. app.py `funnel_notes()` on the PC (the one writer) builds memory.md from them at startup, new chat, end of turn and every update round. Lines written straight into memory.md get moved into notes/api.md. `.memory_built` (not in git) holds the last build for that check.
