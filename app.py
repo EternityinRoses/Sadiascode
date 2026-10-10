@@ -2443,6 +2443,25 @@ def settle_notes_conflicts():
     return None
 
 
+BOOT_HEAD = ""     # the commit this copy started on; set by update_loop
+
+
+def stale_code():
+    """True when code files changed since this copy started, however they arrived."""
+    if not BOOT_HEAD:
+        return False
+    # Only commits from GitHub count; Cloude's own edits on this PC wait for a Restart as before.
+    r = git("log", "--format=@%an", "--name-only", f"{BOOT_HEAD}..HEAD")
+    files, mine = [], False
+    for line in (r.stdout.splitlines() if r and r.returncode == 0 else []):
+        if line.startswith("@"):
+            mine = line[1:] == "Cloude"
+        elif line.strip() and not mine:
+            files.append(line.strip())
+    return any(f not in NO_RESTART_NEEDED and not f.startswith(("fixed/", "seats/"))
+               and f not in NOTES_FILES for f in files)
+
+
 def update_once():
     """Pull new commits. Returns True if Cloude should restart to use them."""
     global UPDATE_NOTE
@@ -2456,6 +2475,8 @@ def update_once():
     if upstream.returncode != 0:
         return False
     behind = git("rev-list", "--count", "HEAD..@{u}").stdout.strip() not in ("", "0")
+    if not behind and stale_code():
+        return True     # something else pulled new code (e.g. pull_memory) without a restart
     if not behind:
         if git("rev-list", "--count", "@{u}..HEAD").stdout.strip() not in ("", "0"):
             git("push", "-q", timeout=120)              # share self-edits and notes
@@ -2486,6 +2507,10 @@ def update_once():
 
 
 def update_loop():
+    global BOOT_HEAD
+    if repo_root():
+        r = git("rev-parse", "HEAD")
+        BOOT_HEAD = r.stdout.strip() if r and r.returncode == 0 else ""
     while True:
         time.sleep(UPDATE_EVERY_SEC)
         try:
