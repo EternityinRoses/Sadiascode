@@ -424,7 +424,8 @@ def with_handoff(chat, user_text, limit):
 def new_chat(handoff=""):
     # The system prompt and tool list are frozen per chat: the API rejects
     # replayed thinking blocks if either changes under an existing conversation.
-    # So when Cloude edits its own prompt or tools, it shows up in new chats.
+    # So when Cloude edits its own prompt, it shows up in new chats. New tools are
+    # added to old chats at the start of their next turn (see run_turn).
     cfg = load_config()
     if cfg.get("git_sync"):
         pull_memory()                    # pick up notes the other brains left
@@ -550,6 +551,14 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
         return
     start_len = len(chat["messages"])
     close_dangling_tools(chat)
+    # Older chats froze their tool list before newer tools existed. Hand them the
+    # missing ones at the start of a fresh turn (never mid tool loop), so e.g.
+    # tell_chat works in every chat. Costs one cache rebuild, once.
+    have = {t["name"] for t in chat["tools"]}
+    added = [t for t in TOOLS if t["name"] not in have]
+    if added:
+        chat["tools"] = list(chat["tools"]) + added
+        activity(f"chat {short_id(chat['id'])}: gained tools {', '.join(t['name'] for t in added)}")
     chat["messages"].append({"role": "user", "content": content})
     log_user(chat, display_text or user_text, attachments)
     if game:
