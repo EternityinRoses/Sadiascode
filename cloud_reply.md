@@ -1,3 +1,0 @@
-### 336297ad game 3fc7ef
-ACT: STAY
-OPEN CHEST
