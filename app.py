@@ -545,8 +545,8 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
     content = list(extra_blocks or [])
     for att in attachments:
         content.extend(attachment_blocks(att))
-    mail = [] if game else chat.pop("inbox", [])     # replies other chats sent while it was quiet
-    model_text = with_handoff(chat, ("\n\n".join(mail) + "\n\n---\n\n" if mail else "") + user_text, 120_000)
+    inbox = [] if game else chat.pop("inbox", [])    # replies other chats sent while it was quiet
+    model_text = with_handoff(chat, ("\n\n".join(inbox) + "\n\n---\n\n" if inbox else "") + user_text, 120_000)
     if model_text:
         content.append({"type": "text", "text": model_text})
     if not content:
@@ -666,9 +666,10 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
                         raise ToolError(f"Unknown tool {name}.")
                     if not valid_input(name, args, schemas.get(name, {})):
                         raise ToolError("The tool input came through garbled; please try again.")
-                    if mail and name in MAIL_FORBIDDEN:
+                    if mail and name in MAIL_FORBIDDEN and (name == "tell_chat" or not cfg.get("auto_approve")):
                         raise ToolError("Another chat asked for this, not the user, so you may only read and "
-                                        "answer. Say what you'd change; the user can tell you to do it.")
+                                        "answer" + ("" if name == "tell_chat" else " (auto-run is off)")
+                                        + ". Say what you'd change; the user can tell you to do it.")
                     if name == "run_command" and game:
                         raise ToolError("Shell commands are off during game turns.")
                     if name == "run_command" and cfg.get("auto_approve"):
@@ -2095,9 +2096,10 @@ def seat_runner():
 # in turn, so two chats can't talk each other in circles.
 
 CHAT_MAIL_LIMIT = 8000
-# A message from another chat is not the user. Answering one is read-only: no
-# writing, no commands, no messaging on, whatever auto-run says. Otherwise one
-# chat (or anything that can steer it) could make another change the PC.
+# A message from another chat is not the user. With auto-run OFF, answering one is
+# read-only: no writing, no commands. With auto-run ON (Rose's choice, Oct 10) it may
+# write, edit and run commands, all shown live and in the activity line. Messaging on
+# (tell_chat) is never allowed in a mail turn, so chats can't relay orders in chains.
 MAIL_FORBIDDEN = {"write_file", "edit_file", "run_command", "tell_chat"}
 BRAIN_NAMES = {"api": "🔑 API", "code": "💻 Claude Code", "cloud": "☁️ cloud"}
 
@@ -2166,8 +2168,9 @@ def deliver_mail(from_id, to_id, text, reply):
             CHAT_TURNS += 1
             try:
                 if brain == "code":
-                    # Claude Code can't be held to read-only tools from here, so it answers in plan mode
-                    run_turn_code(chat, text, [], emit, read_only=True)
+                    # Claude Code can't be held to read-only tools from here, so it answers in
+                    # plan mode, unless auto-run is on (then it may act, like the API brain)
+                    run_turn_code(chat, text, [], emit, read_only=not load_config().get("auto_approve"))
                 else:
                     run_turn(chat, text, [], emit, mail=True)
             finally:
