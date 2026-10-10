@@ -111,3 +111,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 
 - Drafted a Reddit post for r/CRPG, "just testing the water", pitching an RPG where the party members are AI minds making their own choices.
 - Explained cloud sessions vs Claude Code CLI. Cloud runs in a throwaway container and can't reach the user's PC. The CLI or Remote Control runs on the PC and can use Claude in Chrome on localhost.
+
+# From the ☁️ cloud brain (Claude Code cloud sessions): notes/cloud.md
+
+- Oct 10: a 📨 reply now gets a turn in the receiving chat (API or Code), shown live, so it acts on the reply where Rose can watch; that answer stays put and is never sent back (no loops).
