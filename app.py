@@ -389,7 +389,8 @@ def build_system():
     if SYSTEM_FILE.exists():
         parts.append(SYSTEM_FILE.read_text(encoding="utf-8"))
     if MEMORY_FILE.exists():
-        parts.append("# Your memory (memory.md, as of the start of this chat)\n\n"
+        parts.append("# Your memory (memory.md, built from every brain's notes/*.md as of the start "
+                     "of this chat; yours is notes/api.md)\n\n"
                      + MEMORY_FILE.read_text(encoding="utf-8"))
     return "\n\n".join(parts)
 
@@ -429,6 +430,7 @@ def new_chat(handoff=""):
     cfg = load_config()
     if cfg.get("git_sync"):
         pull_memory()                    # pick up notes the other brains left
+    funnel_notes()
     chat = {
         "id": uuid.uuid4().hex,
         "title": "New chat",
@@ -744,7 +746,10 @@ def _drop_unanswered(chat, start_len):
 CODE_PREFACE = """You're running through Claude Code on the user's PC this time, not the API.
 Use Claude Code's own tools (Read, Write, Edit, Bash, and so on) instead of
 list_files / read_file / write_file / edit_file / run_command. Your working
-folder is Cloude's folder, and files the user attaches are in uploads/."""
+folder is Cloude's folder, and files the user attaches are in uploads/.
+Your own notes file is notes/code.md: write things worth remembering there.
+Never edit memory.md (Cloude builds it from every brain's notes file) or
+another brain's notes file."""
 
 
 def find_claude():
@@ -1350,13 +1355,13 @@ def pull_memory():
 
 
 def push_memory_async():
-    """Commit and push memory.md only, in the background, so the cloud brain
+    """Commit and push memory.md and notes/ only, in the background, so the cloud brain
     (and any other copy of Cloude) sees the new notes."""
     def work():
         if not repo_root():
             return
-        git("add", "--", str(MEMORY_FILE))
-        c = git("commit", "-m", "Cloude: update memory", "--", str(MEMORY_FILE))
+        git("add", "--", str(MEMORY_FILE), str(NOTES_DIR))
+        c = git("commit", "-m", "Cloude: update memory", "--", str(MEMORY_FILE), str(NOTES_DIR))
         if c and c.returncode == 0:
             p = git("push", timeout=60)
             ok = p and p.returncode == 0
@@ -1366,10 +1371,83 @@ def push_memory_async():
 
 
 def memory_snapshot():
+    out = b""
+    for p in [MEMORY_FILE] + note_files():
+        try:
+            out += p.read_bytes() + b"\0"
+        except OSError:
+            pass
+    return out
+
+
+# ------------------------------------------------------ the notes funnel --
+# Every brain keeps its OWN notes file, so the PC and the cloud never write the
+# same file and git never clashes over notes (Rose's idea, Oct 10). memory.md is
+# BUILT from them here on the PC, the one writer, and everything that reads
+# memory (new chats, Claude Code, seats, CLAUDE.md's @memory.md) gets all of it.
+
+NOTES_DIR = APP_DIR / "notes"
+NOTE_OWNERS = (("api", "🔑 API brain (Cloude's own tools on the PC)"),
+               ("code", "💻 Claude Code brain (on the PC)"),
+               ("cloud", "☁️ cloud brain (Claude Code cloud sessions)"))
+BUILT_MARK = "<!-- Built by Cloude from notes/*.md."
+BUILT_COPY = APP_DIR / ".memory_built"      # the last build, to spot direct edits (kept out of git)
+_funnel_lock = threading.Lock()
+MEMORY_HEAD = (BUILT_MARK + " Don't edit this file: it is rebuilt, and direct edits get moved "
+               "into notes/api.md. -->\n# Cloude's memory\n\n"
+               "Notes worth keeping between chats, shared by all of Cloude's brains. Each brain writes "
+               "ONLY its own file, so the PC and the cloud never clash over notes: notes/api.md (🔑 API), "
+               "notes/code.md (💻 Claude Code on the PC), notes/cloud.md (☁️ cloud). Keep your file short "
+               "and tidy: update stale lines, delete what's done, never put the API key or other secrets "
+               "in it. If another brain's note is wrong or stale, say so in your own file.")
+
+
+def note_files():
+    known = [NOTES_DIR / f"{k}.md" for k, _ in NOTE_OWNERS]
+    others = sorted(p for p in NOTES_DIR.glob("*.md") if p not in known) if NOTES_DIR.is_dir() else []
+    return [p for p in known + others if p.is_file()]
+
+
+def build_memory_text():
+    titles = dict(NOTE_OWNERS)
+    parts = [MEMORY_HEAD]
+    for p in note_files():
+        body = re.sub(r"\A\s*<!--.*?-->\s*", "", p.read_text(encoding="utf-8"), flags=re.S).strip()
+        if body:
+            parts.append(f"# From the {titles.get(p.stem, p.stem)}: notes/{p.name}\n\n{body}")
+    return "\n\n".join(parts) + "\n"
+
+
+def funnel_notes():
+    """Rebuild memory.md from the notes files. Lines someone wrote straight into
+    memory.md (an older chat, Rose) are moved into notes/api.md first, not lost."""
     try:
-        return MEMORY_FILE.read_bytes()
-    except OSError:
-        return b""
+        with _funnel_lock:
+            NOTES_DIR.mkdir(exist_ok=True)
+            current = MEMORY_FILE.read_text(encoding="utf-8") if MEMORY_FILE.exists() else ""
+            api = NOTES_DIR / "api.md"
+            if current.strip() and not current.startswith(BUILT_MARK) and not api.exists():
+                write_whole(api, current)            # first run: the old shared memory
+                activity("moved memory.md into notes/api.md (each brain has its own notes file now)")
+            elif current.strip() and BUILT_COPY.exists():
+                last = set(BUILT_COPY.read_text(encoding="utf-8").splitlines())
+                fresh = set(build_memory_text().splitlines())
+                stray = [l for l in current.splitlines()
+                         if l.strip() and l not in last and l not in fresh and not l.startswith(("<<<<<<<", "=======", ">>>>>>>"))]
+                if stray:
+                    old = api.read_text(encoding="utf-8").rstrip() if api.exists() else ""
+                    write_whole(api, old + f"\n\n## Written straight into memory.md ({time.strftime('%b %d')}); "
+                                           "sort these into place\n\n" + "\n".join(stray) + "\n")
+                    activity(f"moved {len(stray)} line(s) written straight into memory.md into notes/api.md")
+            built = build_memory_text()
+            BUILT_COPY.write_text(built, encoding="utf-8")
+            if built != current:
+                write_whole(MEMORY_FILE, built)
+                activity("rebuilt memory.md from " + ", ".join(f"notes/{p.name}" for p in note_files()))
+                return True
+    except Exception as e:                           # memory must never stop a chat
+        activity(f"couldn't rebuild memory.md: {type(e).__name__}: {e}")
+    return False
 
 
 # ------------------------------------------------- game seats (mailbox) --
@@ -2376,6 +2454,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             emit({"type": "error", "text": f"{type(e).__name__}: {e}"})
         ACTIVE_TURNS -= 1
+        funnel_notes()
         if load_config().get("git_sync") and memory_snapshot() != before:
             push_memory_async()
         emit({"type": "done", "title": chat["title"]})
@@ -2404,7 +2483,8 @@ def commit_self_edits():
     git("add", "-u")
     untracked = git("ls-files", "--others", "--exclude-standard").stdout.split()
     keep = [f for f in untracked
-            if (f.endswith((".py", ".js", ".md", ".txt", ".json")) and "/" not in f) or f.startswith("static/")]
+            if (f.endswith((".py", ".js", ".md", ".txt", ".json")) and "/" not in f)
+            or f.startswith("static/") or (f.startswith("notes/") and f.endswith(".md"))]
     if keep:
         git("add", "--", *keep)
     if git("diff", "--cached", "--quiet").returncode != 0:
@@ -2416,6 +2496,10 @@ def commit_self_edits():
 NOTES_FILES = {"memory.md", "wishlist.md", "cloud_reply.md"}
 
 
+def is_notes(f):
+    return f in NOTES_FILES or f.startswith("notes/")
+
+
 def settle_notes_conflicts():
     """Brains on the PC and in the cloud both add notes to memory.md, and a clash there
     used to pause every update. A clash only in notes files is settled by keeping both
@@ -2424,7 +2508,7 @@ def settle_notes_conflicts():
     for _ in range(20):                                  # one round per replayed commit
         stuck = git("diff", "--name-only", "--diff-filter=U")
         files = (stuck.stdout.split() if stuck else [])
-        if not files or any(f not in NOTES_FILES for f in files):
+        if not files or any(not is_notes(f) for f in files):
             return stuck if files else None
         for f in files:
             parts = []
@@ -2462,7 +2546,7 @@ def stale_code():
         elif line.strip() and not mine:
             files.append(line.strip())
     return any(f not in NO_RESTART_NEEDED and not f.startswith(("fixed/", "seats/"))
-               and f not in NOTES_FILES for f in files)
+               and not is_notes(f) for f in files)
 
 
 def update_once():
@@ -2472,6 +2556,7 @@ def update_once():
         return False
     if not git("fetch", "-q", timeout=60):
         return False
+    funnel_notes()                  # so the commit below carries a fresh memory.md
     commit_self_edits()
     head = git("rev-parse", "HEAD").stdout.strip()
     upstream = git("rev-parse", "@{u}")
@@ -2499,7 +2584,8 @@ def update_once():
         return False
     UPDATE_NOTE = ""
     git("push", "-q", timeout=120)                      # self-edits reach GitHub too
-    code = [f for f in changed if f not in NO_RESTART_NEEDED and not f.startswith("fixed/")]
+    funnel_notes()                  # the other brains' new notes; committed on the next round
+    code = [f for f in changed if f not in NO_RESTART_NEEDED and not f.startswith("fixed/") and not is_notes(f)]
     if "requirements.txt" in code:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(APP_DIR / "requirements.txt")],
                        cwd=APP_DIR, timeout=600)
@@ -2590,6 +2676,7 @@ def main():
             if attempt == 19:
                 raise
             time.sleep(0.5)
+    funnel_notes()
     threading.Thread(target=seat_runner, daemon=True).start()
     url = f"http://{HOST}:{PORT}"
     print(f"Cloude is up at {url}  (Ctrl+C to stop)")

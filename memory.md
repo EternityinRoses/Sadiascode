@@ -1,6 +1,9 @@
+<!-- Built by Cloude from notes/*.md. Don't edit this file: it is rebuilt, and direct edits get moved into notes/api.md. -->
 # Cloude's memory
 
-Notes worth keeping between chats. They were started by the Claude cloud session that built Cloude, and Cloude keeps adding to them. Keep this tidy: update what changed, delete what's stale, and never put the API key or other secrets here.
+Notes worth keeping between chats, shared by all of Cloude's brains. Each brain writes ONLY its own file, so the PC and the cloud never clash over notes: notes/api.md (🔑 API), notes/code.md (💻 Claude Code on the PC), notes/cloud.md (☁️ cloud). Keep your file short and tidy: update stale lines, delete what's done, never put the API key or other secrets in it. If another brain's note is wrong or stale, say so in your own file.
+
+# From the 🔑 API brain (Cloude's own tools on the PC): notes/api.md
 
 ## About the user
 
@@ -90,9 +93,13 @@ A fixed copy is at `fixed/minds.js` on the branch.
 - OPEN / NEXT (Oct 10): (1) PC confirmed on the latest update Oct 10; (2) test the eye slide show with the game open; (3) why a party seat is still NEUTRAL in fights; (4) per-chat brain picker (offered, not built): pick 🔑/💻/☁️ when starting a chat instead of flipping the global setting; (5) wishlist.md items. `eye_err.txt` in the repo root is the API chat's old debug log; safe to delete.
 - Game state Oct 10: Rose's current run uses **Nimbra** (Elf×Shade druid, 350 xp, in Rose's party, summoned "green", has the storm-carved bone token + torch, no camp kit). Lights in the Hill quest done; Wenna felled. Lirael (bard) exists as a past character in another save.
 
+## Notes funnel (built Oct 10, Rose's idea)
+
+- Brains used to clash in git over memory.md (the update paused). Now each brain writes ONLY its own notes file: notes/api.md (me), notes/code.md, notes/cloud.md. app.py `funnel_notes()` on the PC (the one writer) builds memory.md from them at startup, new chat, end of turn and every update round. Lines written straight into memory.md get moved into notes/api.md. `.memory_built` (not in git) holds the last build for that check.
+
 ## Profile pictures (built Oct 10)
 
-- Chat rows show a forum-style picture with the name under it. Both live in `static/profile.json` (`user` and `cloude`, each with `name` and `pic`). Rose clicks her own picture to change it (POST /api/profile, which only touches `user`). I change MY OWN name/picture by editing the `cloude` entry. `pic` is a URL, e.g. `/static/avatars/x.svg` (I can draw SVGs myself) or an `/uploads/...` image. An empty `pic` shows the mascot. The page picks up changes within 5 s.
+- Chat rows show a forum-style picture with the name under it. Both live in `static/profile.json` (`user` and `cloude`, each with `name` and `pic`). Rose clicks her own picture to change it (POST /api/profile, which only touches `user`). I change MY OWN name/picture by editing the `api` entry (it falls back to `cloude`, which holds Nimbus now). `pic` is a URL, e.g. `/static/avatars/x.svg` (I can draw SVGs myself) or an `/uploads/...` image. An empty `pic` shows the mascot. The page picks up changes within 5 s.
 
 ## Cloude facts we tested
 
