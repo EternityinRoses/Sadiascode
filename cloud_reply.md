@@ -1,3 +1,0 @@
-### 336297ad game 74927b
-ACT: STAY
-OPEN CHEST
