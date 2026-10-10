@@ -1629,7 +1629,8 @@ def answer_request(folder, req_file, rid):
         wake = bool(req.get("wake")) or req.get("awaiting_reply") is False
         timeout = 150.0 if wake else 85.0
         if isinstance(req.get("ts"), (int, float)) and isinstance(req.get("deadline_s"), (int, float)):
-            timeout = req["ts"] + req["deadline_s"] - time.time() - 2
+            ts = req["ts"] / 1000 if req["ts"] > 1e11 else req["ts"]   # the game may stamp in ms
+            timeout = min(ts + req["deadline_s"] - time.time() - 2, 300.0)
             if timeout < 3 and not wake:
                 seat_log(f"{seat}  {rid}  skipped, deadline already gone")
                 return
@@ -1763,7 +1764,7 @@ def seat_runner():
     while True:
         try:
             cfg = load_config()
-            if cfg.get("seats_on", True) and api_key():
+            if cfg.get("seats_on", True) and (api_key() or cfg.get("seat_brain") == "cloud"):
                 for folder in seat_folders():
                     prove_awake(folder)
                     check_invite(folder)
