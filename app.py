@@ -1542,6 +1542,8 @@ def seat_log(line):
 
 def seat_folders():
     out = [p for p in SEATS_DIR.iterdir() if p.is_dir()]
+    if (SEATS_DIR / "SEAT.json").is_file():
+        out.append(SEATS_DIR)  # the game pointed the seat straight at seats\
     for extra in load_config().get("seat_folders") or []:
         p = Path(extra)
         if p.is_dir():

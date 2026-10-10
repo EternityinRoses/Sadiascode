@@ -10,3 +10,13 @@ __pycache__/
 # seat runner live files (requests, replies, logs, transcripts)
 seats/*/
 seats/activity.log
+seats/SEAT.json
+seats/INSTRUCTIONS.md
+seats/request_*.json
+seats/reply_*.txt
+seats/act_*
+seats/speak_*
+seats/awake
+seats/world_state.md
+seats/shot_*
+seats/transcripts/
