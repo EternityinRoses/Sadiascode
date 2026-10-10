@@ -6,20 +6,33 @@
 <title>Cloude</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
 <link rel="stylesheet" href="/static/style.css">
+<script>try { var k = localStorage.getItem("cloude-skin"); if (k) document.documentElement.dataset.skin = k; } catch (e) {}</script>
 </head>
 <body>
 <div class="sky" aria-hidden="true">
   <span class="puff p1"></span><span class="puff p2"></span><span class="puff p3"></span>
+  <span class="petal q1"></span><span class="petal q2"></span><span class="petal q3"></span><span class="petal q4"></span><span class="petal q5"></span><span class="petal q6"></span>
 </div>
 
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <svg class="mascot" viewBox="0 0 64 44" aria-hidden="true">
+      <svg class="mascot m-cloud" viewBox="0 0 64 44" aria-hidden="true">
         <path class="cloud-body" d="M16 40h34a12 12 0 0 0 1-24 16 16 0 0 0-30-4A13 13 0 0 0 16 40z"/>
         <circle class="eye" cx="27" cy="26" r="2.6"/><circle class="eye" cx="39" cy="26" r="2.6"/>
         <circle class="blush" cx="22" cy="31" r="2.6"/><circle class="blush" cx="44" cy="31" r="2.6"/>
         <path class="smile" d="M30 31q3 3 6 0"/>
+      </svg>
+      <svg class="mascot m-rose" viewBox="0 0 64 64" aria-hidden="true">
+        <path class="stem" d="M32 41c-1 8 1 14 0 21"/>
+        <path class="leaf" d="M32 51c-8-6-14-2-16 2 6 2 12 2 16-2z"/>
+        <path class="leaf" d="M32 47c8-6 14-3 16 1-6 3-12 3-16-1z"/>
+        <path class="petal-back" d="M14 22c0-14 12-18 18-12 6-6 18-2 18 12 0 14-10 20-18 20s-18-6-18-20z"/>
+        <path class="petal-front" d="M17 25c2 11 10 15 15 15s13-4 15-15c-6 7-24 7-30 0z"/>
+        <path class="swirl" d="M25 17c2-6 13-6 13 1 0 5-8 6-9 1 0-3 4-4 5-1"/>
+        <circle class="eye" cx="26" cy="27" r="2.4"/><circle class="eye" cx="38" cy="27" r="2.4"/>
+        <circle class="blush" cx="21.5" cy="31" r="2.4"/><circle class="blush" cx="42.5" cy="31" r="2.4"/>
+        <path class="smile" d="M29.5 31.5q2.5 2.6 5 0"/>
       </svg>
       <span>Cloude</span>
     </div>
@@ -31,18 +44,31 @@
     <header class="topbar">
       <button class="icon-btn menu" id="menuBtn" title="Chats">☰</button>
       <div class="chip" id="modelChip">…</div>
+      <div class="chip auto" id="autoChip" hidden title="Commands run without asking (change in settings)">⚡ auto-run</div>
       <div class="spacer"></div>
+      <button class="icon-btn" id="skinBtn" title="Switch skin">🌹</button>
       <button class="icon-btn" id="restartBtn" title="Restart Cloude (loads code changes)">↻</button>
       <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
     </header>
 
     <section class="messages" id="messages">
       <div class="empty" id="empty">
-        <svg class="mascot big" viewBox="0 0 64 44" aria-hidden="true">
+        <svg class="mascot big m-cloud" viewBox="0 0 64 44" aria-hidden="true">
           <path class="cloud-body" d="M16 40h34a12 12 0 0 0 1-24 16 16 0 0 0-30-4A13 13 0 0 0 16 40z"/>
           <circle class="eye" cx="27" cy="26" r="2.6"/><circle class="eye" cx="39" cy="26" r="2.6"/>
           <circle class="blush" cx="22" cy="31" r="2.6"/><circle class="blush" cx="44" cy="31" r="2.6"/>
           <path class="smile" d="M30 31q3 3 6 0"/>
+        </svg>
+        <svg class="mascot big m-rose" viewBox="0 0 64 64" aria-hidden="true">
+          <path class="stem" d="M32 41c-1 8 1 14 0 21"/>
+          <path class="leaf" d="M32 51c-8-6-14-2-16 2 6 2 12 2 16-2z"/>
+          <path class="leaf" d="M32 47c8-6 14-3 16 1-6 3-12 3-16-1z"/>
+          <path class="petal-back" d="M14 22c0-14 12-18 18-12 6-6 18-2 18 12 0 14-10 20-18 20s-18-6-18-20z"/>
+          <path class="petal-front" d="M17 25c2 11 10 15 15 15s13-4 15-15c-6 7-24 7-30 0z"/>
+          <path class="swirl" d="M25 17c2-6 13-6 13 1 0 5-8 6-9 1 0-3 4-4 5-1"/>
+          <circle class="eye" cx="26" cy="27" r="2.4"/><circle class="eye" cx="38" cy="27" r="2.4"/>
+          <circle class="blush" cx="21.5" cy="31" r="2.4"/><circle class="blush" cx="42.5" cy="31" r="2.4"/>
+          <path class="smile" d="M29.5 31.5q2.5 2.6 5 0"/>
         </svg>
         <h1>Hi, I'm Cloude!</h1>
         <p>Talk to me, drop in pictures or files, or ask me to add something to myself.</p>
@@ -79,6 +105,11 @@
         <option>low</option><option>medium</option><option>high</option><option>xhigh</option><option>max</option>
       </select>
     </label>
+    <label class="switch">
+      <input type="checkbox" id="autoApproveInput">
+      <span>Let Cloude run commands without asking</span>
+    </label>
+    <p class="small warn">When this is on, Cloude can run any command on this computer by itself, like installing things or deleting files. Turn it off if you're unsure.</p>
     <p class="small">Your key is saved in <code>config.json</code> next to app.py, on this computer only.</p>
     <div class="actions">
       <button type="button" class="ghost" id="cancelSettings">Cancel</button>

@@ -11,11 +11,21 @@ let chatId = null;
 let busy = false;
 let pending = [];          // uploaded files waiting to be sent: {id, name, mime, kind, url}
 
-const MASCOT = `<svg class="mascot" viewBox="0 0 64 44" aria-hidden="true">
+const MASCOT = `<svg class="mascot m-cloud" viewBox="0 0 64 44" aria-hidden="true">
   <path class="cloud-body" d="M16 40h34a12 12 0 0 0 1-24 16 16 0 0 0-30-4A13 13 0 0 0 16 40z"/>
   <circle class="eye" cx="27" cy="26" r="2.6"/><circle class="eye" cx="39" cy="26" r="2.6"/>
   <circle class="blush" cx="22" cy="31" r="2.6"/><circle class="blush" cx="44" cy="31" r="2.6"/>
-  <path class="smile" d="M30 31q3 3 6 0"/></svg>`;
+  <path class="smile" d="M30 31q3 3 6 0"/></svg><svg class="mascot m-rose" viewBox="0 0 64 64" aria-hidden="true">
+    <path class="stem" d="M32 41c-1 8 1 14 0 21"/>
+    <path class="leaf" d="M32 51c-8-6-14-2-16 2 6 2 12 2 16-2z"/>
+    <path class="leaf" d="M32 47c8-6 14-3 16 1-6 3-12 3-16-1z"/>
+    <path class="petal-back" d="M14 22c0-14 12-18 18-12 6-6 18-2 18 12 0 14-10 20-18 20s-18-6-18-20z"/>
+    <path class="petal-front" d="M17 25c2 11 10 15 15 15s13-4 15-15c-6 7-24 7-30 0z"/>
+    <path class="swirl" d="M25 17c2-6 13-6 13 1 0 5-8 6-9 1 0-3 4-4 5-1"/>
+    <circle class="eye" cx="26" cy="27" r="2.4"/><circle class="eye" cx="38" cy="27" r="2.4"/>
+    <circle class="blush" cx="21.5" cy="31" r="2.4"/><circle class="blush" cx="42.5" cy="31" r="2.4"/>
+    <path class="smile" d="M29.5 31.5q2.5 2.6 5 0"/>
+  </svg>`;
 
 // ---------------------------------------------------------------- markdown --
 // Small and safe: everything is escaped first, then a few patterns are styled.
@@ -181,6 +191,8 @@ async function refreshStatus() {
   $("modelChip").textContent = `${s.model} · ${s.effort}`;
   $("modelInput").value = s.model;
   $("effortInput").value = s.effort;
+  $("autoApproveInput").checked = s.auto_approve;
+  $("autoChip").hidden = !s.auto_approve;
   if (!s.has_key) $("settings").showModal();
 }
 
@@ -372,11 +384,22 @@ $("settingsForm").onsubmit = async (e) => {
   if (e.submitter && e.submitter.value === "save") {
     await post("/api/settings", {
       api_key: $("keyInput").value, model: $("modelInput").value, effort: $("effortInput").value,
+      auto_approve: $("autoApproveInput").checked,
     });
     $("keyInput").value = "";
     refreshStatus();
   }
 };
+// Skins: "cloud" (default) or "rose". Remembered in this browser only.
+function applySkin(skin) {
+  document.documentElement.dataset.skin = skin;
+  $("skinBtn").textContent = skin === "rose" ? "☁️" : "🌹";
+  $("skinBtn").title = skin === "rose" ? "Switch to the cloud skin" : "Switch to the rose skin";
+  try { localStorage.setItem("cloude-skin", skin); } catch (e) { /* private window: fine */ }
+}
+$("skinBtn").onclick = () => applySkin(document.documentElement.dataset.skin === "rose" ? "cloud" : "rose");
+applySkin(document.documentElement.dataset.skin || "cloud");
+
 $("restartBtn").onclick = async () => {
   if (busy) return;
   $("restartBtn").textContent = "…";

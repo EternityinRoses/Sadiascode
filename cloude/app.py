@@ -39,7 +39,8 @@ SYSTEM_FILE = APP_DIR / "system_prompt.md"
 HOST = "127.0.0.1"          # only this computer can reach it
 PORT = int(os.environ.get("CLOUDE_PORT", "8640"))
 
-DEFAULTS = {"model": "claude-opus-5-5", "effort": "medium", "max_tokens": 32000}
+DEFAULTS = {"model": "claude-opus-5-5", "effort": "medium", "max_tokens": 32000,
+            "auto_approve": False}   # True: run_command skips the Allow / Deny card
 MAX_TOOL_ROUNDS = 30        # tool calls Cloude may chain for one message
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 IMAGE_LIMIT = 5 * 1024 * 1024          # the API's per-image size limit
@@ -464,7 +465,9 @@ def run_turn(chat, user_text, attachments, emit):
                         raise ToolError(f"Unknown tool {name}.")
                     if not valid_input(name, args, schemas.get(name, {})):
                         raise ToolError("The tool input came through garbled; please try again.")
-                    if name == "run_command":
+                    if name == "run_command" and cfg.get("auto_approve"):
+                        emit({"type": "notice", "text": f"Auto-allowed: {args['command']}"})
+                    elif name == "run_command":
                         approval_id = uuid.uuid4().hex
                         with APPROVAL_LOCK:
                             APPROVALS[approval_id] = {"event": threading.Event(), "ok": False}
@@ -565,7 +568,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_file(target) if target.is_relative_to(UPLOADS_DIR) else self.send_error(404)
         if path == "/api/status":
             cfg = load_config()
-            return self.send_json({"has_key": bool(api_key()), "model": cfg["model"], "effort": cfg["effort"]})
+            return self.send_json({"has_key": bool(api_key()), "model": cfg["model"], "effort": cfg["effort"],
+                                  "auto_approve": bool(cfg.get("auto_approve"))})
         if path == "/api/chats":
             return self.send_json(list_chats())
         if path.startswith("/api/chats/"):
@@ -592,6 +596,8 @@ class Handler(BaseHTTPRequestHandler):
             for k in ("model", "effort"):
                 if body.get(k):
                     cfg[k] = body[k].strip()
+            if "auto_approve" in body:
+                cfg["auto_approve"] = bool(body["auto_approve"])
             save_config(cfg)
             return self.send_json({"ok": True})
         if path == "/api/upload":
