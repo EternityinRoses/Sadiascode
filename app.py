@@ -292,7 +292,8 @@ TOOL_FUNCS = {
     "list_chats": lambda args, chat=None: chats_overview(skip=chat and chat["id"]),
     "tell_chat": lambda args, chat=None: tell_chat(chat["id"], args.get("chat"), args.get("message", "")),
 }
-CHAT_TOOLS = {"list_chats", "tell_chat"}       # these need to know which chat is asking
+CHAT_TOOLS = {"list_chats", "tell_chat"}
+STOPS = set()          # chat ids whose answer the user stopped (checked between steps)       # these need to know which chat is asking
 
 
 def valid_input(name, args, schema):
@@ -506,8 +507,12 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
     compact_at = max(50000, int(cfg.get("compact_at") or 100000))
     json_retries = 0
 
+    STOPS.discard(chat["id"])
     try:
         for _ in range(MAX_TOOL_ROUNDS):
+            if chat["id"] in STOPS:
+                emit({"type": "notice", "text": "Stopped."})
+                break
             new_round = True
             try:
                 with client.beta.messages.stream(
@@ -588,6 +593,8 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
                 label = args.get("path") or args.get("command") or ""
                 record = {"name": name, "label": label, "ok": True}
                 try:
+                    if chat["id"] in STOPS:
+                        raise ToolError("The user pressed Stop, so this didn't run.")
                     if name not in TOOL_FUNCS:
                         raise ToolError(f"Unknown tool {name}.")
                     if not valid_input(name, args, schemas.get(name, {})):
@@ -717,7 +724,12 @@ def run_turn_code(chat, user_text, attachments, emit):
         proc.stdin.write(prompt)             # the message goes in on stdin, never through a shell
         proc.stdin.close()
         new_round = False
+        STOPS.discard(chat["id"])
         for line in proc.stdout:
+            if chat["id"] in STOPS:          # the user pressed Stop
+                proc.kill()
+                emit({"type": "notice", "text": "Stopped."})
+                break
             try:
                 ev = json.loads(line)
             except ValueError:
@@ -2121,6 +2133,10 @@ class Handler(BaseHTTPRequestHandler):
                     pass
             chat = new_chat(carried)
             return self.send_json({"id": chat["id"]})
+        if path == "/api/stop":
+            if isinstance(body.get("chat_id"), str):
+                STOPS.add(body["chat_id"])
+            return self.send_json({"ok": True})
         if path == "/api/delete":
             try:
                 chat_path(body.get("id")).unlink(missing_ok=True)

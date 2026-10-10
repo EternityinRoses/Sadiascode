@@ -308,7 +308,7 @@ async function openChat(id) {
     else assistantBubble().setAll(d);
   }
   shownLen = chat.display.length;
-  sendBtn.disabled = isBusy();
+  showStop(isBusy());
   refreshChats();
   $("sidebar").classList.remove("open");
 }
@@ -327,6 +327,22 @@ setInterval(async () => {
   } catch (e) { /* restarting; try again next tick */ }
 }, 2500);
 
+// While a chat is answering, its send button is a Stop button: the answer
+// stops after the step it's on (a tool that hasn't run yet is skipped).
+function showStop(on) {
+  sendBtn.disabled = false;
+  sendBtn.textContent = on ? "■" : "➤";
+  sendBtn.title = on ? "Stop" : "Send";
+  sendBtn.classList.toggle("stop", on);
+}
+sendBtn.addEventListener("click", (e) => {
+  if (!isBusy()) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  post("/api/stop", { chat_id: chatId }).catch(() => {});
+  sendBtn.title = "Stopping after this step…";
+}, true);
+
 // ------------------------------------------------------------------- send --
 async function send() {
   const text = inputEl.value.trim();
@@ -335,7 +351,7 @@ async function send() {
   // `mine` follows this answer even if the user opens another chat meanwhile
   const mine = { from: chatId, chat: chatId };
   if (mine.chat) busyChats.add(mine.chat);
-  sendBtn.disabled = true;
+  showStop(true);
 
   const files = pending.map(({ id, name, mime, kind, url }) => ({ id, name, mime, kind, url }));
   pending = []; renderPending();
@@ -378,7 +394,7 @@ async function send() {
   if (here) {
     try { shownLen = (await (await fetch(`/api/chats/${chatId}`)).json()).display.length; } catch (e) { /* next poll catches up */ }
   }
-  sendBtn.disabled = isBusy();
+  showStop(isBusy());
   refreshChats();
   if (here) inputEl.focus();
 }
