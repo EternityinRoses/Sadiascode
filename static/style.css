@@ -381,3 +381,6 @@ dialog::backdrop { background: rgba(30, 20, 60, 0.35); }
   cursor: pointer; background: var(--code-bg); color: var(--ink); text-align: center;
 }
 .settings-form label.ghost-btn { display: block; }
+
+/* a message from another chat: that chat's picture and name, plain text */
+.msg.mail .bubble { white-space: pre-wrap; border: 1px dashed var(--line, rgba(127,127,127,.4)); }

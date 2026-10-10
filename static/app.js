@@ -89,9 +89,19 @@ function markdown(src) {
 let profile = { user: { name: "You", pic: "" }, cloude: { name: "Cloude", pic: "" } };
 let profileRaw = "";
 
+// Each brain can have its own name and picture: profile.json "api", "code" and
+// "cloud" entries (the API brain falls back to the "cloude" entry).
+const BRAIN_DEFAULT = { api: null, code: { name: "Code", pic: "" }, cloud: { name: "Cloud", pic: "" } };
+function brainProfile(b) {
+  if (b === "api" || !(b in BRAIN_DEFAULT)) return { ...profile.cloude, ...(profile.api || {}) };
+  return { ...BRAIN_DEFAULT[b], ...(profile[b] || {}) };
+}
+
 function fillAvatar(el) {
-  const who = el.dataset.who;
-  const p = who === "game" ? { name: "Game", pic: "" } : (profile[who] || {});
+  let who = el.dataset.who;
+  const brainy = who in BRAIN_DEFAULT;
+  const p = who === "game" ? { name: "Game", pic: "" } : brainy ? brainProfile(who) : (profile[who] || {});
+  if (brainy) who = "cloude";              // same mascot when there's no picture
   const name = p.name || (who === "user" ? "You" : "Cloude");
   el.innerHTML = "";
   const pic = document.createElement("div");
@@ -124,7 +134,7 @@ async function loadProfile() {
     if (raw === profileRaw) return;
     profileRaw = raw;
     const p = JSON.parse(raw);
-    profile = { user: { ...profile.user, ...(p.user || {}) }, cloude: { ...profile.cloude, ...(p.cloude || {}) } };
+    profile = { ...p, user: { ...profile.user, ...(p.user || {}) }, cloude: { ...profile.cloude, ...(p.cloude || {}) } };
     document.querySelectorAll(".avatar").forEach(fillAvatar);
   } catch (e) { /* keep the old one */ }
 }
@@ -195,12 +205,37 @@ function userBubble(text, files, game) {
   scrollDown();
 }
 
+// A message or reply from another chat shows that chat's picture and name
+// instead of the "📨 Message from chat …" line the brains read.
+const MAIL_RE = /^📨 (?:Message|Reply) from chat ([0-9a-f]{8}) \((\S+) [^,]*, "[^\n]*?"\)[^\n]*?:\n\n/;
+const BRAIN_BY_ICON = { "🔑": "api", "💻": "code", "☁️": "cloud", "☁": "cloud" };
+function mailBubble(d) {
+  const m = MAIL_RE.exec(d.text || "");
+  if (!m) return false;
+  hideEmpty();
+  const row = document.createElement("div");
+  row.className = "msg assistant mail";
+  const av = avatar(BRAIN_BY_ICON[m[2]] || "api");
+  av.title = "chat " + m[1];
+  const b = document.createElement("div");
+  b.className = "bubble"; b.textContent = d.text.slice(m[0].length);
+  row.append(av, b);
+  messagesEl.append(row);
+  scrollDown();
+  return true;
+}
+function drawEntry(d) {
+  if (mailBubble(d)) return;
+  if (d.role === "user") userBubble(d.text, d.files, d.game);
+  else assistantBubble().setAll(d);
+}
+
 // One assistant bubble that fills in as the stream arrives.
 function assistantBubble() {
   hideEmpty();
   const row = document.createElement("div");
   row.className = "msg assistant";
-  row.append(avatar("cloude"));
+  row.append(avatar(chatBrain || "api"));
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   const thoughts = document.createElement("details");
@@ -381,8 +416,7 @@ async function openChat(id) {
   clearMessages();
   liveView = null;
   for (const d of chat.display) {
-    if (d.role === "user") userBubble(d.text, d.files, d.game);
-    else assistantBubble().setAll(d);
+    drawEntry(d);
   }
   shownLen = chat.display.length;
   showStop(isBusy());
@@ -415,8 +449,7 @@ setInterval(async () => {
     if (chat.display.length !== shownLen) {
       dropLive();
       for (const d of chat.display.slice(shownLen)) {
-        if (d.role === "user") userBubble(d.text, d.files, d.game);
-        else assistantBubble().setAll(d);
+        drawEntry(d);
       }
       shownLen = chat.display.length;
     }
@@ -632,8 +665,7 @@ async function showNewCloudReplies() {
   const chat = await (await fetch(`/api/chats/${chatId}`)).json();
   const fresh = chat.display.slice(shownLen);
   for (const d of fresh) {
-    if (d.role === "user") userBubble(d.text, d.files, d.game);
-    else assistantBubble().setAll(d);
+    drawEntry(d);
   }
   shownLen = chat.display.length;
   return fresh.length;
