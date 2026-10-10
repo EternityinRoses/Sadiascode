@@ -58,6 +58,7 @@ DEFAULTS = {
     "cache_ttl": "1h",       # API brain: how long the sent chat stays cheap to resend ("5m" or "1h")
     "auto_update": True,     # pull new versions from GitHub by itself and restart
     "cloud_scry": True,      # let the cloud session read files here (read-only, approved folders only)
+    "seat_brain": "api",     # who plays the game seat: "api" (here, API credits) or "cloud" (the cloud session)
     # Folders outside Cloude's home that its file tools may also reach (approved by the user).
     "extra_roots": [r"D:\Sadias Canvas"],
 }
@@ -1114,6 +1115,17 @@ def check_mailbox():
                     continue
                 seen.add(key)
                 chat["cloud_seen"] = sorted(seen)
+                words = header.split()
+                if len(words) >= 3 and words[1].lower() == "game":
+                    waiter = GAME_WAITS.get(words[2])
+                    if waiter:
+                        waiter["text"] = body
+                        waiter["event"].set()
+                    chat["display"].append({"role": "assistant", "text": f"🎲 → game: {body}",
+                                            "thoughts": "", "tools": [], "game": True})
+                    save_chat(chat)
+                    delivered += 1
+                    continue
                 if "scry" in header.lower().split()[1:]:
                     if chat.get("cloud_session"):
                         try:
@@ -1281,14 +1293,18 @@ def game_chat_id():
 
 def game_turn(folder, seat, req, wake, timeout):
     """Put one game request into the chat as a turn, and return my final words."""
-    cid = game_chat_id()
+    cloud_seat = load_config().get("seat_brain") == "cloud"
+    cid = cloud_seat_chat_id() if cloud_seat else game_chat_id()
+    if not cid:
+        seat_log(f"{seat}  the cloud is set to play, but no chat is linked to a cloud session")
+        return ""
     lock = chat_lock(cid)
     if not lock.acquire(timeout=max(1.0, timeout - 15)):
         seat_log(f"{seat}  chat busy past the deadline, nothing sent")
         return ""
     try:
         chat = load_chat(cid)
-        if chat.get("brain", "api") != "api":
+        if not cloud_seat and chat.get("brain", "api") != "api":
             seat_log(f"{seat}  the game chat isn't on the API brain, nothing sent")
             return ""
         msgs = [m for m in (req.get("messages") or []) if isinstance(m, dict)]
@@ -1345,12 +1361,90 @@ def game_turn(folder, seat, req, wake, timeout):
         global ACTIVE_TURNS
         ACTIVE_TURNS += 1                    # the updater won't restart mid-move
         try:
+            if cloud_seat:
+                return cloud_game_turn(chat, folder, seat, wake, timeout, parts, shown, shot)
             run_turn(chat, "\n\n".join(parts), [], emit, display_text=shown, game=True, extra_blocks=extra)
         finally:
             ACTIVE_TURNS -= 1
         return got["text"].strip()
     finally:
         lock.release()
+
+
+# ------------------------------------------------------------ cloud seat --
+# With config seat_brain = "cloud", the cloud session plays the seat: each game
+# turn goes to it as a message, and its answer comes back as a
+# '### <chat id> game <turn id>' mailbox block. Cloude checks the mailbox
+# every few seconds while the game waits, within the game's own deadline.
+
+GAME_WAITS = {}                       # turn id -> {"event": Event, "text": str}
+
+
+def cloud_seat_chat_id():
+    """The chat the cloud seat talks through: config seat_cloud_chat, else the
+    most recently active chat that's linked to a cloud session."""
+    pin = load_config().get("seat_cloud_chat")
+    linked = []
+    for p in CHATS_DIR.glob("*.json"):
+        try:
+            if json.loads(p.read_text(encoding="utf-8")).get("cloud_session"):
+                if p.stem == pin:
+                    return pin
+                linked.append(p)
+        except (OSError, ValueError):
+            pass
+    return max(linked, key=lambda p: p.stat().st_mtime).stem if linked else None
+
+
+def push_files(root, tag, files):
+    """push_attachments for files that aren't uploads (e.g. a VISION shot)."""
+    staged = []
+    for src in files:
+        name = f"{uuid.uuid4().hex[:8]}_{Path(src).name}"
+        shutil.copy2(src, UPLOADS_DIR / name)
+        staged.append({"id": name, "name": Path(src).name})
+    return push_attachments(root, tag, staged)
+
+
+def cloud_game_turn(chat, folder, seat, wake, timeout, parts, shown, shot):
+    exe, root = find_claude(), repo_root()
+    tag, turn = short_id(chat["id"]), uuid.uuid4().hex[:6]
+    started = time.time()
+    body = list(parts)
+    ws = folder / "world_state.md"
+    if wake and ws.is_file():
+        body.append("world_state.md (the game's snapshot):\n\n"
+                    + ws.read_text(encoding="utf-8", errors="replace")[:30000])
+    if shot:
+        try:
+            path = push_files(root, tag, [shot])[0]
+            body.append(f"VISION picture: `git fetch -q origin cloude-inbox && git show "
+                        f"origin/cloude-inbox:{path} > /tmp/vision.jpg`, then look at it with the Read tool.")
+        except Exception as e:
+            seat_log(f"{seat}  couldn't send the vision picture: {e}")
+    left = int(timeout - (time.time() - started)) - 10
+    waiter = GAME_WAITS[turn] = {"event": threading.Event(), "text": ""}
+    chat["display"].append({"role": "user", "text": shown, "files": [], "game": True})
+    save_chat(chat)
+    try:
+        cloud_send(exe, root, chat["cloud_session"],
+                   f"[Cloude chat {tag}] GAME TURN {turn}: you're playing the seat \"{seat}\". "
+                   f"Answer within about {left} seconds.\n\n" + "\n\n".join(body)
+                   + f"\n\nAnswer with a `### {tag} game {turn}` block holding exactly what the seat "
+                     f"says or does" + (" (start with ACT: or SPEAK:)" if wake else "")
+                   + ", or PASS. Then commit and push it.")
+        deadline = started + timeout - 3
+        while time.time() < deadline and not waiter["event"].is_set():
+            try:
+                check_mailbox()
+            except Exception as e:
+                seat_log(f"{seat}  mailbox check failed: {e}")
+            waiter["event"].wait(4)
+        if not waiter["event"].is_set():
+            seat_log(f"{seat}  the cloud didn't answer turn {turn} in time")
+        return waiter["text"].strip()
+    finally:
+        GAME_WAITS.pop(turn, None)
 
 
 SEAT_NOTES = SEATS_DIR / "notes.md"
@@ -1744,7 +1838,8 @@ class Handler(BaseHTTPRequestHandler):
                                   "git_sync": bool(cfg.get("git_sync")), "claude_found": bool(find_claude()),
                                   "in_git": bool(repo_root()), "auto_update": bool(cfg.get("auto_update")),
                                   "boot_id": BOOT_ID, "update_note": UPDATE_NOTE,
-                                  "cloud_scry": bool(cfg.get("cloud_scry", True))})
+                                  "cloud_scry": bool(cfg.get("cloud_scry", True)),
+                                  "seat_brain": cfg.get("seat_brain", "api")})
         if path == "/api/chats":
             return self.send_json(list_chats())
         if path.startswith("/api/chats/"):
@@ -1778,6 +1873,8 @@ class Handler(BaseHTTPRequestHandler):
             for k in ("auto_approve", "git_sync", "auto_update", "cloud_scry"):
                 if k in body:
                     cfg[k] = bool(body[k])
+            if body.get("seat_brain") in ("api", "cloud"):
+                cfg["seat_brain"] = body["seat_brain"]
             if body.get("brain") in BRAINS:
                 cfg["brain"] = body["brain"]
             save_config(cfg)

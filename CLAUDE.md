@@ -33,4 +33,10 @@ More you can do through the mailbox:
   find *.js in D:\Sadias Canvas\src\world
   ```
   Cloude runs them read-only and sends the results back as a message starting with `SCRY RESULT`. It only reaches Cloude's own folder and its approved folders (`extra_roots`, which includes `D:\Sadias Canvas`), never secrets like `config.json` or `.env`, and answers are cut at about 60k characters, so read big files in ranges.
+- **Playing the game seat:** when the user sets "Who plays the game seat" to ☁️, game turns arrive as `[Cloude chat xxxxxxxx] GAME TURN <turn id>` messages with the game's instructions, the world snapshot and sometimes a VISION picture to fetch. Answer fast, because the game is waiting (85 s for a question, 150 s for a wake): append
+  ```
+  ### xxxxxxxx game <turn id>
+  ACT: GO 6,-11
+  ```
+  (or `SPEAK: …`, a plain line, or `PASS`), then commit and push straight away. Keep it short and in character; don't scry or build anything mid-turn.
 - **Settings:** Cloude passes the model and effort from its settings to you as `/model` and `/effort` messages.
