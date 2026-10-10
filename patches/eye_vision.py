@@ -8,7 +8,7 @@ every /api/ call but the picture is answered with a fake "no", so it can't touch
 the save, the session lease or any seat's mailbox. It makes no sound.
 
 Run it once (double-click, or `python patches/eye_vision.py`). It backs up
-void.js into Desktop\\cloude\\backups first, checks every place it edits, and changes nothing if
+void.js into Desktop\\cloude\\.backups first, checks every place it edits, and changes nothing if
 any of them doesn't match. Running it twice is safe.
 """
 import shutil
@@ -20,8 +20,8 @@ GAME = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(r"D:\Sadias Canvas")
 VOID = GAME / "src" / "world" / "void.js"
 EYE = GAME / "eye.html"
 MARK = "EYE FROM AFAR"
-# Backups live in Cloude's own folder (Desktop\cloude\backups\sadias_canvas), never in the game folder.
-BACKUPS = Path(__file__).resolve().parent.parent / "backups" / "sadias_canvas"
+# Backups live in Cloude's own .backups folder (where app.py keeps all of them), never in the game folder.
+BACKUPS = Path(__file__).resolve().parent.parent / ".backups"
 
 EYE_HTML = r'''<!DOCTYPE html>
 <html lang="en">
