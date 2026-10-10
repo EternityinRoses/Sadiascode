@@ -1382,7 +1382,7 @@ def game_turn(folder, seat, req, wake, timeout):
         ACTIVE_TURNS += 1                    # the updater won't restart mid-move
         try:
             if cloud_seat:
-                return cloud_game_turn(chat, folder, seat, wake, timeout, parts, shown, shot)
+                return cloud_game_turn(chat, folder, seat, wake, timeout, parts, shown, shot if extra else None)
             run_turn(chat, "\n\n".join(parts), [], emit, display_text=shown, game=True, extra_blocks=extra)
         finally:
             ACTIVE_TURNS -= 1
@@ -1779,6 +1779,60 @@ def prove_awake(folder):
         pass
 
 
+SHOT_SENDING = set()
+
+
+def forward_new_shot(folder):
+    """With the cloud playing, a fresh VISION picture goes to it at once, not only with
+    the next game turn: a seat that is waiting, or on another map, may not get a turn soon."""
+    cfg = load_config()
+    if cfg.get("seat_brain") != "cloud":
+        return
+    shots = [p for p in (folder / "shot_latest.jpg", folder / "shot_latest.png") if p.is_file()]
+    if not shots:
+        return
+    shot = max(shots, key=lambda p: p.stat().st_mtime)
+    key = str(folder)
+    if key in SHOT_SENDING or time.time() - shot.stat().st_mtime < 2:   # let the game finish writing it
+        return
+    cid = cloud_seat_chat_id()
+    if not cid:
+        return
+    seat = folder.name
+    try:
+        seat = json.loads((folder / "SEAT.json").read_text(encoding="utf-8")).get("seat") or seat
+    except (OSError, ValueError):
+        pass
+    lock = chat_lock(cid)
+    if not lock.acquire(blocking=False):          # a game turn is running; it carries the picture itself
+        return
+    try:
+        chat = load_chat(cid)
+        seen = chat.setdefault("seat_vision_seen", {})
+        if shot.stat().st_mtime <= seen.get(seat, 0) or not chat.get("cloud_session"):
+            return
+        seen[seat] = shot.stat().st_mtime
+        save_chat(chat)
+    finally:
+        lock.release()
+    SHOT_SENDING.add(key)
+
+    def send():
+        try:
+            root, tag = repo_root(), short_id(cid)
+            path = push_files(root, tag, [shot])[0]
+            cloud_send(find_claude(), root, chat["cloud_session"],
+                       f"[Cloude chat {tag}] VISION for the seat \"{seat}\" (no turn waiting, just so you can see): "
+                       f"`git fetch -q origin cloude-inbox && git show origin/cloude-inbox:{path} > /tmp/vision.jpg`, "
+                       "then look at it with the Read tool.")
+            seat_log(f"{seat}  vision picture sent to the cloud")
+        except Exception as e:
+            seat_log(f"{seat}  couldn't send the vision picture: {e}")
+        finally:
+            SHOT_SENDING.discard(key)
+    threading.Thread(target=send, daemon=True).start()
+
+
 def seat_runner():
     cfg = load_config()
     seat_log("seat runner started, watching " + (", ".join(f.name for f in seat_folders()) or "nothing")
@@ -1792,6 +1846,7 @@ def seat_runner():
                 for folder in seat_folders():
                     prove_awake(folder)
                     check_invite(folder)
+                    forward_new_shot(folder)
                     for f in folder.iterdir():
                         m = REQ_RE.match(f.name)
                         if not m:
