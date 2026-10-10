@@ -1538,6 +1538,72 @@ def game_chat_id():
     return max(files, key=lambda p: p.stat().st_mtime).stem
 
 
+# Shorter game turns (wishlist #2). The game's brief is the whole rule book plus the
+# live world, so it never matches the last one and the rule book went out every
+# turn. Now each long part (paragraph) goes out once and is left out while it's
+# unchanged, re-sent every SEEN_REFRESH_SEC so a compacted chat gets it back.
+SEEN_MIN_CHARS = 400
+SEEN_REFRESH_SEC = 1800
+
+
+def only_fresh(chat, seat, text):
+    seen = chat.setdefault("seat_paras", {}).setdefault(seat, {})
+    now = time.time()
+    for h in [h for h, t in seen.items() if now - t > 2 * SEEN_REFRESH_SEC]:
+        del seen[h]
+    out, left_out = [], 0
+    for para in re.split(r"\n[ \t]*\n", text):
+        if len(para) >= SEEN_MIN_CHARS:
+            h = hashlib.md5(para.encode()).hexdigest()
+            if now - seen.get(h, 0) < SEEN_REFRESH_SEC:
+                left_out += 1
+                continue
+            seen[h] = now
+        out.append(para)
+    if left_out:
+        out.insert(0, f"({left_out} long part{'s' if left_out != 1 else ''} of this, the rules among them, "
+                      "unchanged since you were last told and left out; they still hold.)")
+    return "\n\n".join(out).strip()
+
+
+# The seat's notebook (wishlist #5): the character's own notes, kept by Cloude in
+# seats/notebooks/<seat>.md (never in the game folder) and shown on every game turn.
+# A "NOTE: ..." line in an answer adds one, "UNNOTE: <words>" drops the notes holding
+# those words; both are taken out before the answer reaches the game.
+NOTEBOOK_LINES = 30
+NOTE_RE = re.compile(r"^\s*(NOTE|UNNOTE)\s*:\s*(.+?)\s*$", re.I | re.M)
+
+
+def notebook_path(seat):
+    return SEATS_DIR / "notebooks" / (re.sub(r"[^A-Za-z0-9_-]+", "_", seat) + ".md")
+
+
+def notebook_lines(seat):
+    try:
+        return [l[2:] for l in notebook_path(seat).read_text(encoding="utf-8").splitlines() if l.startswith("- ")]
+    except OSError:
+        return []
+
+
+def take_notes(seat, text):
+    """Apply NOTE:/UNNOTE: lines from an answer to the notebook; return the answer without them."""
+    found = NOTE_RE.findall(text or "")
+    if not found:
+        return text
+    notes = notebook_lines(seat)
+    for kind, body in found:
+        if kind.upper() == "NOTE":
+            notes.append(time.strftime("%b %d %H:%M ") + body)
+        else:
+            notes = [n for n in notes if body.lower() not in n.lower()]
+    notes = notes[-NOTEBOOK_LINES:]
+    path = notebook_path(seat)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_whole(path, f"# {seat}'s notebook\n\n" + "".join(f"- {n}\n" for n in notes))
+    activity(f"seat {seat}: notebook now {len(notes)} note(s) ({', '.join(k.upper() for k, _ in found)})")
+    return re.sub(r"\n{2,}", "\n", NOTE_RE.sub("", text)).strip()
+
+
 def game_turn(folder, seat, req, wake, timeout):
     """Put one game request into the chat as a turn, and return my final words."""
     cloud_seat = load_config().get("seat_brain") == "cloud"
@@ -1568,13 +1634,16 @@ def game_turn(folder, seat, req, wake, timeout):
 
         parts = [f"🎲 GAME → you, as the seat \"{seat}\" in Legends of Harpine"
                  + (" (a wake: nothing is waiting on you)" if wake else "")]
-        briefs = chat.setdefault("seat_briefs", {})
-        h = hashlib.md5(brief.encode()).hexdigest()
-        if brief and briefs.get(seat) != h:
+        brief = only_fresh(chat, seat, brief)
+        if brief:
             parts.append("The game's instructions for this seat (they stay in force until they change):\n"
                          + brief)
-            briefs[seat] = h
         parts.append(said or "(no new line: the game gave you the floor)")
+        notes = notebook_lines(seat)
+        parts.append("Your notebook (your own notes; the game never sees it):\n"
+                     + ("\n".join(f"- {n}" for n in notes) if notes else "(empty)")
+                     + "\nAdd a note with a line NOTE: <text>, drop notes with UNNOTE: <words in them>. "
+                       "Those lines are taken out before your answer reaches the game.")
         if wake and (folder / "world_state.md").is_file():
             parts.append(f"The game's current snapshot is in {shown_path(folder / 'world_state.md')}.")
         parts.append("Your final words after any tool use go to the game exactly as written. "
@@ -1658,7 +1727,7 @@ def cloud_game_turn(chat, folder, seat, wake, timeout, parts, shown, shot):
     ws = folder / "world_state.md"
     if wake and ws.is_file():
         body.append("world_state.md (the game's snapshot):\n\n"
-                    + ws.read_text(encoding="utf-8", errors="replace")[:30000])
+                    + only_fresh(chat, seat, ws.read_text(encoding="utf-8", errors="replace")[:30000]))
     if shot:
         try:
             path = push_files(root, tag, [shot])[0]
@@ -1892,7 +1961,7 @@ def answer_request(folder, req_file, rid):
         if game_sys:
             parts.append("# THE GAME'S INSTRUCTIONS FOR THIS SEAT\n\n" + game_sys)
 
-        text = game_turn(folder, seat, req, wake, timeout)
+        text = take_notes(seat, game_turn(folder, seat, req, wake, timeout))
 
         if wake:
             # Which file does this wake want? World wakes ask for act_, room wakes for speak_.

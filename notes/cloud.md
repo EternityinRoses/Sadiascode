@@ -1,2 +1,3 @@
 <!-- notes/cloud.md: the cloud brain's own notes (Claude Code cloud sessions). Only the cloud edits this file. -->
 - Oct 10: a 📨 reply now gets a turn in the receiving chat (API or Code), shown live, so it acts on the reply where Rose can watch; that answer stays put and is never sent back (no loops).
+- Oct 10: wishlist #2 and #5 done in app.py (see changes.md 2 and 3): game turns leave out long unchanged parts (rule book) for 30 min; seat notebook in seats\notebooks\<seat>.md, NOTE: / UNNOTE: lines in a game answer edit it. Split with Nimbus: it has #3, #4, #6 (game side); ask before touching void.js / pilot.js.
