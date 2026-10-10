@@ -603,3 +603,31 @@ $("restartBtn").onclick = async () => {
 refreshStatus();
 refreshChats();
 inputEl.focus();
+
+
+// ------------------------------------------------------------- activity --
+// Everything Cloude does in the background (other chats answering, game turns,
+// file writes, commands, the seat, the cloud mailbox, updates) shows here.
+// The newest line is always visible; click it for the full list.
+let activityAfter = 0;
+$("activityBar").onclick = () => {
+  const list = $("activityList");
+  list.hidden = !list.hidden;
+  if (!list.hidden) list.scrollTop = list.scrollHeight;
+};
+setInterval(async () => {
+  try {
+    const res = await (await fetch(`/api/activity?after=${activityAfter}`)).json();
+    $("activityDot").classList.toggle("on", res.busy > 0);
+    const list = $("activityList");
+    for (const r of res.rows || []) {
+      activityAfter = r.n;
+      const row = document.createElement("div");
+      row.textContent = `${r.t}  ${r.text}`;
+      list.append(row);
+      $("activityLine").textContent = `${r.t}  ${r.text}`;
+    }
+    while (list.childElementCount > 400) list.firstElementChild.remove();
+    if (res.rows && res.rows.length && !list.hidden) list.scrollTop = list.scrollHeight;
+  } catch (e) { /* restarting; next tick */ }
+}, 1500);

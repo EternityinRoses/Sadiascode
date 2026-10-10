@@ -52,6 +52,11 @@
       <button class="icon-btn" id="restartBtn" title="Restart Cloude (loads code changes)">↻</button>
       <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
     </header>
+    <!-- Everything Cloude does in the background, newest first line; click for the whole list -->
+    <button class="activity" id="activityBar" type="button" title="What Cloude is doing in the background. Click for the full list.">
+      <span class="activity-dot" id="activityDot"></span><span id="activityLine">nothing happening</span>
+    </button>
+    <div class="activity-list" id="activityList" hidden></div>
 
     <section class="messages" id="messages">
       <div class="empty" id="empty">

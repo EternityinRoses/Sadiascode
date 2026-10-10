@@ -341,3 +341,15 @@ dialog::backdrop { background: rgba(30, 20, 60, 0.35); }
    and the bubble inside it sizes to its text (short words no longer squish) */
 .user-wrap { display: flex; flex-direction: column; align-items: flex-end; max-width: 85%; min-width: 0; }
 .msg.user .bubble { max-width: 100%; }
+
+/* the activity line: what Cloude is doing in the background, always visible */
+.activity { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-bottom: 1px solid rgba(0,0,0,.06);
+  background: rgba(255,255,255,.35); padding: 4px 14px; font: 12px/1.4 inherit; color: inherit; opacity: .8;
+  text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; }
+.activity span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.activity-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #b9b9c3; }
+.activity-dot.on { background: #e0507a; animation: actpulse 1s ease-in-out infinite; }
+@keyframes actpulse { 50% { opacity: .35; } }
+.activity-list { max-height: 40vh; overflow: auto; padding: 6px 14px; font: 12px/1.5 ui-monospace, Consolas, monospace;
+  background: rgba(255,255,255,.6); border-bottom: 1px solid rgba(0,0,0,.08); }
+.activity-list div { white-space: pre-wrap; word-break: break-word; }

@@ -16,6 +16,7 @@ Three "brains", each spending a different pool of credit:
 """
 
 import base64
+import collections
 import fnmatch
 import hashlib
 import json
@@ -66,6 +67,50 @@ BRAINS = ("api", "code", "cloud")
 MAX_TOOL_ROUNDS = 30        # tool calls Cloude may chain for one message
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 IMAGE_LIMIT = 5 * 1024 * 1024          # the API's per-image size limit
+
+# EVERYTHING CLOUDE DOES IN THE BACKGROUND IS SHOWN (Rose: "any invisible action is
+# dangerous"). Each action lands here and the page shows the newest line under the
+# top bar, with the full list a click away.
+ACTIVITY = collections.deque(maxlen=400)
+ACTIVITY_LOCK = threading.Lock()
+ACTIVITY_SEQ = [0]
+
+
+def activity(text):
+    with ACTIVITY_LOCK:
+        ACTIVITY_SEQ[0] += 1
+        ACTIVITY.append({"n": ACTIVITY_SEQ[0], "t": time.strftime("%H:%M:%S"), "text": str(text)[:300]})
+
+
+LIVE = {}      # chat id -> what a turn nobody is streaming is doing right now (the page polls it)
+
+
+def live_emit(cid, got):
+    """An emit for a turn with no page attached (game turns, other chats' messages):
+    it fills LIVE[cid] so the open page can draw the turn as it happens."""
+    live = LIVE[cid] = {"text": "", "thoughts": "", "tools": []}
+
+    def emit(ev):
+        kind = ev.get("type")
+        if kind == "text":
+            got["text"] += ev["text"]
+            live["text"] += ev["text"]
+        elif kind == "thinking":
+            live["thoughts"] += ev.get("text", "")
+        elif kind == "tool_start":
+            got["text"] = ""          # only the words after the last tool call count
+            live["tools"].append({"name": ev.get("name", "tool"), "label": "", "ok": None})
+        elif kind == "tool_done":
+            row = {k: ev.get(k) for k in ("name", "label", "ok")}
+            if live["tools"] and live["tools"][-1]["ok"] is None:
+                live["tools"][-1] = row
+            else:
+                live["tools"].append(row)
+        elif kind == "error":
+            got.setdefault("errors", []).append(ev.get("text", ""))
+        elif kind == "notice":
+            live["text"] += f"\n\n_{ev.get('text', '')}_"
+    return emit
 TEXT_LIMIT = 400 * 1024                # bigger text files are attached by path only
 UPLOAD_LIMIT = 30 * 1024 * 1024
 SECRET_FILES = {CONFIG_FILE.name}      # never read back to the model: holds the API key
@@ -252,6 +297,7 @@ def write_whole(target, text):
     tmp = target.with_name(f".{target.name}.cloude-tmp")
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, target)
+    activity(f"wrote {shown_path(target)}")
 
 
 def tool_write_file(args):
@@ -625,6 +671,7 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
                             raise ToolError("The user said no to running that command.")
                     if name in CHAT_TOOLS and game:
                         raise ToolError("Not during game turns.")
+                    activity(f"chat {short_id(chat['id'])}: {name} {label}".strip())
                     out = (TOOL_FUNCS[name](args, chat) if name in CHAT_TOOLS else TOOL_FUNCS[name](args))
                     results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": out})
                 except ToolError as e:
@@ -844,6 +891,7 @@ def open_cloud_terminal(exe, root):
 
 def cloud_send(exe, root, session, message):
     """Queue one message into an existing cloud session (works without a terminal)."""
+    activity("sent to the cloud: " + message.strip().splitlines()[0][:120] if message.strip() else "sent to the cloud")
     done = subprocess.run([exe, "-p", "--cloud", session, "--output-format", "json"],
                           cwd=root, input=message, capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=120)
@@ -1182,6 +1230,8 @@ def check_mailbox():
                 seen.add(key)
                 chat["cloud_seen"] = sorted(seen)
                 words = header.split()
+                activity(f"from the cloud ({' '.join(words[1:]) or 'reply'}) for chat {words[0]}: "
+                         + (body.strip().splitlines() or [""])[0][:100])
                 if len(words) >= 3 and words[1].lower() == "game":
                     waiter = GAME_WAITS.get(words[2])
                     if waiter:
@@ -1457,11 +1507,7 @@ def game_turn(folder, seat, req, wake, timeout):
 
         got = {"text": ""}
 
-        def emit(ev):
-            if ev.get("type") == "text":
-                got["text"] += ev["text"]
-            elif ev.get("type") == "tool_start":
-                got["text"] = ""          # only the words after the last tool call count
+        emit = live_emit(cid, got)
 
         global ACTIVE_TURNS
         ACTIVE_TURNS += 1                    # the updater won't restart mid-move
@@ -1471,6 +1517,7 @@ def game_turn(folder, seat, req, wake, timeout):
             run_turn(chat, "\n\n".join(parts), [], emit, display_text=shown, game=True, extra_blocks=extra)
         finally:
             ACTIVE_TURNS -= 1
+            LIVE.pop(cid, None)
         return got["text"].strip()
     finally:
         lock.release()
@@ -1638,6 +1685,7 @@ def seat_think(cfg, system, msgs, timeout, tag):
 
 
 def seat_log(line):
+    activity("seat: " + line)
     try:
         with SEAT_LOG.open("a", encoding="utf-8") as f:
             f.write(time.strftime("%Y-%m-%d %H:%M:%S  ") + line + "\n")
@@ -1958,7 +2006,6 @@ def seat_runner():
 # in turn, so two chats can't talk each other in circles.
 
 CHAT_MAIL_LIMIT = 8000
-LIVE = {}      # chat id -> what a turn nobody is streaming is doing right now (the page polls it)
 # A message from another chat is not the user. Answering one is read-only: no
 # writing, no commands, no messaging on, whatever auto-run says. Otherwise one
 # chat (or anything that can steer it) could make another change the PC.
@@ -2023,25 +2070,8 @@ def deliver_mail(from_id, to_id, text, reply):
                 save_chat(chat)
                 return
             got = {"text": "", "errors": []}
-            live = LIVE[to_id] = {"text": "", "thoughts": "", "tools": []}
-
-            def emit(ev):
-                kind = ev.get("type")
-                if kind == "text":
-                    got["text"] += ev["text"]
-                    live["text"] += ev["text"]
-                elif kind == "thinking":
-                    live["thoughts"] += ev.get("text", "")
-                elif kind == "tool_start":
-                    got["text"] = ""
-                    live["tools"].append({"name": ev.get("name", "tool"), "label": "", "ok": None})
-                elif kind == "tool_done":
-                    if live["tools"] and live["tools"][-1]["ok"] is None:
-                        live["tools"][-1] = {k: ev.get(k) for k in ("name", "label", "ok")}
-                    else:
-                        live["tools"].append({k: ev.get(k) for k in ("name", "label", "ok")})
-                elif kind == "error":
-                    got["errors"].append(ev.get("text", ""))
+            emit = live_emit(to_id, got)
+            activity(f"chat {short_id(to_id)} is answering a message from chat {short_id(from_id)}")
 
             ACTIVE_TURNS += 1
             try:
@@ -2132,6 +2162,15 @@ class Handler(BaseHTTPRequestHandler):
                                   "seat_brain": cfg.get("seat_brain", "api")})
         if path == "/api/chats":
             return self.send_json(list_chats())
+        if path == "/api/activity":
+            try:
+                after = int(dict(p.split("=", 1) for p in (urlparse(self.path).query or "").split("&")
+                                 if "=" in p).get("after") or 0)
+            except ValueError:
+                after = 0
+            with ACTIVITY_LOCK:
+                rows = [r for r in ACTIVITY if r["n"] > after]
+            return self.send_json({"rows": rows[-200:], "busy": ACTIVE_TURNS})
         if path.startswith("/api/chats/"):
             try:
                 chat = load_chat(path.rsplit("/", 1)[1])
@@ -2343,6 +2382,7 @@ def commit_self_edits():
     if git("diff", "--cached", "--quiet").returncode != 0:
         git("-c", "user.name=Cloude", "-c", "user.email=cloude@localhost",
             "commit", "-q", "-m", "Cloude: self-edits on this PC")
+        activity("saved Cloude's own file changes to git")
 
 
 def update_once():
@@ -2381,6 +2421,7 @@ def update_once():
                        cwd=APP_DIR, timeout=600)
     if code:
         print("update: pulled new code:", ", ".join(code))
+    activity("pulled an update from GitHub" + (": " + ", ".join(code) if code else ""))
     return bool(code)
 
 
@@ -2392,6 +2433,7 @@ def update_loop():
                 while ACTIVE_TURNS > 0:          # let the current answer finish
                     time.sleep(2)
                 print("update: restarting with the new version")
+                activity("restarting to load the update")
                 restart()
         except Exception as e:
             print(f"update check failed: {e}")
