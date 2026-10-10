@@ -928,12 +928,18 @@ def replies_from_transcript(path, seen):
             continue
         if ev.get("type") != "assistant" or ev.get("isSidechain"):
             continue
-        content = (ev.get("message") or {}).get("content")
+        msg = ev.get("message") or {}
+        # Claude Code's own notices (usage limits, API errors) aren't replies
+        if ev.get("isApiErrorMessage") or msg.get("model") == "<synthetic>":
+            continue
+        content = msg.get("content")
         if isinstance(content, str):
             text = content
         else:
             text = "".join(b.get("text", "") for b in content or [] if isinstance(b, dict) and b.get("type") == "text")
         text = text.strip()
+        if re.match(r"(You've hit your|You have hit your).*limit|API Error:", text):
+            continue                     # same notices, caught by their wording
         key = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
         if text and key not in seen:
             seen.add(key)
