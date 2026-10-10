@@ -113,16 +113,22 @@ const ear = new THREE.Mesh(new THREE.RingGeometry(0.97, 1, 48), new THREE.MeshBa
 // ------------------------------------------------------------------- log --
 const logEl = $('log'); let filter = 'all';
 const KIND_CLASS = { crime: 'sig', law: 'law', politics: 'pol', gang: 'gang', death: 'death', life: 'life', lie: 'lie', rumor: 'know', fight: 'fight', talk: 'base', trade: 'coin', town: 'pol' };
+// which tab a line belongs in: crime = crimes, the law, and accusations (true or not)
+const ACCUSE = /committed|robs|steals|lifts|burgl|mugs|arrest|jail|report|wanted|bounty|ambush|slaughters one/i;
+const tabOf = e => e.kind === 'crime' || e.kind === 'law' || (e.kind === 'lie' || e.kind === 'rumor') && ACCUSE.test(e.text) ? 'crime' : e.kind === 'lie' || e.kind === 'rumor' ? (e.kind === 'rumor' ? 'rumor' : 'lie') : e.kind === 'town' ? 'politics' : e.kind;
+const shows = d => filter === 'all' || d.dataset.tab === filter || d.dataset.kind === filter || filter === 'lie' && d.dataset.kind === 'lie' || filter === 'rumor' && d.dataset.kind === 'rumor';
+function emptyNote() { let n = $('logEmpty'); if (!n) { n = document.createElement('div'); n.id = 'logEmpty'; n.className = 'k'; logEl.appendChild(n); } n.textContent = `Nothing under "${filter}" yet.` + (filter === 'crime' ? ' Most crime happens in the evening and at night.' : ''); n.hidden = filter === 'all' || [...logEl.children].some(d => d !== n && !d.hidden); }
 function logLine(e) {
   const d = document.createElement('div'); d.className = KIND_CLASS[e.kind] || 'base'; d.dataset.kind = e.kind;
-  d.textContent = `d${e.day} ${e.clock}  ${e.text}`; d.hidden = filter !== 'all' && filter !== e.kind && !(filter === 'crime' && (e.kind === 'law' || e.kind === 'crime'));
+  d.textContent = `d${e.day} ${e.clock}  ${e.text}`; d.dataset.tab = tabOf(e); d.hidden = !shows(d);
   if (e.who?.includes('player')) d.classList.add('me');
-  logEl.appendChild(d); while (logEl.children.length > 500) logEl.firstChild.remove();
+  logEl.appendChild(d); while (logEl.children.length > 600) logEl.firstChild.remove();
+  if ($('logEmpty') && !d.hidden) $('logEmpty').hidden = true;
   if (!d.hidden) logEl.scrollTop = 1e9;
 }
 S.onLog = logLine;
 for (const e of S.log) logLine(e);
-document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { filter = b.dataset.filter; document.querySelectorAll('[data-filter]').forEach(x => x.classList.toggle('on', x === b)); for (const d of logEl.children) d.hidden = filter !== 'all' && filter !== d.dataset.kind && !(filter === 'crime' && (d.dataset.kind === 'law' || d.dataset.kind === 'crime')); logEl.scrollTop = 1e9; });
+document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { filter = b.dataset.filter; document.querySelectorAll('[data-filter]').forEach(x => x.classList.toggle('on', x === b)); for (const d of logEl.children) if (d.id !== 'logEmpty') d.hidden = !shows(d); emptyNote(); logEl.scrollTop = 1e9; });
 const note = text => { if (text) logLine({ day: S.day, clock: S.clock(), kind: 'talk', text, who: ['player'] }); };
 
 // ---------------------------------------------------------------- brains --
@@ -367,6 +373,12 @@ $('sSave').onclick = async () => {
   $('brainNote').textContent = `Brains: mayor = ${j.mayor}; townsfolk = ${j.folk}.`;
   $('sMsg').textContent = 'Saved. New brains take over from the next morning plan. (A new "at once" number needs a Town.bat restart.)';
 };
+
+// ------------------------------------------------------------------ deals --
+S.onOffer = po => { if (!po) { $('offerCard').hidden = true; return; } const f = S.people[po.from]; $('offerWho').textContent = `${f.name} ${po.offer.threat ? 'demands' : 'offers'}: ${S.offerText(po.offer).replace(/^\w+: /, '')}.`; $('offerCard').hidden = false; };
+$('offerYes').onclick = () => { $('offerCard').hidden = true; note(S.offerAnswer(true)); drawPanel(); };
+$('offerNo').onclick = () => { $('offerCard').hidden = true; note(S.offerAnswer(false)); drawPanel(); };
+$('aOffer').onclick = () => doTo('offer', { coin: +$('offCoin').value || 0, want: $('offWant').value, threat: $('offThreat').checked });
 
 // ------------------------------------------------------------ invitations --
 S.onInvite = inv => {
