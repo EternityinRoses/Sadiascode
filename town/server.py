@@ -8,8 +8,8 @@ Nothing heavy runs on this computer: every brain is a cloud model.
     and "ollama" (Ollama's cloud models: either the Ollama app signed in, host
     http://localhost:11434 and a model ending in -cloud, or host https://ollama.com with
     OLLAMA_API_KEY set). Set a group's provider to "off" for plain brains only.
-  - Each person has their own notebook in brains/<town>/<person>.json. A person's prompt
-    only ever contains their own notebook: nobody reads anyone else's mind.
+  - Each person is their own AI instance: a fixed identity (cached), their own running thread of
+    turns and their own notes, all in brains/<town>/<person>.json. Nobody reads anyone else's mind.
   - A daily dollar cap stops paid calls; the town keeps running on its plain brains.
     Townsfolk re-plan at most every folk_every_minutes real minutes each.
   - The town's learned mind (the lore) is kept in lore.json. It stays when the AI is unplugged.
@@ -90,21 +90,26 @@ def post(url, body, headers, timeout=60):
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
-def ask_model(cfg, prompt):
+def ask_model(cfg, prompt, system=None, history=None):
+    """One turn for one person's instance: their fixed identity (system), their own past turns, and now."""
     prov, model = cfg.get("provider", "off"), cfg.get("model", "")
+    msgs = list(history or []) + [{"role": "user", "content": prompt}]
     if prov == "anthropic":
         key = anthropic_key()
         if not key:
             raise RuntimeError("no Anthropic key (Cloude's config.json api_key, or ANTHROPIC_API_KEY)")
-        j = post("https://api.anthropic.com/v1/messages", {"model": model, "max_tokens": 1200, "messages": [{"role": "user", "content": prompt}]},
+        body = {"model": model, "max_tokens": 1200, "messages": msgs}
+        if system:   # the identity never changes, so it is cached between this person's turns
+            body["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+        j = post("https://api.anthropic.com/v1/messages", body,
                  {"x-api-key": key, "anthropic-version": "2023-06-01"})
         u = j.get("usage", {})
-        spend(model, u.get("input_tokens", 0), u.get("output_tokens", 0))
+        spend(model, u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) * 1.25 + u.get("cache_read_input_tokens", 0) * 0.1, u.get("output_tokens", 0))
         return "".join(b.get("text", "") for b in j.get("content", []) if b.get("type") == "text")
     if prov == "ollama":
         host = cfg.get("host", "http://localhost:11434").rstrip("/")
         key = ollama_key()
-        j = post(host + "/api/chat", {"model": model, "stream": False, "format": "json", "messages": [{"role": "user", "content": prompt}]},
+        j = post(host + "/api/chat", {"model": model, "stream": False, "format": "json", "messages": ([{"role": "system", "content": system}] if system else []) + msgs},
                  {"Authorization": "Bearer " + key} if key else {}, timeout=90)
         spend(model, j.get("prompt_eval_count", 0), j.get("eval_count", 0))
         return (j.get("message") or {}).get("content", "")
@@ -141,6 +146,7 @@ def write_book(town, person, book):
         json.dump(book, f, ensure_ascii=False, indent=1)
     os.replace(p + ".tmp", p)
 
+THREAD = 16   # how many past messages of their own thread each person keeps in mind (older ones live on as their notes)
 gate = threading.BoundedSemaphore(max(1, int(settings().get("parallel", 3))))
 
 # ------------------------------------------------------------- settings --
@@ -214,17 +220,25 @@ def think(req):
         book["asked"] = time.time()
     write_book(town, person, book)
     prompt = str(req.get("prompt", ""))[:12000]
+    turn = prompt     # what goes into their thread (the notebook is re-attached fresh each time)
     if book["notes"]:
         prompt += "\nYour own notebook (only you can see it): " + " | ".join(book["notes"][-12:])
+    system = str(req.get("system") or "")[:12000] or None
+    # this person's own thread: their past turns, and only theirs
+    hist = [m for m in book.get("history", []) if m.get("role") in ("user", "assistant")][-THREAD:]
+    while hist and hist[0]["role"] != "user":
+        hist.pop(0)
     with gate:
         try:
-            dec = parse(ask_model(cfg, prompt))
+            raw = ask_model(cfg, prompt, system, hist)
+            dec = parse(raw)
         except Exception as e:
             with ulock:
                 usage["errors"] += 1
             print(f"[brain] {req.get('name', person)}: {type(e).__name__}: {str(e)[:160]}")
             return None
     if isinstance(dec, dict):
+        book["history"] = (hist + [{"role": "user", "content": turn}, {"role": "assistant", "content": json.dumps(dec, ensure_ascii=False)}])[-THREAD:]
         if req.get("kind") == "chat" and dec.get("say"):
             book["said"] = (book["said"] + [str(dec["say"])[:200]])[-20:]
             if dec.get("note"):

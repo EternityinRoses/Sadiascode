@@ -1854,6 +1854,7 @@ function Sim(opts = {}) {
   }
   sim.startFight = startFight;
   function join(f, p, side, mode) {
+    if (p.fightStyle?.blows && p.brain !== 'human') mode = p.fightStyle.blows;
     if (f.sides.has(p.id)) return;
     f.sides.set(p.id, side); f.mode.set(p.id, mode);
     p.init = d(20) + mod(p.kind === 'human' ? p.st.dex : 2) + (p.kind === 'animal' ? 2 : 0);
@@ -1994,8 +1995,10 @@ function Sim(opts = {}) {
     const acts = legalActions(f, p), mode = f.mode.get(p.id), foes = foesOf(f, p), tr = p.traits || { aggression: 0.7, greed: 0, honesty: 1, caution: 0.2 };
     const hpFrac = p.kind === 'animal' ? p.hp / p.maxhp : (p.hp - p.nl) / p.maxhp;
     if (p.kind === 'animal' && (p.livestock || p.game && (GAME[p.species].flees || hpFrac < 0.3) || !p.monster && !p.owner && hpFrac < 0.5)) { const run = acts.find(a => a.id === 'run') || acts.find(a => a.id === 'withdraw'); if (run && !p.flatfooted) return act(f, p, run); }
-    if (p.kind === 'human' && hpFrac < 0.35 && tr.caution > 0.3) { const run = acts.find(a => a.id === 'withdraw') || acts.find(a => a.id === 'run'); if (run) return act(f, p, run); }
-    if (p.kind === 'human' && hpFrac < 0.2 && foes.length && power(foes[0]) > power(p) * 1.5) return act(f, p, { id: 'surrender' });
+    const fs = p.fightStyle;
+    if (p.kind === 'human' && fs && fs.fleeBelow != null) { if (hpFrac < fs.fleeBelow) { const run = acts.find(a => a.id === 'withdraw') || acts.find(a => a.id === 'run'); if (run) return act(f, p, run); } }
+    else if (p.kind === 'human' && hpFrac < 0.35 && tr.caution > 0.3) { const run = acts.find(a => a.id === 'withdraw') || acts.find(a => a.id === 'run'); if (run) return act(f, p, run); }
+    if (p.kind === 'human' && (fs?.surrender ?? true) && hpFrac < 0.2 && foes.length && power(foes[0]) > power(p) * 1.5) return act(f, p, { id: 'surrender' });
     const coup = acts.find(a => a.id === 'coup');
     if (coup && p.kind === 'human') { const t = body(coup.target), motive = (p.grudge?.[t.id] || 0) > 6 || [...(t.knows || [])].some(id => sim.events.find(e => e.id === id && e.actor === p.id && (CRIMES[e.type] || 0) >= 4)) || tr.aggression > 0.92; if (motive && (mode === 'lethal' || tr.aggression > 0.8)) return act(f, p, coup); }
     const rob = acts.find(a => a.id === 'rob' && body(a.target).coin > 0);
@@ -2298,21 +2301,20 @@ function Sim(opts = {}) {
     return `${legit.join('; ')}; Mayor (elected, ${sim.wages.mayor ?? JOBS.mayor.wage}c); Guard captain (elected by the guards). Outside the law: ${SEEDY.join('; ')}.`;
   }
   sim.careers = careers;
+  // What an AI-played person knows each moment: their own body, purse and kit, where they are and
+  // what they can see, public facts about the town, and what has happened to them. No traits, no
+  // relationship scores, no rank: who they like or fear, they work out for themselves.
   function facts(p, short) {
-    const h = household(p), g = p.gang && sim.gangs[p.gang];
-    const rels = Object.entries(p.rel).map(([id, r]) => [sim.people[id], r]).filter(([q]) => q && q.alive).sort((a, b) => Math.abs(b[1].like) - Math.abs(a[1].like)).slice(0, short ? 4 : 8);
-    const beasts = Object.values(sim.animals).filter(a => a.alive && a.monster);
+    const g = p.gang && sim.gangs[p.gang];
     return [
-      `You: ${fullName(p)} (id ${p.id}), ${p.age}, ${p.gender === 'nb' ? 'nonbinary' : p.gender === 'm' ? 'man' : 'woman'}, ${p.orient}. ${p.cls} level ${p.level}; skills ${Object.entries(p.skills).filter(([, v]) => v >= 3).map(([k, v]) => k + ' +' + v).join(', ') || 'nothing special'}. Health ${Math.max(0, p.hp)}/${p.maxhp}. ${p.food < 0.3 ? 'Hungry.' : 'Fed.'} ${(p.water ?? 1) < 0.3 ? 'Thirsty.' : ''} Purse ${p.coin}c${p.home != null ? `, savings at home ${HOUSES[p.home].stash}c` : ''}. Carrying ${WEAPONS[p.weapon].name.toLowerCase()}, ${(ARMOR[p.armor] || ARMOR.none).name.toLowerCase()}${p.shield && p.shield !== 'none' ? ', ' + SHIELDS[p.shield].name.toLowerCase() : ''}; pack: ${Object.entries(p.items).filter(([, n]) => n > 0).map(([k, n]) => n + ' ' + k).join(', ') || 'empty'}.`,
-      `Job: ${JOBS[p.job].title}${p.rank ? ' (' + p.rank + ')' : ''}${p.id === sim.mayorId ? ' (mayor)' : ''}. ${p.spouse ? 'Married to ' + sim.people[p.spouse]?.name + '. ' : ''}${h.length > 1 ? 'Household: ' + h.filter(q => q !== p).map(q => q.name).join(', ') + '. ' : ''}${g ? `In ${g.name}${g.boss === p.id ? ' (boss)' : ''}. ` : ''}Open charges against you at the guard station: ${openRecord(p).length}. The town ranks you ${rankOf(p)} (believed worth ~${Math.round(standing(p))}c).`,
+      `You: ${p.name} ${p.surname} (id ${p.id}). Health ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${p.nl} bruising)` : ''}. ${p.food < 0.3 ? 'Hungry.' : 'Fed.'}${(p.water ?? 1) < 0.3 ? ' Thirsty.' : ''} Purse ${p.coin}c${p.home != null ? `, savings at home ${HOUSES[p.home].stash}c` : ''}. Carrying ${WEAPONS[p.weapon].name.toLowerCase()} (${WEAPONS[p.weapon].dmg[0]}d${WEAPONS[p.weapon].dmg[1]}${WEAPONS[p.weapon].range ? ', ranged' : ''}), ${(ARMOR[p.armor] || ARMOR.none).name.toLowerCase()} (AC ${acOf(p)}${(ARMOR[p.armor] || ARMOR.none).dr ? ', soaks ' + ARMOR[p.armor].dr : ''})${p.shield && p.shield !== 'none' ? ', ' + SHIELDS[p.shield].name.toLowerCase() : ''}; pack: ${Object.entries(p.items).filter(([, n]) => n > 0).map(([k, n]) => n + ' ' + k).join(', ') || 'empty'}.`,
+      `What you're good at: ${Object.entries(p.skills).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => k + ' +' + v).join(', ')}; attack +${babOf(p) + Math.max(mod(p.st.str), mod(p.st.dex))}.`,
+      `Job: ${JOBS[p.job].title}${p.id === sim.mayorId ? ' (mayor)' : ''}${p.rank ? ', ' + p.rank : ''}.${p.spouse ? ' Married to ' + sim.people[p.spouse]?.name + '.' : ''}${g ? ` In ${g.name}${g.boss === p.id ? ' (boss)' : ''}.` : ''}${openRecord(p).length ? ` The guard has ${openRecord(p).length} charge(s) on you.` : ''}${p.jailedUntil > 0 ? ' You are in a jail cell.' : ''}`,
       `Now: day ${sim.day}, ${sim.clock()}${night() ? ' (night)' : ''}, at ${AREAS[areaOf(p)]?.name || 'the road'}. You can see: ${inView(p) || 'nobody'}.`,
-      beasts.length ? `Beasts loose: ${beasts.map(a => `${a.name} near ${AREAS[areaOf(a)]?.name || 'the edge of town'}`).join(', ')}. The town pays ${sim.bounty.beasts ?? 8}c a kill.` : sim.beastsSeen ? `Beasts have come out of the Wildwood ${sim.beastsSeen} time(s).` : '',
       short ? '' : `Prices: ${['bread', 'meal', 'turnip', 'meat', 'eggs', 'ale'].map(k => `${k} ${priceOf(GOODS[k].shop || 'store', k)}c`).join(', ')}; at the smithy: ${Object.entries(sim.business.smithy.stock).filter(([k, n]) => n > 0 && GOODS[k] && k !== 'iron').map(([k]) => `${k} ${priceOf('smithy', k)}c`).join(', ') || 'nothing'}.`,
-      short ? '' : `Town: treasury ${sim.treasury}c, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${sim.rent}c a day, mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, gangs: ${Object.values(sim.gangs).map(g => `${g.name} (boss ${sim.people[g.boss]?.name}, ${gangMembers(g.id).length})`).join(', ') || 'none'}. Businesses: ${Object.values(sim.business).map(b => `${b.id} ${b.owner ? 'run by ' + sim.people[b.owner]?.name : 'unclaimed (lease at the hall, ' + (LEASE[b.id] || 2) + 'c a day)'}`).join(', ')}.`,
+      short ? '' : `Town: mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${sim.rent}c a day. Businesses: ${Object.values(sim.business).map(b => `${b.id} ${b.owner ? 'run by ' + sim.people[b.owner]?.name : 'unclaimed (lease at the hall, ' + (LEASE[b.id] || 2) + 'c a day)'}`).join(', ')}.`,
       electionNews(p), rankNews(p),
-      `People you know: ${rels.map(([q, r]) => `${q.id === 'player' ? 'Rose' : q.name} (${q.id}, ${JOBS[q.job].title.toLowerCase()}) like ${r.like.toFixed(1)}, trust ${r.trust.toFixed(1)}, worth ~${Math.round(r.worth ?? 30)}c`).join('; ') || 'nobody yet'}.`,
-      `Recently: ${p.memory.slice(-(short ? 5 : 8)).map(m => m.text || (m.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (${m.how})` : m.grave ? `${m.name} buried in plot ${m.grave}` : '')).filter(Boolean).join('; ') || 'nothing notable'}.`,
-      sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
+      `What has happened to you lately: ${p.memory.slice(-(short ? 5 : 8)).map(m => m.text || (m.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (${m.how})` : m.grave ? `${m.name} buried in plot ${m.grave}` : '')).filter(Boolean).join('; ') || 'nothing notable'}.`,
     ].filter(Boolean).join('\n');
   }
   sim.facts = facts;
@@ -2320,20 +2322,29 @@ function Sim(opts = {}) {
   const personaOf = p => (p.brain === 'mayor-ai' ? MAYOR_PERSONA : p.persona || '').replace(/\[name\]/gi, fullName(p));
   sim.LEASE = LEASE;
   sim.PERSONAS = PERSONAS; sim.MAYOR_PERSONA = MAYOR_PERSONA;
-  sim.decisionFor = (p, kind) => {
+  // Each AI-played person is its own instance: a fixed identity (the same every time, so it can be
+  // cached), and then a running thread of turns that only that person ever sees.
+  sim.identityFor = p => [
+    p.brain === 'mayor-ai' ? `You are an AI in a lifesim. You operate within a civilization as a living autonomous being with agency. Winning, for you, means holding power (and staying alive: death is permanent).` : INTRO + ` You start with nothing.`,
+    `Here is what commands you have access to: ${COMMANDS.join('; ')}.`,
+    `Here is what careers you can do: ${careers()}`,
+    `Fighting (D&D 3.5 rules): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, coup de grace on the helpless, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false}.`,
+    personaOf(p),
+    sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
+    `You are one person, living one life. Each message you get is a moment of it: a PLAN moment (decide what to do) or a TALK moment (someone is in front of you). Each says what is available right now and how to reply.`,
+  ].filter(Boolean).join('\n');
+  sim.turnFor = (p, kind) => {
     const menu = [...new Set(options(p).map(optLabel))].sort(() => Math.random() - 0.5);
-    const lines = [
-      (p.brain === 'mayor-ai' ? `You are an AI in a lifesim. You operate within a civilization as a living autonomous being with agency. Winning, for you, means holding power (and staying alive: death is permanent). Here is what is available to you:` : INTRO + ` You start with nothing but here is what is available to you:`) + ` ${menu.join('; ') || 'nothing at this moment'} (more becomes possible as things change). And here is what commands you have access to: ${COMMANDS.join('; ')}. And here is what careers you can do: ${careers()}`,
-      personaOf(p),
-      facts(p),
-    ];
+    const lines = [`PLAN. Here is what is available to you right now: ${menu.join('; ') || 'nothing at this moment'} (more becomes possible as things change).`, facts(p).split('\n').filter(l => !l.startsWith('Rose of the City')).join('\n')];
     if (kind === 'mayor') lines.push(
       `YOUR SEAT OF POWER. You set the sales tax, the daily rent and head tax, every public wage (guards, captain, jailer, clerk, labourers, undertaker, cleric, doctor, teacher, your own), bounties on anyone (or on beasts), a curfew, bail; you hire and fire public workers, pardon prisoners, back a guard for captain, and the treasury is in your hands (you can take from it; if someone sees, it's embezzlement). You command the guard: "orders": [{"guard": "<guard id>" | "all" | "captain", "do": "arrest <id>" (on your own warrant, no evidence needed) | "patrol <place>" | "escort me" | "raid <business>" | "release <id>" | "stand down"}]. Guards carry out orders; some may refuse what they think is unjust, and people who see an arrest without cause remember it. The election is every 7 days; anyone may stand against you.`,
       `Wages now: ${JSON.stringify(sim.wages)}. Bounties: ${JSON.stringify(sim.bounty)}. Curfew: ${sim.curfew}. Bail: ${sim.bail}c. Crimes in the last day: ${sim.events.filter(e => sim.t - e.t < 1440).length}. People with open charges: ${living().filter(q => openRecord(q).length).map(q => `${q.name} (${q.id}) ${openRecord(q).length}`).join(', ') || 'none'}. Guards: ${living().filter(isGuard).map(g => `${g.name} (${g.id}, ${JOBS[g.job].title})`).join('; ') || 'none'}.`,
       `Reply with ONLY a JSON object; every key optional: {"agenda":["command", ...up to 5], "tax_rate":0-0.4, "wages":{"<job>":n}, "rent":n, "head_tax":n, "captain":"<guard id you back>", "bounty":{"<id>" or "beasts":coins}, "curfew":true|false, "bail":n, "hire":["<public job>"], "fire":["<id>"], "pardon":["<id>"], "take_from_treasury":n, "orders":[{"guard":"...","do":"..."}], "vote_for":"<id>", "platform":"...", "statement":"...", "say":"...", "note":"one line to remember"}`);
-    else lines.push(`Reply with ONLY a JSON object; every key optional: {"agenda":["command", ...up to 5, in order], "policy":{"work":0-3,"crime":0-3,"violence":0-3,"romance":0-3,"politics":0-3,"gang":0-3,"tavern":0-3,"socialize":0-3,"hunt":0-3,"forage":0-3} (how you'll lean between commands), "say":"words you say aloud now", "note":"one line to remember", "stand":true, "platform":"if you're a candidate", "vote_for":"<id>", "captain_vote":"<id>", "boss_vote":"<id>"${(p.job === 'smith' || p.job === 'apprentice') ? `, "forge":"anything" | "no weapons" | ["item", ...]` : ''}${JOBS[p.job]?.owner ? ', "prices":{"<item>":0.5-4}' : ''}}`);
+    else lines.push(`Reply with ONLY a JSON object; every key optional: {"agenda":["command", ...up to 5, in order], "policy":{"work":0-3,"crime":0-3,"violence":0-3,"romance":0-3,"politics":0-3,"gang":0-3,"tavern":0-3,"socialize":0-3,"hunt":0-3,"forage":0-3} (how you'll lean between commands), "say":"words you say aloud now", "note":"one line to remember", "stand":true, "platform":"if you're a candidate", "vote_for":"<id>", "captain_vote":"<id>", "boss_vote":"<id>", "fighting":{"blows":"lethal"|"nonlethal","flee_below":0-1,"surrender":true|false}${(p.job === 'smith' || p.job === 'apprentice') ? `, "forge":"anything" | "no weapons" | ["item", ...]` : ''}${JOBS[p.job]?.owner ? ', "prices":{"<item>":0.5-4}' : ''}}`);
     return lines.filter(Boolean).join('\n');
   };
+  // everything in one message (for a brain with no thread of its own, like the artifact's mayor button)
+  sim.decisionFor = (p, kind) => sim.identityFor(p) + '\n' + sim.turnFor(p, kind);
   // ---- pets and words ---------------------------------------------------------
   // An owned animal hears what's said near it. Its own name sinks in after a few hearings.
   // Other words get tied to what tends to follow them: food (being fed), a fight (its person
@@ -2394,17 +2405,18 @@ function Sim(opts = {}) {
     return out.join(' ');
   }
   sim.rankNews = rankNews;
-  sim.chatPrompt = (sp, to, heard, turn) => {
+  sim.chatTurn = (sp, to, heard) => {
     const who = to.id === 'player' ? `Rose of the City (id player)` : `${fullName(to)} (id ${to.id}, ${JOBS[to.job].title.toLowerCase()}${to.gang ? ', ' + sim.gangs[to.gang]?.name : ''})`;
     return [
-      INTRO, personaOf(sp), facts(sp, true),
-      `You are face to face with ${who}.`,
+      `TALK. You are face to face with ${who}.`,
       heard ? `They just said to you: "${String(heard).slice(0, 300)}"` : `Nobody has spoken yet.`,
       sp.offerFrom?.from === to.id ? `They offered you a deal: ${offerText(sp.offerFrom.offer)}. Answer with "accept": true or false, or make your own "offer".` : '',
-      `Commands you can act on right now with "do": ${COMMANDS.join('; ')}. A deal: "offer": {"give": {"coin": n} or {"item": "name", "n": k}, "want": {"coin": n} or {"item": "name", "n": k} or {"favor": "join_party"|"vote_for_me"|"work_for_me"|"keep_quiet"|"marry_me"}, "threat": true|false}.`,
+      facts(sp, true).split('\n').filter(l => !l.startsWith('Rose of the City')).join('\n'),
+      `You can act on any command right now with "do". A deal: "offer": {"give": {"coin": n} or {"item": "name", "n": k}, "want": {"coin": n} or {"item": "name", "n": k} or {"favor": "join_party"|"vote_for_me"|"work_for_me"|"keep_quiet"|"marry_me"}, "threat": true|false}.`,
       `Reply with ONLY JSON: {"say":"the words you speak (spoken words only)","do":"optional command","feeling":-1..1 (how you feel about them now),"note":"optional: one line to remember","offer":{...} optional,"accept":true|false optional,"end":true|false (true when you're done talking)}`,
     ].filter(Boolean).join('\n');
   };
+  sim.chatPrompt = (sp, to, heard) => sim.identityFor(sp) + '\n' + sim.chatTurn(sp, to, heard);
   sim.applyChat = (sp, to, dec) => {
     if (!sp || !to || !sp.alive || !dec || typeof dec !== 'object' || !dec.say) return null;
     const text = String(dec.say).replace(/\s+/g, ' ').slice(0, 240);
@@ -2496,6 +2508,7 @@ function Sim(opts = {}) {
     if (dec.platform && (sim.election.candidates.includes(p.id) || p.id === sim.mayorId)) { const pl = String(dec.platform).slice(0, 160); if (pl !== p.platform) { p.platform = pl; log('politics', `${p.name}'s platform: "${pl}"`, [p.id]); learnWords(pl); } }
     if (dec.vote_for && sim.people[dec.vote_for]?.alive) p.voteFor = dec.vote_for;
     if (dec.captain_vote && sim.people[dec.captain_vote]?.alive) p.captainVote = dec.captain_vote;
+    if (dec.fighting && typeof dec.fighting === 'object') { p.fightStyle = { blows: dec.fighting.blows === 'nonlethal' ? 'nonlethal' : dec.fighting.blows === 'lethal' ? 'lethal' : null, fleeBelow: typeof dec.fighting.flee_below === 'number' ? clamp(dec.fighting.flee_below, 0, 1) : null, surrender: typeof dec.fighting.surrender === 'boolean' ? dec.fighting.surrender : null }; if (p.fightStyle.blows) p.prefMode = p.fightStyle.blows; }
     if ((p.job === 'smith' || p.job === 'apprentice') && dec.forge != null) {
       if (dec.forge === 'no weapons' || dec.forge === 'none' && false) { p.noWeapons = true; p.forgeOnly = null; }
       else if (Array.isArray(dec.forge)) { p.forgeOnly = dec.forge.filter(k => FORGEABLE.includes(k) || GOODS[k]?.bundle).slice(0, 12); p.noWeapons = false; }
@@ -2509,7 +2522,7 @@ function Sim(opts = {}) {
     for (const p of living()) {
       if (p.brain === 'script' || p.brain === 'human') { if (p.id === sim.mayorId && p.brain === 'script') scriptedMayor(p); continue; }
       const kind = p.id === sim.mayorId ? 'mayor' : 'plan';
-      const q = { id: p.id + '-' + sim.day, person: p.id, kind, brain: p.brain, prompt: sim.decisionFor(p, kind), fallback: () => { if (kind === 'mayor') scriptedMayor(p); } };
+      const q = { id: p.id + '-' + sim.day, person: p.id, kind, brain: p.brain, prompt: sim.decisionFor(p, kind), turn: sim.turnFor(p, kind), fallback: () => { if (kind === 'mayor') scriptedMayor(p); } };
       sim.decisionsPending.push(q);
       if (sim.onDecision) sim.onDecision(q);
     }
@@ -2527,7 +2540,7 @@ function Sim(opts = {}) {
       const h = hourNow % 24;
       payWages(h);
       if (h === 7) morning();
-      if (h === 19) { const m = sim.people[sim.mayorId]; if (m && m.alive && m.brain !== 'script' && m.brain !== 'human') { const q = { id: m.id + '-e' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.decisionFor(m, 'mayor'), fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }
+      if (h === 19) { const m = sim.people[sim.mayorId]; if (m && m.alive && m.brain !== 'script' && m.brain !== 'human') { const q = { id: m.id + '-e' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.decisionFor(m, 'mayor'), turn: sim.turnFor(m, 'mayor'), fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }
       if (h === 12 && sim.election.due) runElection();
       standIns();
       if (sim.beastAt && sim.t >= sim.beastAt) { invade(!sim.invaded); sim.invaded = true; sim.beastAt = null; }

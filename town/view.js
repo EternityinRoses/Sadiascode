@@ -148,7 +148,7 @@ fetch('/brain/ping').then(r => r.ok ? r.json() : null).then(j => {
 }).catch(() => {});
 setInterval(() => { if (server) fetch('/brain/ping').then(r => r.json()).then(j => { if (j?.ok) $('brainNote').textContent = `Brains: mayor = ${j.mayor}; townsfolk = ${j.folk} · ${j.calls} calls today, about $${j.cost.toFixed(2)}${j.capped ? ' · daily cap reached, plain brains only' : ''}`; }).catch(() => {}); }, 20000);
 if (window.claude?.use) window.claude.use('sample').then(s => { sample = s; if (s) $('brainNote').textContent = 'The mayor is Claude: press "Let the mayor decide" each morning.'; });
-const pending = [];
+const pending = [], mayorThread = [];
 S.onDecision = q => {
   pending.push(q);
   if (server) ask(q);
@@ -160,8 +160,8 @@ async function ask(q) {
   q.asking = true; drawCouncil();
   try {
     let dec = null;
-    if (server) { const p = S.people[q.person]; const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: q.brain, kind: q.kind, prompt: q.prompt, town: townId, day: S.day, person: q.person, name: p ? S.fullName(p) : q.person }) }); dec = (await r.json()).decision; }
-    else if (sample) dec = await sample.json(q.prompt, { modelTier: 'default' });
+    if (server) { const p = S.people[q.person]; const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: q.brain, kind: q.kind, system: p ? S.identityFor(p) : null, prompt: q.turn || q.prompt, town: townId, day: S.day, person: q.person, name: p ? S.fullName(p) : q.person }) }); dec = (await r.json()).decision; }
+    else if (sample) { const m = S.people[q.person]; mayorThread.push({ role: 'user', content: (mayorThread.length ? '' : S.identityFor(m) + '\n\n') + (q.turn || q.prompt) }); dec = await sample.json(mayorThread.slice(-12).filter((x, i, a) => !(i === 0 && x.role === 'assistant')), { modelTier: 'default' }); mayorThread.push({ role: 'assistant', content: JSON.stringify(dec) }); if (mayorThread.length > 24) { const first = mayorThread[0]; mayorThread.splice(0, mayorThread.length - 12); if (mayorThread[0].role !== 'user') mayorThread.shift(); mayorThread[0] = { role: 'user', content: first.content.split('\n\n')[0] + '\n\n' + mayorThread[0].content }; } }
     if (dec) { S.applyDecision(S.people[q.person], q.kind, dec); if (q.kind === 'mayor') logLine({ day: S.day, clock: S.clock(), kind: 'politics', text: `(${S.people[q.person].name}'s choices came from ${server ? server.mayor : 'Claude'}.)`, who: [] }); }
     else q.fallback?.();
   } catch (e) { logLine({ day: S.day, clock: S.clock(), kind: 'sig', text: `The mayor's brain didn't answer (${e.code || e.message || e}); the office runs on its fallback today.`, who: [] }); q.fallback?.(); }
@@ -332,7 +332,7 @@ S.onChat = async c => {
   for (let turn = 0; turn < (c.a === 'player' ? 1 : 4); turn++) {
     if (!sp?.alive || !to?.alive || !S.conscious(sp) || sp.fight) break;
     let dec = null;
-    try { const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: sp.brain, kind: 'chat', prompt: S.chatPrompt(sp, to, heard, turn), town: townId, day: S.day, person: sp.id, name: S.fullName(sp), player: c.a === 'player' }) }); dec = (await r.json()).decision; } catch (e) {}
+    try { const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: sp.brain, kind: 'chat', system: S.identityFor(sp), prompt: S.chatTurn(sp, to, heard), town: townId, day: S.day, person: sp.id, name: S.fullName(sp), player: c.a === 'player' }) }); dec = (await r.json()).decision; } catch (e) {}
     const said = S.applyChat(sp, to, dec); if (!said) break;
     bubbles[sp.id] = { text: said, until: performance.now() + 7000 };
     if (dec.end || to.id === 'player' || !S.thinks(to)) break;
