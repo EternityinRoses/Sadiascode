@@ -275,6 +275,7 @@ function Sim(opts = {}) {
     const guards = [['m', 'captain', 3], ['m', 'guard', 2], ['f', 'guard', 1], ['m', 'nightguard', 1], ['f', 'nightguard', 1], ['m', 'jailer', 1]]
       .map(([gd, job, lvl]) => add({ gender: gd, cls: 'warrior', level: lvl, job, weapon: job === 'captain' ? 'longsword' : pick(['club', 'shortsword', 'sap']), armor: job === 'captain' ? 'chain' : 'leather', coin: irnd(4, 12), focus: ['intimidate', 'spot', 'sense'], bias: { str: 1, con: 1 } }));
     sim.captainId = guards[0].id;
+    for (const g of guards) g.items.torch = 1;
     const civJobs = ['baker', 'bakehand', 'shopkeep', 'shophand', 'smith', 'apprentice', 'innkeep', 'server', 'farmer', 'farmhand', 'rancher', 'doctor', 'undertaker', 'cleric', 'teacher', 'clerk'];
     const genders = ['m', 'm', 'm', 'm', 'm', 'm', 'm', 'm', 'f', 'f', 'f', 'f', 'f', 'f', 'f', 'f'].sort(() => Math.random() - 0.5);
     civJobs.forEach((job, i) => add({ gender: genders[i], cls: ['baker', 'shopkeep', 'smith', 'innkeep', 'farmer', 'rancher', 'doctor', 'cleric', 'teacher'].includes(job) ? 'expert' : 'commoner', level: 1, job,
@@ -356,22 +357,47 @@ function Sim(opts = {}) {
 
   // ---- perception -----------------------------------------------------------
   const night = () => { const h = H(); return h < 6 || h >= 20; };
+  // ---- sight and hearing ----------------------------------------------------
+  // Everyone has a vision radius (Wisdom and Spot) and looks one way (a 140-degree cone);
+  // close by (2.5 m) you notice anyone. Light matters: at night, outdoors, a dark figure is
+  // seen at a third of the range, unless they stand under a lamp or carry a torch (which also
+  // makes them easy to spot from afar). Someone sneaking in the dark rolls Hide against Spot.
+  // Hearing (Listen) works all round but shorter, and walls stop both.
+  const LAMPS = [P(-14, -11), P(14, -11), P(-14, 11), P(14, 11), P(-35, 5), P(0, 0)];
+  const SNEAKY = new Set(['pickpocket', 'burgle', 'rustle', 'ambush', 'lurk', 'mug', 'avenge']);
+  const sightOf = a => a.kind === 'animal' ? 14 : Math.max(8, 16 + (a.skills.spot || 0) * 1.5);
+  const hearOf = a => a.kind === 'animal' ? 10 : Math.max(4, 7 + (a.skills.listen || 0));
+  const litAt = (pos, t) => !night() || AREAS[areaOf(pos)]?.indoor || LAMPS.some(l => dist2(l, pos) < 7) || (t && t.items?.torch > 0 && t.kind === 'human');
+  sim.sightOf = sightOf; sim.hearOf = hearOf; sim.litAt = litAt;
+  function facing(a, pos) { const dx = pos.x - a.x, dz = pos.z - a.z, l = Math.hypot(dx, dz) || 1; return (dx * Math.sin(a.yaw || 0) + dz * Math.cos(a.yaw || 0)) / l; }
+  const spotCache = {};
   const sees = (a, pos) => {
     if (!conscious(a) || a.state === 'sleep' || a.jailedUntil > 0 && areaOf(pos) !== 'station') return false;
     if (!sameSpace(a, pos)) return false;
     const dd = dist2(a, pos);
-    const range = (AREAS[areaOf(pos)]?.indoor ? 14 : night() ? 7 : 20);
-    return dd < 3 || dd < range;
+    if (dd < 2.5) return true;
+    const t = pos.kind ? pos : null, lit = litAt(pos, t);
+    const range = sightOf(a) * (lit ? 1 : 0.35) * (t?.items?.torch > 0 && night() ? 1.5 : 1);
+    if (dd > range || facing(a, pos) < -0.34) return false;
+    if (t && !lit && SNEAKY.has(t.state)) {      // Spot vs Hide, remembered for half an hour
+      const k = a.id + '>' + t.id, c = spotCache[k];
+      if (c && sim.t - c.t < 30) return c.ok;
+      const ok = d(20) + (a.skills.spot || 0) >= d(20) + (t.skills.hide || 0);
+      spotCache[k] = { t: sim.t, ok }; return ok;
+    }
+    return true;
   };
+  const hears = (a, pos) => conscious(a) && sameSpace(a, pos) && dist2(a, pos) < hearOf(a) * (a.state === 'sleep' ? 0.4 : 1);
+  sim.sees = sees; sim.hears = hears;
   sim.sees = sees;
-  const witnesses = (pos, exclude = []) => living().filter(w => !exclude.includes(w) && sees(w, pos));
+  const witnesses = (pos, exclude = [], noisy = false) => living().filter(w => !exclude.includes(w) && (sees(w, pos) || noisy && hears(w, pos)));
 
   // ---- deeds, beliefs and the record ----------------------------------------
   // A deed is seen by whoever sees it. Each witness may report it at the station desk.
   const CRIMES = { embezzlement: 6, theft: 3, burglary: 4, assault: 4, mugging: 5, murder: 10, extortion: 4, bribery: 3, vandalism: 2, desecration: 3, jailbreak: 4, trespass: 1 };
   function deed(type, actor, victim, at, extra = {}) {
     const ev = { id: 'ev' + (++sim.rec.crimes) + '-' + Math.floor(sim.t), type, actor: actor.id, victim: victim?.id || null, at: { x: at.x, z: at.z }, t: sim.t, day: sim.day, ...extra };
-    const seen = witnesses(at, [actor]);
+    const seen = witnesses(at.kind ? P(at.x, at.z) : at, [actor], ['assault', 'mugging', 'murder', 'vandalism'].includes(type));
     if (victim && victim.kind === 'human' && conscious(victim) && !seen.includes(victim) && extra.victimKnows !== false && dist2(victim, at) < 2.5) seen.push(victim);
     for (const w of seen) perceive(w, ev, 'saw', null);
     sim.events.push(ev); if (sim.events.length > 400) sim.events.shift();
@@ -606,6 +632,7 @@ function Sim(opts = {}) {
       const v = seen * 4 * p.traits.greed * desp - moral * 1.3 - 4 + p.traits.aggression * 2 + (p.gang ? 2 : 0) - (inShift(p.job, h) ? wageOf(p) : 0);
       if (v > 0) add('ambush', v);
     }
+    if (!p.items.torch && (h >= 16 || h < 6) && shopOpen('store') && p.coin >= 4 && p.traits.caution > 0.4) add('buy', 1 + p.traits.caution * 2, { shop: 'store', item: 'torch' });
     // status: fine clothes for those who can afford to be seen; boasting for those who'd rather lie
     if (!p.items.finery && p.coin >= 20 && shopOpen('store') && p.traits.greed > 0.5) add('buy', 1 + p.traits.greed * 2 + (p.court ? 1 : 0), { shop: 'store', item: 'finery' });
     if (p.traits.honesty < 0.5 && !(p.cd?.boast > sim.t)) { const near = living().find(q => q !== p && q.kind === 'human' && dist2(q, p) < 4 && sameSpace(q, p)); if (near && seen(near, p).worth < trueWorth(p) * 2 + 30) add('boast', 1.5 + (1 - p.traits.honesty) * 2, { target: near }); }
@@ -708,6 +735,7 @@ function Sim(opts = {}) {
   function settle(p) {     // score the last choice by how things went since
     const lc = p.lastChoice; if (!lc) return;
     lesson(lc.key, lc.kind, worth(p) - lc.worth, false); p.lastChoice = null;
+    if (sim.onChronicle && Math.random() < 0.2) { const rows = (sim.dataRows ||= []); if (rows.length < 3000) rows.push({ type: 'choice', day: sim.day, sit: lc.key, choice: lc.kind, reward: +(worth(p) - lc.worth).toFixed(1), brain: p.brain }); }
   }
   function loreBias(key, kind) {
     const row = sim.lore.acts[key]; if (!row) return 0;
@@ -744,9 +772,55 @@ function Sim(opts = {}) {
     return null;
   }
   sim.babble = babble; sim.learnWords = learnWords;
+  const STOP = new Set('the and you your for are but not with this that have has was were what who how why when where can will just his her its our their they them she him out about from into there here then than been would could should does did doing very much some any all get got say said tell told yes yeah well'.split(' '));
+  const keywords = t => [...new Set((String(t || '').toLowerCase().match(/[a-z']{3,}/g) || []).filter(w => !STOP.has(w)))].slice(0, 12);
+  sim.keywords = keywords;
+  // turn names into slots, so a line learned about one person can be said about another
+  function slotify(text, sp, to) {
+    let t = String(text);
+    const sw = (name, slot) => { if (name) t = t.replace(new RegExp('\\b' + name.replace(/[^\w]/g, '') + '\\b', 'g'), slot); };
+    sw(to?.id === 'player' ? 'Rose' : to?.name, '{you}'); sw(sp?.name, '{me}');
+    for (const q of living()) if (q !== sp && q !== to && q.kind === 'human' && q.name.length > 2 && t.includes(q.name)) sw(q.name, '{someone}');
+    return t;
+  }
+  function learnPhrase(sp, to, heard, said) {
+    const ph = (sim.lore.phrases ||= {}), role = roleOf(sp), list = (ph[role] ||= []);
+    const k = heard ? keywords(heard) : ['^'];
+    if (!k.length) return;
+    const say = slotify(said, sp, to);
+    if (list.some(e => e.say === say)) return;
+    list.push({ k, say, n: 0 }); if (list.length > 400) list.splice(Math.floor(Math.random() * 200), 1);
+    sim.lore.phrasesLearned = (sim.lore.phrasesLearned || 0) + 1;
+  }
+  // a plain brain answering: the closest thing an AI once said to words like these
+  function plainReply(sp, to, heard) {
+    const ph = sim.lore.phrases || {}, k = heard ? keywords(heard) : ['^'];
+    let best = null, bestScore = 0.25;
+    for (const [role, list] of Object.entries(ph)) for (const e of list) {
+      const hit = e.k.filter(w => k.includes(w)).length; if (!hit && !(k[0] === '^' && e.k[0] === '^')) continue;
+      const sc = (k[0] === '^' && e.k[0] === '^' ? 0.5 : hit / Math.sqrt(e.k.length * Math.max(1, k.length))) * (role === roleOf(sp) ? 1.3 : 1) + Math.random() * 0.15;
+      if (sc > bestScore) { bestScore = sc; best = e; }
+    }
+    if (!best) return null;
+    best.n++;
+    const other = pick(living().filter(q => q !== sp && q !== to && q.kind === 'human' && !q.town)) || sp;
+    return best.say.replace(/\{you\}/g, to.id === 'player' ? 'Rose' : to.name).replace(/\{me\}/g, sp.name).replace(/\{someone\}/g, other.name);
+  }
+  sim.plainReply = plainReply;
+  // plain-brained talk: a line out loud (heard by those in earshot, pets included)
+  function plainSay(sp, to, heard) {
+    const line = plainReply(sp, to, heard) || (sim.learning && Math.random() < 0.3 ? babble(keywords(heard)[0]) : null);
+    if (!line) return null;
+    log('talk', `${sp.name} to ${to.id === 'player' ? 'you' : to.name}: "${line}"`, [sp.id, to.id]);
+    sp.bubble = { text: line, t: sim.t };
+    remember(to, { text: `${sp.name} told me: "${line}"` });
+    hearWords(sp, line);
+    return line;
+  }
+  sim.plainSay = plainSay;
   sim.exportLore = () => JSON.parse(JSON.stringify(sim.lore));
   sim.importLore = o => { if (o && o.v === 1 && o.acts) { sim.lore = o; sim.lore.runs = (o.runs || 0) + 1; } };
-  sim.loreSize = () => ({ situations: Object.keys(sim.lore.acts).length, taught: sim.lore.taught, scored: sim.lore.scored, words: Object.keys(sim.lore.chain).length, runs: sim.lore.runs });
+  sim.loreSize = () => ({ phrases: Object.values(sim.lore.phrases || {}).reduce((a, l) => a + l.length, 0), situations: Object.keys(sim.lore.acts).length, taught: sim.lore.taught, scored: sim.lore.scored, words: Object.keys(sim.lore.chain).length, runs: sim.lore.runs });
   sim.options = options; sim.choose = choose;
 
   function startTask(p, o) {
@@ -1133,8 +1207,12 @@ function Sim(opts = {}) {
   sim.disband = disband;
 
   // ---- talking -------------------------------------------------------------
+  const thinks = p => p.brain === 'folk-ai' || p.brain === 'mayor-ai';
   function converse(p, q) {
     if (q.brain === 'human') return;
+    // two AI-minded people meeting actually talk (each speaks from their own mind)
+    if (thinks(p) && thinks(q) && sim.onChat && sees(p, q) && sees(q, p) && !(p.cd?.chat > sim.t) && !(q.cd?.chat > sim.t)) { cool(p, 'chat', 240); cool(q, 'chat', 240); sim.onChat({ a: p.id, b: q.id }); }
+    else if (!thinks(p) && sees(p, q) && !(p.cd?.chat > sim.t) && Math.random() < 0.25) { cool(p, 'chat', 180); const l1 = plainSay(p, q, null); if (l1 && !thinks(q)) plainSay(q, p, l1); }
     bump(p, q, 'like', 0.02 * p.traits.sociability); bump(q, p, 'like', 0.02 * q.traits.sociability);
     bump(p, q, 'trust', 0.01); bump(q, p, 'trust', 0.01);
     { const about = pick(living().filter(x => x !== p && x !== q && x.kind === 'human' && p.rel[x.id]?.worth != null)); if (about && R(q, p).trust > 0.3) glimpse(q, about, seen(p, about).worth, 0.15 * R(q, p).trust); }
@@ -1352,6 +1430,10 @@ function Sim(opts = {}) {
     if (b.kind === 'human' && !(isGuard(a) && (o.why === 'arrest' || o.why === 'resisting arrest' && false))) deed(o.why === 'mug' ? 'mugging' : 'assault', a, b, b);
     else if (b.kind === 'animal' && b.owner && sim.people[b.owner]) deed('assault', a, sim.people[b.owner], b);
     // allies nearby decide whether to join (backers, gang, owners' dogs, guards on duty)
+    for (const x of [a, b]) for (const an of Object.values(sim.animals)) if (an.alive && an.owner === x.id && !an.game && dist2(an, x) < 10 && x.kind === 'human' && x.brain !== 'human' && conscious(x)) {
+      const word = (x.sicWord ||= pick(['get him', 'go on', 'at them', 'sic', 'take them'])), line = `${an.name}, ${word}!`;
+      log('talk', `${x.name}: "${line}"`, [x.id, an.id]); x.bubble = { text: line, t: sim.t }; hearWords(x, line); petEvent(an, 'fight');
+    }
     for (const x of [a, b]) if (x.party) for (const q of living()) if (q !== x && q.party === x.party && conscious(q) && !f.sides.has(q.id) && dist2(q, x) < 25) { join(f, q, f.sides.get(x.id), x === a ? (o.mode || 'nonlethal') : 'nonlethal'); log('fight', `${q.name} joins in with ${x.name}'s party.`, [q.id, x.id]); }
     if (o.quiet) return f;
     for (const q of [...living(), ...Object.values(sim.animals)]) {
@@ -1595,6 +1677,25 @@ function Sim(opts = {}) {
     // elections every seventh day
     if (sim.day % 7 === 0) sim.election.due = true;
     sim.history.push(snapshot());
+    if (sim.onChronicle) {
+      const hs = sim.history, a = hs[hs.length - 2] || hs[0], b = hs[hs.length - 1], day = sim.lore.acts;
+      const ppl = living().filter(q => q.kind === 'human' && !q.town && q.id !== 'player');
+      const best = [], worst = [];
+      for (const [k, row] of Object.entries(day)) for (const [kind, c] of Object.entries(row)) if (c.n >= 15) (c.r > 0 ? best : worst).push([k + ' -> ' + kind, c.r, c.n]);
+      best.sort((x, y) => y[1] - x[1]); worst.sort((x, y) => x[1] - y[1]);
+      const deaths = sim.log.filter(e => e.kind === 'death' && e.day === sim.day - 1 && / dies/.test(e.text)).map(e => e.text);
+      const text = [`## Day ${sim.day - 1}`,
+        `People ${b.pop} · deaths so far ${b.deaths} · crimes so far ${b.crimes} · treasury ${b.treasury}c · coin in town ${b.total}c · inequality ${b.gini} · gangs ${b.gangs}`,
+        `Hungry now: ${ppl.filter(q => q.food < 0.2).length} · thirsty: ${ppl.filter(q => (q.water ?? 1) < 0.2).length} · jailed: ${ppl.filter(q => q.jailedUntil > 0).length} · jobless: ${ppl.filter(q => q.job === 'none').length}`,
+        `Food in shops: bakery ${JSON.stringify(sim.business.bakery.stock)} · store ${JSON.stringify(Object.fromEntries(Object.entries(sim.business.store.stock).filter(([k]) => GOODS[k]?.food)))} · farm ${JSON.stringify(sim.business.farm.stock)} · commons ${JSON.stringify(sim.commons)} · fish ${sim.fish} · game ${Object.values(sim.animals).filter(x => x.game && x.alive).length}`,
+        `Ranks: ${['gentry', 'freeholder', 'commoner', 'lowborn'].map(r => r + ' ' + ppl.filter(q => rankOf(q) === r).length).join(', ')} · richest: ${ppl.slice().sort((x, y) => trueWorth(y) - trueWorth(x)).slice(0, 3).map(q => `${q.name} (${JOBS[q.job].title}, ~${Math.round(trueWorth(q))}c)`).join(', ')}`,
+        deaths.length ? `Deaths: ${deaths.join(' ')}` : '',
+        `Choices that paid best (situation -> choice, avg change in worth, times): ${best.slice(0, 5).map(x => `${x[0]} ${x[1].toFixed(1)} x${x[2]}`).join('; ') || 'not enough yet'}`,
+        `Choices that hurt most: ${worst.slice(0, 5).map(x => `${x[0]} ${x[1].toFixed(1)} x${x[2]}`).join('; ') || 'not enough yet'}`,
+        `Town mind: ${JSON.stringify(sim.loreSize())}, phrases learned ${sim.lore.phrasesLearned || 0}. Pets: ${Object.values(sim.animals).filter(x => x.alive && x.owner && !x.livestock).map(x => `${x.name} ${x.knowsName ? 'knows its name' : 'no name yet'}; words: ${Object.entries(x.words || {}).filter(([, e]) => e.heard >= 3 && (e.food / e.heard > 0.4 || e.fight / e.heard > 0.3)).map(([w, e]) => w + (e.food / e.heard > 0.4 ? '=food' : '=fight')).join(', ') || 'none'}`).join(' · ')}`,
+      ].filter(Boolean).join('\n');
+      sim.onChronicle(text, (sim.dataRows || []).splice(0));
+    }
     if (sim.onDay) sim.onDay(sim.day);
   }
   function newcomers(n) {
@@ -1725,6 +1826,7 @@ function Sim(opts = {}) {
       `The town seems to rank you as ${rankOf(p)} (by what people believe you're worth, ~${Math.round(standing(p))}c; you're really worth ~${Math.round(trueWorth(p))}c). Standing affects prices, votes, marriage offers, who'll work for you, and who robs you. It can be bluffed, and bluffs can be caught.`,
       `Recently: ${p.memory.slice(-8).map(m => m.text || (m.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (${m.how}${m.lie ? '' : ''})` : m.grave ? `${m.name} buried in plot ${m.grave}` : '')).filter(Boolean).join('; ') || 'nothing notable'}.`,
       `Town: treasury ${sim.treasury}c, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${sim.rent}c and head tax ${sim.headTax}c a day, mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, gangs ${Object.values(sim.gangs).map(g => `${g.name} (boss ${sim.people[g.boss]?.name}, ${gangMembers(g.id).length})`).join(', ') || 'none'}. Election every 7th day (next: day ${Math.ceil(sim.day / 7) * 7}).`,
+      `Right now you can see: ${inView(p) || 'nobody'}.`,
       sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
     ];
     if (kind === 'mayor') lines.push(
@@ -1734,6 +1836,76 @@ function Sim(opts = {}) {
     else lines.push(`Reply with ONLY a JSON object: {"policy":{"work":0-3,"crime":0-3,"violence":0-3,"romance":0-3,"politics":0-3,"gang":0-3,"tavern":0-3,"socialize":0-3,"hunt":0-3,"forage":0-3}, "prices":{"item":multiplier} (only if you own a business), "say":"optional one line you say aloud today", "note":"optional: one line you want to remember tomorrow"}. The weights bias what you choose to do today (1 = normal, 0 = never, 3 = strongly).`);
     return lines.filter(Boolean).join('\n');
   };
+  // ---- pets and words ---------------------------------------------------------
+  // An owned animal hears what's said near it. Its own name sinks in after a few hearings.
+  // Other words get tied to what tends to follow them: food (being fed), a fight (its person
+  // fighting). Once a word means food it comes running when it hears it; once a word means
+  // "fight", it joins in when its person says it, if it's bonded enough and bold enough.
+  const PET_WORDS = 3;
+  function hearWords(sp, text) {
+    const words = keywords(text).concat((String(text).toLowerCase().match(/[a-z]+/g) || []).filter(w => w.length <= 3 && !STOP.has(w)));
+    for (const an of Object.values(sim.animals)) {
+      if (!an.alive || an.game || an.livestock || an.fight || dist2(an, sp) > 10 || !sameSpace(an, sp)) continue;
+      const v = (an.words ||= {});
+      an.recent = (an.recent || []).filter(r => sim.t - r.t < 3).concat(words.map(w => ({ w, t: sim.t, by: sp.id })));
+      for (const w of words) { const e = (v[w] ||= { heard: 0, food: 0, fight: 0 }); e.heard++; }
+      const name = an.name.toLowerCase();
+      if (words.includes(name)) { if ((v[name].heard >= PET_WORDS || an.owner && an.bond[an.owner] > 0.8) && !an.knowsName) { an.knowsName = true; log('life', `${an.name} has learned its name.`, [an.id]); } if (an.knowsName) an.yaw = Math.atan2(sp.x - an.x, sp.z - an.z); }
+      // words it already understands
+      for (const w of words) {
+        const e = v[w]; if (!e || e.heard < PET_WORDS) continue;
+        const bond = an.bond[sp.id] || 0;
+        if (e.food / e.heard > 0.4 && an.full < 0.8) { an.goal = P(sp.x, sp.z); an.come = sim.t; if (!an.lastPerk || sim.t - an.lastPerk > 60) { an.lastPerk = sim.t; log('life', `${an.name} perks up at "${w}" and trots over to ${sp.id === 'player' ? 'you' : sp.name}.`, [an.id, sp.id]); } break; }
+        if (e.fight / e.heard > 0.3 && bond > 0.5 && an.temper !== 'passive') {
+          const f = sim.fights.find(f => f.sides.has(sp.id));
+          const foe = f ? [...f.sides.keys()].map(body).find(q => q && q.alive && f.sides.get(q.id) !== f.sides.get(sp.id)) : living().filter(q => q !== sp && q.kind === 'human' && conscious(q) && dist2(q, sp) < 5 && facing(sp, q) > 0.3).sort((a, b) => dist2(a, sp) - dist2(b, sp))[0];
+          if (foe) { log('fight', `${an.name} hears "${w}" from ${sp.id === 'player' ? 'you' : sp.name} and goes for ${foe.id === 'player' ? 'you' : foe.name}!`, [an.id, sp.id, foe.id]); if (f) join(f, an, f.sides.get(sp.id), 'lethal'); else startFight(an, foe, { mode: 'lethal', why: 'set on by ' + sp.name }); }
+          break;
+        }
+      }
+    }
+  }
+  sim.hearWords = hearWords;
+  function petEvent(an, kind) {      // whatever was said just before this gets the credit
+    for (const r of (an.recent || [])) if (sim.t - r.t < 3 && an.words?.[r.w]) an.words[r.w][kind]++;
+    an.recent = [];
+  }
+  sim.petEvent = petEvent;
+  // ---- conversations: a prompt for one line, from the speaker's own point of view
+  function inView(p, max = 8) {
+    const out = [];
+    for (const q of [...living(), ...Object.values(sim.animals)]) if (q !== p && q.alive && sees(p, q)) out.push(q);
+    return out.sort((a, b) => dist2(a, p) - dist2(b, p)).slice(0, max).map(q => q.kind === 'animal' ? `a ${q.species}` : `${q.id === 'player' ? 'Rose of the City' : q.name} (${!conscious(q) ? 'on the ground' : q.fight ? 'fighting' : q.task?.kind || q.state}${q.items?.finery ? ', finely dressed' : ''}${q.items?.torch && night() ? ', carrying a torch' : ''}, ~${Math.round(dist2(q, p))}m)`).join(', ');
+  }
+  sim.inView = inView;
+  sim.chatPrompt = (sp, to, heard, turn) => {
+    const r = R(sp, to), about = sp.memory.filter(m => (m.text || '').includes(to.name) || m.actor === to.id || m.by === to.id).slice(-4).map(m => m.text || `${sim.people[m.actor]?.name} ${m.type}`).join('; ');
+    const who = to.id === 'player' ? `Rose of the City, an outsider from the city (a human player; treat her like anyone else)` : `${fullName(to)}, ${JOBS[to.job].title.toLowerCase()}${to.gang ? ' (' + sim.gangs[to.gang]?.name + ')' : ''}`;
+    return [
+      `You are ${fullName(sp)}, ${sp.age}, ${JOBS[sp.job].title.toLowerCase()} in Hollow Town, a small grim-fantasy village. ${sim.clock()}, day ${sim.day}, at ${AREAS[areaOf(sp)]?.name || 'the road'}.`,
+      `Your one goal is to make as much money as you can. Purse ${sp.coin}c. ${sp.food < 0.3 ? 'You are hungry. ' : ''}${sp.hp < sp.maxhp / 2 ? 'You are hurt. ' : ''}The town ranks you ${rankOf(sp)}.${sp.policy ? ' Your plan today: ' + JSON.stringify(sp.policy) + '.' : ''}`,
+      `You're talking with ${who}. You like them ${r.like.toFixed(1)} (-1..1), trust ${r.trust.toFixed(1)}, guess they're worth ~${Math.round(r.worth ?? 30)}c.${about ? ' What you know about them: ' + about + '.' : ''}`,
+      `You can see: ${inView(sp) || 'nobody else'}${litAt(sp, sp) ? '' : ' (it is dark here)'}.`,
+      heard ? `They just said to you: "${String(heard).slice(0, 300)}"` : `You start the conversation.`,
+      `Speak like a villager: one or two short sentences, no narration. You may lie, flatter, haggle, threaten, gossip or ask for something if it serves you.`,
+      `Reply with ONLY JSON: {"say":"your words","feeling":-1..1 (how you feel about them now),"note":"optional: one line you want to remember","end":true|false (true if you're done talking)}`,
+    ].join('\n');
+  };
+  sim.applyChat = (sp, to, dec) => {
+    if (!sp || !to || !sp.alive || !dec || typeof dec !== 'object' || !dec.say) return null;
+    const text = String(dec.say).replace(/\s+/g, ' ').slice(0, 240);
+    log('talk', `${sp.name} to ${to.id === 'player' ? 'you' : to.name}: "${text}"`, [sp.id, to.id]);
+    sp.bubble = { text, t: sim.t };
+    learnPhrase(sp, to, sp.lastHeard?.[to.id] || null, text); (to.lastHeard ||= {})[sp.id] = text;
+    hearWords(sp, text);
+    (sim.dataRows ||= []).push({ type: 'talk', day: sim.day, role: roleOf(sp), heard: sp.lastHeard?.[to.id] || null, said: text });
+    if (typeof dec.feeling === 'number') { const r = R(sp, to); r.like = clamp(r.like + (clamp(dec.feeling, -1, 1) - r.like) * 0.15, -1, 1); }
+    remember(to, { text: `${sp.name} told me: "${text}"` });
+    if (dec.note) remember(sp, { text: String(dec.note).slice(0, 160) });
+    for (const w of living()) if (w !== sp && w !== to && w.kind === 'human' && hears(w, sp) && dist2(w, sp) < 6) remember(w, { text: `I overheard ${sp.name} tell ${to.name}: "${text.slice(0, 120)}"` });
+    return text;
+  };
+  sim.thinks = thinks;
   sim.applyDecision = (p, kind, dec) => {
     if (!p || !p.alive || !dec || typeof dec !== 'object') return;
     const own = JOBS[p.job]?.owner && sim.business[JOBS[p.job].owner];
@@ -1779,6 +1951,7 @@ function Sim(opts = {}) {
       // a dry throat wakes you and pulls you off work
       if (p.water < 0.12 && p.brain !== 'human' && conscious(p) && !p.fight && !(p.jailedUntil > 0) && p.task && !['drink', 'flee', 'jail'].includes(p.task.kind) && !p.carriedBy) { if (p.task.kind === 'follow' || p.task.kind === 'caravan' || p.task.kind === 'ambush') { const w = [...SPOTS.wells].sort((a, b) => dist2(p, a) - dist2(p, b))[0]; if (dist2(p, w) > 60) { p.water = 0.5; } else p.task = null; } else p.task = null; }
       if (p.state !== 'sleep') p.rest = Math.max(0, p.rest - dtMin / 60 / 18);
+      if (p.state !== 'sleep' && Math.random() < dtMin / 8) p.yaw = (p.yaw || 0) + rnd(-1.6, 1.6);
       if (p.items.finery && Math.random() < dtMin / 120) showWealth(p, 70, 0.05);
       if (p.food <= 0) { p.starve = (p.starve || 0) + dtMin; if (p.starve > 3 * 1440 && p.hp > 1 && Math.random() < dtMin / 1440) p.hp -= 1; if (p.starve > 21 * 1440) { if (p.brain === 'human') { p.hp = -1; p.down = 'out'; p.downUntil = sim.t + 60; p.food = 0.3; p.starve = 0; } else die(p, null, 'starvation'); } } else p.starve = 0;
       if (p.down === 'out' && sim.t >= (p.downUntil || 0) && p.hp > 0) { p.down = null; p.nl = Math.min(p.nl, p.hp - 1); if (p.state === 'idle' || p.state === 'fight') p.task = null; }
@@ -1798,7 +1971,11 @@ function Sim(opts = {}) {
       if (own && own.alive && an.species === 'dog') { if (dist2(an, own) > 2.5) stepToward(an, own, 1.8, dtMin); }
       else if (Math.random() < dtMin / 30) { an.goal = randIn(an.species === 'goat' ? 'fields' : an.species === 'fox' ? 'fields' : areaOf(an) || 'square'); }
       if (an.goal) stepToward(an, an.goal, 1.0, dtMin);
-      if (own && own.alive && H() >= 18 && H() < 19) an.full = Math.max(an.full, 0.7);
+      if (own && own.alive && H() >= 18 && H() < 19 && an.full < 0.7 && dist2(own, an) < 10 && conscious(own)) {
+        const word = (own.petWord ||= pick(['dinner', 'supper', 'grub', 'food', 'treat', 'eat up']));
+        const line = `${an.name}, ${word}!`; log('talk', `${own.name}: "${line}"`, [own.id, an.id]); own.bubble = { text: line, t: sim.t };
+        hearWords(own, line); an.full = 0.9; petEvent(an, 'food'); (an.bond[own.id] = Math.min(1, (an.bond[own.id] || 0) + 0.02));
+      } else if (own && own.alive && H() >= 19 && H() < 20 && an.full < 0.5) an.full = 0.7;
     }
     // bodies on the street frighten people a little
     for (const b of sim.bodies) if (!b.buried) for (const q of living()) if (q.kind === 'human' && dist2(q, b) < 8) q.mood = Math.max(0, q.mood - dtMin * 0.0005);
@@ -1822,14 +1999,19 @@ function Sim(opts = {}) {
         if (!near(3) || t.kind !== 'human') return 'Get closer first.';
         const r = d20r() + me.skills.diplomacy; bump(t, me, 'like', r >= 12 ? 0.06 : 0.01); bump(t, me, 'trust', 0.02); bump(me, t, 'like', 0.03);
         const said = me.memory?.slice(-1)[0]?.said, heard = sim.learning && Math.random() < 0.4 ? babble(said) : null;
+        if (!thinks(t)) { const said2 = plainSay(t, me, me.memory?.slice(-1)[0]?.text || null); if (said2) return `You chat with ${t.name}. (Diplomacy ${r})`; }
         const line = heard || (R(t, me).like > 0.3 ? 'Good to see you.' : R(t, me).like < -0.3 ? 'What do you want, city girl?' : pick(['Hm. The stranger.', 'Afternoon.', 'You\'re not from here.', 'Mind yourself in Hollow Town.']));
         log('talk', `${t.name}: "${line}"`, [t.id, 'player']); return `You chat with ${t.name}. (Diplomacy ${r})`;
       }
       case 'say': {
         const text = String(extra.text || '').slice(0, 200); if (!text) return '';
         log('talk', `${me.name}: "${text}"`, ['player']);
-        for (const q of living()) if (q !== me && dist2(q, me) < 8 && sameSpace(q, me)) remember(q, { text: `${me.name} said: "${text}"` });
+        for (const q of living()) if (q !== me && hears(q, me)) remember(q, { text: `${me.name} said: "${text}"` });
         remember(me, { said: (text.toLowerCase().match(/[a-z']{4,}/g) || []).pop() });
+        const listener = living().filter(q => q !== me && thinks(q) && conscious(q) && !q.fight && dist2(q, me) < 5 && hears(q, me)).sort((a, b) => dist2(a, me) - dist2(b, me))[0];
+        if (listener && sim.onChat) sim.onChat({ a: 'player', b: listener.id, heard: text });
+        else { const plain = living().filter(q => q !== me && !thinks(q) && q.kind === 'human' && conscious(q) && !q.fight && dist2(q, me) < 5 && hears(q, me)).sort((a, b) => dist2(a, me) - dist2(b, me))[0]; if (plain) plainSay(plain, me, text); }
+        hearWords(me, text);
         return '';
       }
       case 'bribe': {
@@ -1909,6 +2091,12 @@ function Sim(opts = {}) {
         if (!near(3) || t.kind !== 'human') return 'Get closer first.';
         const amt = Math.max(10, extra.amount | 0), ok = boast(me, t, amt);
         return ok ? `${t.name} takes you for someone worth about ${amt}c.` : `${t.name} doesn't buy it, and trusts you less.`;
+      }
+      case 'feed': {
+        const an = t && t.kind === 'animal' ? t : null; if (!an || !near(2.5)) return 'Get close to an animal first.';
+        if (!(me.items.treats > 0)) return 'You have no treats (the store sells them).';
+        me.items.treats--; an.full = Math.min(1, an.full + 0.2); an.bond.player = Math.min(an.maxBond ?? 1, (an.bond.player || 0) + 0.08); petEvent(an, 'food');
+        return `${an.name} takes the treat.${an.knowsName ? '' : ''} (bond ${an.bond.player.toFixed(2)})`;
       }
       case 'dismiss': { if (!me.party) return 'You have no party.'; disband(me); return 'You send your party home.'; }
       case 'fish': { if (dist2(me, SPOTS.pond) > 7) return 'Fish at the pond in the Wildwood.'; sim.t += 60; if (Math.random() < 0.6 * sim.fish / 40) { sim.fish--; me.items.fish = (me.items.fish || 0) + 1; return 'You catch a fish.'; } return 'An hour, and nothing bites.'; }

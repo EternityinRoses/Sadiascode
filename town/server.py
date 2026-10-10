@@ -12,7 +12,9 @@ Nothing heavy runs on this computer: every brain is a cloud model.
     only ever contains their own notebook: nobody reads anyone else's mind.
   - A daily dollar cap stops paid calls; the town keeps running on its plain brains.
     Townsfolk re-plan at most every folk_every_minutes real minutes each.
-  - The town's learned mind (the lore) is kept in lore.json.
+  - The town's learned mind (the lore) is kept in lore.json. It stays when the AI is unplugged.
+  - chronicle.md: a summary per game day, for Claude to read and suggest fixes.
+    dataset.jsonl: what was chosen and how it paid off, and what was said to what.
 Keys are read, never written or printed.
 """
 import json, os, re, threading, time, urllib.request, urllib.error, urllib.parse
@@ -22,6 +24,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PORT = 8650
 SETTINGS = os.path.join(HERE, "town_brains.json")
 LORE = os.path.join(HERE, "lore.json")
+CHRONICLE = os.path.join(HERE, "chronicle.md")
+DATASET = os.path.join(HERE, "dataset.jsonl")
 BRAINS = os.path.join(HERE, "brains")
 DEFAULTS = {
     "mayor": {"provider": "anthropic", "model": "claude-sonnet-5-5"},
@@ -30,6 +34,7 @@ DEFAULTS = {
     "daily_dollar_cap": 2.0,
     "parallel": 3,
     "folk_every_minutes": 10,
+    "chat_every_minutes": 3,
 }
 # rough $ per million tokens (input, output), for the cap; Ollama cloud is a flat subscription
 PRICES = {"haiku": (1, 5), "sonnet": (3, 15), "opus": (5, 25)}
@@ -161,7 +166,7 @@ def save_settings(new):
     st = settings()
     st["mayor"] = clean_brain(new.get("mayor"), st["mayor"])
     st["folk"] = clean_brain(new.get("folk"), st["folk"])
-    for k, lo, hi in (("daily_dollar_cap", 0, 100), ("folk_every_minutes", 1, 1440), ("parallel", 1, 8)):
+    for k, lo, hi in (("daily_dollar_cap", 0, 100), ("folk_every_minutes", 1, 1440), ("chat_every_minutes", 0.5, 1440), ("parallel", 1, 8)):
         try:
             st[k] = max(lo, min(hi, float(new.get(k, st[k]))))
         except Exception:
@@ -198,9 +203,15 @@ def think(req):
     town, person = req.get("town", "town"), req.get("person", "x")
     book = read_book(town, person)
     # townsfolk re-plan at most every few real minutes (at high speed most days run on yesterday's plan)
-    if req.get("brain") != "mayor-ai" and time.time() - book.get("asked", 0) < 60 * float(st.get("folk_every_minutes", 10)):
+    if req.get("kind") == "chat":
+        # a conversation line: each person talks at most every few real minutes (answering Rose is always allowed)
+        if not req.get("player") and time.time() - book.get("chatted", 0) < 60 * float(st.get("chat_every_minutes", 3)):
+            return None
+        book["chatted"] = time.time()
+    elif req.get("brain") != "mayor-ai" and time.time() - book.get("asked", 0) < 60 * float(st.get("folk_every_minutes", 10)):
         return None
-    book["asked"] = time.time()
+    else:
+        book["asked"] = time.time()
     write_book(town, person, book)
     prompt = str(req.get("prompt", ""))[:12000]
     if book["notes"]:
@@ -214,6 +225,13 @@ def think(req):
             print(f"[brain] {req.get('name', person)}: {type(e).__name__}: {str(e)[:160]}")
             return None
     if isinstance(dec, dict):
+        if req.get("kind") == "chat" and dec.get("say"):
+            book["said"] = (book["said"] + [str(dec["say"])[:200]])[-20:]
+            if dec.get("note"):
+                book["notes"] = (book["notes"] + [f"day {req.get('day', '?')}: {str(dec['note'])[:200]}"])[-30:]
+            write_book(town, person, book)
+            print(f"[talk] {req.get('name', person)}: {str(dec['say'])[:150]}")
+            return dec
         note = dec.get("note") or dec.get("statement")
         if note:
             book["notes"] = (book["notes"] + [f"day {req.get('day', '?')}: {str(note)[:200]}"])[-30:]
@@ -254,7 +272,7 @@ class H(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/settings":
             st = settings()
-            return self.send(200, json.dumps({**{k: st[k] for k in ("mayor", "folk", "daily_dollar_cap", "folk_every_minutes", "parallel")}, "keys": {"anthropic": bool(anthropic_key()), "ollama": bool(ollama_key())}}))
+            return self.send(200, json.dumps({**{k: st[k] for k in ("mayor", "folk", "daily_dollar_cap", "folk_every_minutes", "chat_every_minutes", "parallel")}, "keys": {"anthropic": bool(anthropic_key()), "ollama": bool(ollama_key())}}))
         if path == "/settings/models":
             q = dict(p.split("=", 1) for p in (self.path.split("?", 1) + [""])[1].split("&") if "=" in p)
             return self.send(200, json.dumps({"models": list_models(q.get("provider"), urllib.parse.unquote(q.get("host", "")))}))
@@ -292,6 +310,20 @@ class H(BaseHTTPRequestHandler):
             except Exception:
                 return self.send(400, "{}")
             return self.send(200, json.dumps({"decision": think(req)}))
+        if self.path == "/chronicle":
+            # a day's summary (for Claude to read and tune the sim) and the day's training rows
+            try:
+                j = json.loads(self.body() or b"{}")
+            except Exception:
+                return self.send(400, "{}")
+            with open(CHRONICLE, "a", encoding="utf-8") as f:
+                f.write(str(j.get("text", ""))[:20000] + "\n\n")
+            if os.path.exists(DATASET) and os.path.getsize(DATASET) > 20_000_000:
+                os.replace(DATASET, DATASET + ".old")
+            with open(DATASET, "a", encoding="utf-8") as f:
+                for r in (j.get("rows") or [])[:5000]:
+                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            return self.send(200, "{}")
         if self.path == "/lore":
             raw = self.body()
             try:

@@ -104,6 +104,11 @@ function figure(p) {
   return views[p.id] = { g, lbl };
 }
 const corpses = {}, stones = {};
+// the selected person's eyes: a cone of sight (how far they'd see someone here, now) and a ring of hearing
+const coneMat = new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.24, depthWrite: false, side: THREE.DoubleSide });
+const cone = new THREE.Mesh(new THREE.CircleGeometry(1, 40, -1.22, 2.44), coneMat); cone.rotation.x = -Math.PI / 2; cone.visible = false;
+const coneHolder = new THREE.Group(); coneHolder.add(cone); scene.add(coneHolder);
+const ear = new THREE.Mesh(new THREE.RingGeometry(0.97, 1, 48), new THREE.MeshBasicMaterial({ color: 0x8ad0ff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide })); ear.rotation.x = -Math.PI / 2; ear.visible = false; scene.add(ear);
 
 // ------------------------------------------------------------------- log --
 const logEl = $('log'); let filter = 'all';
@@ -196,7 +201,7 @@ function movePlayer(dtReal) {
 // ------------------------------------------------------------- the panels --
 const bar = (v, c) => `<div class="bar"><i style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%;background:${c}"></i></div>`;
 function personPanel(p) {
-  if (p.kind === 'animal') return `<b>${p.name}</b> <span class="k">${p.species}${p.owner ? ', ' + (S.people[p.owner]?.name || '?') + "'s" : ', wild'}</span><br>hp ${p.hp}/${p.maxhp} · ${p.alive ? p.state : 'dead'}`;
+  if (p.kind === 'animal') { const known = Object.entries(p.words || {}).filter(([, e]) => e.heard >= 3 && (e.food / e.heard > 0.4 || e.fight / e.heard > 0.3)).map(([w, e]) => `"${w}" = ${e.food / e.heard > 0.4 ? 'food' : 'fight'}`); return `<b>${p.name}</b> <span class="k">${p.species}${p.owner ? ', ' + (S.people[p.owner]?.name || '?') + "'s" : p.game ? ', game' : ', wild'}</span><br>hp ${p.hp}/${p.maxhp} · ${p.alive ? p.state : 'dead'}${p.game || p.livestock ? '' : `<br><span class="k">knows its name:</span> ${p.knowsName ? 'yes' : 'not yet'} · <span class="k">words:</span> ${known.join(', ') || 'none yet'}<br><span class="k">bond with you:</span> ${(p.bond?.player || 0).toFixed(2)}`}`; }
   const job = S.JOBS[p.job]?.title || p.job, g = p.gang && S.gangs[p.gang];
   const rels = Object.entries(p.rel).map(([id, r]) => [S.people[id], r]).filter(([q]) => q && q.alive).sort((a, b) => b[1].like - a[1].like);
   const likes = rels.slice(0, 4).map(([q, r]) => `${q.name} ${r.like.toFixed(1)}`).join(', '), hates = rels.slice(-3).filter(([, r]) => r.like < -0.15).map(([q, r]) => `${q.name} ${r.like.toFixed(1)}`).join(', ');
@@ -251,6 +256,7 @@ $('aTalk').onclick = () => doTo('talk'); $('aPersuade').onclick = () => doTo('pe
 $('aBribe').onclick = () => doTo('bribe', { amount: +$('bribeAmt').value || 3 }); $('aPropose').onclick = () => doTo('propose');
 $('aRecruit').onclick = () => doTo('recruit'); $('aJoin').onclick = () => doTo('join'); $('aPick').onclick = () => doTo('pickpocket');
 $('aApply').onclick = () => doTo('apply'); $('aBoast').onclick = () => doTo('boast', { amount: +$('boastAmt').value || 100 }); $('aInvite').onclick = () => doTo('invite', { purpose: $('invPurpose').value, pay: +$('invPay').value || 0 });
+$('cFeed').onclick = () => { if (selected) note(S.playerDo('feed', selected)); drawPanel(); };
 $('cQuit').onclick = () => note(S.playerDo('quit')); $('cDismiss').onclick = () => note(S.playerDo('dismiss')); $('cFish').onclick = () => note(S.playerDo('fish')); $('cForage').onclick = () => note(S.playerDo('forage'));
 $('aHit').onclick = () => doTo('attack', { mode: 'lethal' }); $('aSubdue').onclick = () => doTo('attack', { mode: 'nonlethal' }); $('aCarry').onclick = () => doTo('carry');
 $('aLie').onclick = () => {
@@ -303,6 +309,26 @@ addEventListener('keydown', e => {
 S.onArrest = (g, q) => { if (q.id !== 'player') return; $('arrestWho').textContent = `${g.name} blocks your way: "You're under arrest."`; $('arrest').hidden = false; paused = true; drawSpeed(); };
 document.querySelectorAll('[data-arrest]').forEach(b => b.onclick = () => { $('arrest').hidden = true; paused = false; drawSpeed(); note(S.arrestAnswer(b.dataset.arrest, +$('arrestBribe').value || 4)); });
 
+// -------------------------------------------------------------- chronicle --
+S.onChronicle = (text, rows) => { if (server) fetch('/chronicle', { method: 'POST', body: JSON.stringify({ text: text + `\n(town ${townId})`, rows }) }).catch(() => {}); };
+
+// ---------------------------------------------------------- conversations --
+// Each line is asked of the speaker's own brain (their notebook, their feelings), then the other answers.
+const bubbles = {};
+S.onChat = async c => {
+  if (!server || server.folk === 'off' && c.a !== 'player') return;
+  let sp = c.a === 'player' ? S.people[c.b] : S.people[c.a], to = c.a === 'player' ? S.people.player : S.people[c.b], heard = c.heard || null;
+  for (let turn = 0; turn < (c.a === 'player' ? 1 : 4); turn++) {
+    if (!sp?.alive || !to?.alive || !S.conscious(sp) || sp.fight) break;
+    let dec = null;
+    try { const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: sp.brain, kind: 'chat', prompt: S.chatPrompt(sp, to, heard, turn), town: townId, day: S.day, person: sp.id, name: S.fullName(sp), player: c.a === 'player' }) }); dec = (await r.json()).decision; } catch (e) {}
+    const said = S.applyChat(sp, to, dec); if (!said) break;
+    bubbles[sp.id] = { text: said, until: performance.now() + 7000 };
+    if (dec.end || to.id === 'player' || !S.thinks(to)) break;
+    heard = said; [sp, to] = [to, sp];
+  }
+};
+
 // --------------------------------------------------------------- settings --
 const PROV_DEFAULT = { anthropic: { mayor: 'claude-sonnet-5-5', folk: 'claude-haiku-5-5' }, ollama: { mayor: 'gpt-oss:120b-cloud', folk: 'gpt-oss:20b-cloud' }, off: { mayor: '', folk: '' } };
 function showHosts() { for (const x of ['m', 'f']) document.querySelectorAll(`.ohost[data-for="${x}"]`).forEach(e => e.hidden = $(x + 'Prov').value !== 'ollama'); for (const x of ['m', 'f']) $(x + 'Model').disabled = $(x + 'Prov').value === 'off'; }
@@ -319,7 +345,7 @@ async function openSettings() {
   if (!server) return;
   const st = await (await fetch('/settings')).json();
   for (const [x, k] of [['m', 'mayor'], ['f', 'folk']]) { $(x + 'Prov').value = st[k].provider; $(x + 'Model').value = st[k].model || ''; $(x + 'Host').value = st[k].host || 'http://localhost:11434'; }
-  $('sCap').value = st.daily_dollar_cap; $('sEvery').value = st.folk_every_minutes; $('sPar').value = st.parallel;
+  $('sCap').value = st.daily_dollar_cap; $('sEvery').value = st.folk_every_minutes; $('sChat').value = st.chat_every_minutes ?? 3; $('sPar').value = st.parallel;
   $('sKeys').textContent = `Claude API key: ${st.keys.anthropic ? 'found (Cloude’s)' : 'not found'} · Ollama key: ${st.keys.ollama ? 'found' : 'none (fine if you use the Ollama app)'}. Keys stay in Cloude’s config.json; this page never sees them.`;
   showHosts(); fillModels('m'); fillModels('f');
 }
@@ -332,7 +358,7 @@ $('learnMode2').onclick = () => { S.learning = S.learning ? 0 : 1; $('learnMode2
 $('sSave').onclick = async () => {
   if (!server) { $('settings').hidden = true; return; }
   const brain = x => ({ provider: $(x + 'Prov').value, model: $(x + 'Model').value.trim(), host: $(x + 'Host').value });
-  const body = { mayor: brain('m'), folk: brain('f'), daily_dollar_cap: +$('sCap').value, folk_every_minutes: +$('sEvery').value, parallel: +$('sPar').value };
+  const body = { mayor: brain('m'), folk: brain('f'), daily_dollar_cap: +$('sCap').value, folk_every_minutes: +$('sEvery').value, chat_every_minutes: +$('sChat').value, parallel: +$('sPar').value };
   const r = await fetch('/settings', { method: 'POST', headers: { 'X-Town': '1' }, body: JSON.stringify(body) });
   if (!r.ok) { $('sMsg').textContent = 'Couldn’t save.'; return; }
   const j = await (await fetch('/brain/ping')).json(); server = j;
@@ -358,7 +384,7 @@ const saveLore = () => { const j = JSON.stringify(S.exportLore()); if (server) f
 setInterval(saveLore, 30000); addEventListener('pagehide', saveLore);
 $('learnMode').onclick = () => { S.learning = S.learning ? 0 : 1; drawLore(); };
 $('forgetLore').onclick = () => { if ($('forgetLore').dataset.sure) { S.importLore({ v: 1, acts: {}, taught: 0, scored: 0, chain: {}, runs: -1 }); saveLore(); delete $('forgetLore').dataset.sure; $('forgetLore').textContent = 'Forget'; } else { $('forgetLore').dataset.sure = 1; $('forgetLore').textContent = 'Sure? Forget all'; } drawLore(); };
-function drawLore() { const z = S.loreSize(); $('loreStat').textContent = `Town mind: ${z.situations} situations, ${z.scored.toLocaleString()} outcomes, ${z.taught} AI examples, ${z.words} word links · town #${z.runs + 1}`; $('learnMode').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode').classList.toggle('on', !!S.learning); }
+function drawLore() { const z = S.loreSize(); $('loreStat').textContent = `Town mind: ${z.situations} situations, ${z.scored.toLocaleString()} outcomes, ${z.taught} AI examples, ${z.phrases} phrases, ${z.words} word links · town #${z.runs + 1}`; $('learnMode').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode').classList.toggle('on', !!S.learning); }
 
 // ---------------------------------------------------------------- combat --
 let fightAcc = 0;
@@ -415,9 +441,17 @@ function loop() {
     if (near && place(v.lbl, p.x, v.g.userData.head + 0.15, p.z)) {
       v.lbl.style.display = '';
       const st = p.kind === 'animal' ? '' : !S.conscious(p) ? (p.dying ? 'dying' : 'out cold') : p.fight ? 'fighting' : p.jailedUntil > 0 ? 'jailed' : (p.task?.kind || p.state);
-      v.lbl.innerHTML = `${p.name}${p.id === S.mayorId ? ' <i>mayor</i>' : ''} <small>${st === 'idle' ? '' : st}</small>`;
+      if (p.bubble && p.bubble !== v.lastBub) { v.lastBub = p.bubble; bubbles[p.id] = { text: p.bubble.text, until: performance.now() + 7000 }; }
+      const bub = bubbles[p.id] && bubbles[p.id].until > performance.now() ? bubbles[p.id].text : '';
+      v.lbl.innerHTML = `${bub ? `<span class="bub"></span>` : ''}${p.name}${p.id === S.mayorId ? ' <i>mayor</i>' : ''} <small>${st === 'idle' ? '' : st}</small>`;
+      if (bub) v.lbl.firstChild.textContent = bub;
       v.lbl.classList.toggle('sel', p.id === selected);
     }
+  }
+  { const t = selected && S.people[selected];
+    const show = t && t.alive && t.kind === 'human' && t.id !== 'player' && S.conscious(t) && t.state !== 'sleep';
+    cone.visible = ear.visible = !!show;
+    if (show) { const r = S.sightOf(t) * (S.litAt(t, null) ? 1 : 0.35); cone.scale.set(r, r, 1); coneHolder.position.set(t.x, 0.06, t.z); coneHolder.rotation.y = (t.yaw || 0) - Math.PI / 2; const h = S.hearOf(t); ear.scale.set(h, h, 1); ear.position.set(t.x, 0.07, t.z); }
   }
   // the dead: on the ground, on the slab, then a headstone
   for (const b of S.bodies) {
@@ -435,10 +469,12 @@ function loop() {
   $('cShop').hidden = !(S.business[where] && S.shopOpen(where)); $('cWork').hidden = !['bakery', 'store', 'smithy', 'tavern', 'fields', 'ranch'].includes(where);
   $('cStudy').hidden = where !== 'school'; $('cStand').hidden = where !== 'hall'; $('cReport').hidden = where !== 'station';
   $('cBurgle').hidden = !(S.AREAS[where]?.house && me.home !== S.HOUSES.findIndex(h => h.id === where));
+  { const an = selected && S.animals[selected]; $('cFeed').hidden = !(an && an.alive && !an.game && S.dist(me, an) < 2.5); }
   $('cQuit').hidden = me.job === 'none'; $('cDismiss').hidden = !me.party; $('cFish').hidden = S.dist(me, S.SPOTS.pond) > 7; $('cForage').hidden = !['orchard', 'wood'].includes(where);
   $('cLoot').hidden = !S.bodies.some(b => !b.buried && S.dist(me, b) < 1.6); $('cDig').hidden = !S.graves.some(g => S.dist(me, g.at) < 1.5 && !g.robbed);
   renderer.render(scene, camera);
 }
+window.townSelect = id => { selected = id; drawPanel(); };   // for poking from the console
 drawPanel();
 loop();
 })();

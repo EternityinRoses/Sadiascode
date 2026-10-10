@@ -24,3 +24,6 @@ seats/transcripts/
 town/town_brains.json
 town/brains/
 town/lore.json
+town/chronicle.md
+town/dataset.jsonl
+town/dataset.jsonl.old
