@@ -1339,7 +1339,11 @@ def mailbox_loop():
 
 def git(*args, timeout=30):
     try:
-        return subprocess.run(["git", *args], cwd=APP_DIR, capture_output=True, text=True,
+        # Always with an identity: this PC has none set, and a rebase that replays a local
+        # commit needs a committer. Without it every such pull failed and looked like a
+        # clash, which paused updates even when nothing really collided.
+        return subprocess.run(["git", "-c", "user.name=Cloude", "-c", "user.email=cloude@localhost", *args],
+                              cwd=APP_DIR, capture_output=True, text=True,
                               encoding="utf-8", errors="replace", timeout=timeout)
     except (OSError, subprocess.TimeoutExpired):
         return None
