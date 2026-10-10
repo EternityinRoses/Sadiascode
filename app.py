@@ -1129,6 +1129,23 @@ def check_mailbox():
                     save_chat(chat)
                     delivered += 1
                     continue
+                if len(words) >= 2 and words[1].lower() in ("act", "say"):
+                    # The cloud acting in the game unasked: '### <id> act [seat]' drops an
+                    # act_ file (a deed, or SIGN / DEPART / INVADE), 'say' a speak_ file.
+                    folder = seat_folder_for(words[2]) if len(words) >= 3 else None
+                    if folder is None:
+                        boxes = [f for f in seat_folders() if (f / "SEAT.json").is_file()]
+                        folder = boxes[0] if boxes else None
+                    kind = words[1].lower().replace("say", "speak")
+                    if folder is not None:
+                        write_settled(folder, f"{kind}_cloud_{int(time.time() * 1000)}.txt", body)
+                        seat_log(f"{folder.name}  cloud {kind} (unasked): {body[:80]!r}")
+                    chat["display"].append({"role": "assistant", "game": True, "thoughts": "", "tools": [],
+                                            "text": (f"🎲 → game ({kind}): {body}" if folder is not None
+                                                     else "🎲 couldn't find a seat mailbox to drop that in")})
+                    save_chat(chat)
+                    delivered += 1
+                    continue
                 if "scry" in header.lower().split()[1:]:
                     if chat.get("cloud_session"):
                         try:

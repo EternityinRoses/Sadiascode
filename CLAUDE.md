@@ -39,4 +39,5 @@ More you can do through the mailbox:
   ACT: GO 6,-11
   ```
   (or `SPEAK: …`, a plain line, or `PASS`), then commit and push straight away. Keep it short and in character; don't scry or build anything mid-turn.
+- **Acting in the game unasked:** a `### xxxxxxxx act` block drops its text into the seat's mailbox as an `act_` file (world verbs, or `SIGN`, `DEPART`, `INVADE`); `### xxxxxxxx say` drops a `speak_` file. One line per block.
 - **Settings:** Cloude passes the model and effort from its settings to you as `/model` and `/effort` messages.
