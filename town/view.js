@@ -199,10 +199,11 @@ function personPanel(p) {
   const job = S.JOBS[p.job]?.title || p.job, g = p.gang && S.gangs[p.gang];
   const rels = Object.entries(p.rel).map(([id, r]) => [S.people[id], r]).filter(([q]) => q && q.alive).sort((a, b) => b[1].like - a[1].like);
   const likes = rels.slice(0, 4).map(([q, r]) => `${q.name} ${r.like.toFixed(1)}`).join(', '), hates = rels.slice(-3).filter(([, r]) => r.like < -0.15).map(([q, r]) => `${q.name} ${r.like.toFixed(1)}`).join(', ');
-  const toMe = p.rel.player && p !== me ? `<br><span class="k">thinks of you:</span> like ${p.rel.player.like.toFixed(2)}, trust ${p.rel.player.trust.toFixed(2)}${p.rel.player.fear > 0.1 ? ', fear ' + p.rel.player.fear.toFixed(2) : ''}` : '';
+  const toMe = p.rel.player && p !== me ? `<br><span class="k">thinks of you:</span> like ${p.rel.player.like.toFixed(2)}, trust ${p.rel.player.trust.toFixed(2)}, worth ~${Math.round(p.rel.player.worth ?? 30)}c${p.rel.player.fear > 0.1 ? ', fear ' + p.rel.player.fear.toFixed(2) : ''}` : '';
   const status = !p.alive ? (p.left ? 'left town' : 'dead') : p.jailedUntil > 0 ? 'in jail' : p.dying ? 'dying' : p.down ? 'unconscious' : p.fight ? 'fighting' : (p.task?.kind || p.state);
   return `<b>${S.fullName(p)}</b> <span class="k">${job} · ${p.gender === 'nb' ? 'nonbinary' : p.gender === 'f' ? 'woman' : 'man'}, ${p.age} · ${p.orient}</span><br>
     <span class="k">${p.cls} ${p.level}</span> · hp ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${p.nl} nonlethal)` : ''} · AC ${S.acOf(p)} · ${S.WEAPONS[p.weapon].name.toLowerCase()} · <b>${p.coin}c</b>${p.home != null ? ` <span class="k">(+${S.HOUSES[p.home].stash}c at home)</span>` : ''}<br>
+    <span class="k">standing:</span> <b>${S.rankOf(p)}</b> <span class="k">· town believes ~${Math.round(S.standing(p))}c · really ~${Math.round(S.trueWorth(p))}c${p.items.finery ? ' · fine clothes' : ''}</span><br>
     <span class="k">now:</span> ${status}${p.id === S.mayorId ? ' · <span class="pol">MAYOR</span>' : ''}${p.brain !== 'script' && p.brain !== 'human' ? ' · <span class="pol">AI-played</span>' : ''}<br>
     ${p.spouse ? `<span class="k">married to</span> ${S.people[p.spouse]?.name} · ` : p.widowed ? `<span class="k">widowed</span> · ` : ''}${g ? `<span class="gang">${g.name}${g.boss === p.id ? ' (boss)' : ''}</span> · ` : ''}<span class="k">backers</span> ${S.backers(p).length} · <span class="k">power</span> ${S.power(p).toFixed(0)}<br>
     ${p !== me ? `<span class="k">greed</span>${bar(p.traits.greed, '#e0b84a')}<span class="k">honesty</span>${bar(p.traits.honesty, '#6aa84f')}<span class="k">aggression</span>${bar(p.traits.aggression, '#c0504d')}<span class="k">caution</span>${bar(p.traits.caution, '#8e7cc3')}` : ''}
@@ -218,6 +219,7 @@ function townPanel() {
     <span class="k">Treasury</span> <b>${S.treasury}c</b> · tax ${Math.round(S.taxRate * 100)}% · rent ${S.rent}c · head ${S.headTax}c<br>
     <span class="k">Election</span> day ${nextE}${S.election.candidates.length ? ': ' + S.election.candidates.map(id => S.people[id]?.name).join(', ') : ''}${S.election.last ? ` <span class="k">(last: ${Object.entries(S.election.last.tally).map(([n, v]) => n + ' ' + v).join(', ')})</span>` : ''}<br>
     <span class="k">Gangs</span> ${gangs}<br>
+    <span class="k">Standing</span> ${['gentry', 'freeholder', 'commoner', 'lowborn'].map(r => r + ' ' + S.living().filter(p => p.kind === 'human' && !p.town && S.rankOf(p) === r).length).join(' · ')}<br>
     <span class="k">People</span> ${S.living().filter(p => p.kind === 'human').length} · <span class="k">jailed</span> ${S.living().filter(p => p.jailedUntil > 0).length} · <span class="k">dead</span> ${S.rec.deaths} · <span class="k">graves</span> ${S.graves.length} · <span class="k">inequality</span> ${h.gini}`;
 }
 function drawChart() {
@@ -231,7 +233,7 @@ function drawPanel() {
   const t = selected && (S.people[selected] || S.animals[selected]);
   $('sel').innerHTML = t ? personPanel(t) : 'Click someone to study them.';
   $('acts').hidden = !t || t === me || t.kind !== 'human' || !t.alive;
-  $('me').innerHTML = `<b>${me.name} of the City</b> · hp ${Math.max(0, me.hp)}/${me.maxhp} · <b>${me.coin}c</b> · AC ${S.acOf(me)} · ${S.WEAPONS[me.weapon].name.toLowerCase()} · blows: <b>${me.prefMode || 'lethal'}</b><br>
+  $('me').innerHTML = `<b>${me.name} of the City</b> <span class="k">(${S.rankOf(me)}, believed ~${Math.round(S.standing(me))}c)</span> · hp ${Math.max(0, me.hp)}/${me.maxhp} · <b>${me.coin}c</b> · AC ${S.acOf(me)} · ${S.WEAPONS[me.weapon].name.toLowerCase()} · blows: <b>${me.prefMode || 'lethal'}</b><br>
     <span class="k">${S.AREAS[S.areaOf(me) || me.area]?.name || ''}${me.jailedUntil > 0 ? ' · IN JAIL until ' + Math.round((me.jailedUntil - S.t) / 60) + 'h' : ''}${me.gang ? ' · ' + S.gangs[me.gang]?.name : ''}${me.spouse ? ' · married to ' + S.people[me.spouse]?.name : ''}</span>
     ${Object.entries(me.items).filter(([, n]) => n > 0).length ? '<br><span class="k">pack:</span> ' + Object.entries(me.items).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${S.GOODS[k]?.name.toLowerCase() || k}`).join(', ') : ''}
     ${S.openRecord(me).length ? `<br><span class="sig">On the record: ${S.openRecord(me).length}${S.hasEvidence(me) ? ' (wanted)' : ''}</span>` : ''}`;
@@ -247,7 +249,7 @@ const doTo = (kind, extra) => { if (!selected) return; note(S.playerDo(kind, sel
 $('aTalk').onclick = () => doTo('talk'); $('aPersuade').onclick = () => doTo('persuade'); $('aIntim').onclick = () => doTo('intimidate');
 $('aBribe').onclick = () => doTo('bribe', { amount: +$('bribeAmt').value || 3 }); $('aPropose').onclick = () => doTo('propose');
 $('aRecruit').onclick = () => doTo('recruit'); $('aJoin').onclick = () => doTo('join'); $('aPick').onclick = () => doTo('pickpocket');
-$('aApply').onclick = () => doTo('apply'); $('aInvite').onclick = () => doTo('invite', { purpose: $('invPurpose').value, pay: +$('invPay').value || 0 });
+$('aApply').onclick = () => doTo('apply'); $('aBoast').onclick = () => doTo('boast', { amount: +$('boastAmt').value || 100 }); $('aInvite').onclick = () => doTo('invite', { purpose: $('invPurpose').value, pay: +$('invPay').value || 0 });
 $('cQuit').onclick = () => note(S.playerDo('quit')); $('cDismiss').onclick = () => note(S.playerDo('dismiss')); $('cFish').onclick = () => note(S.playerDo('fish')); $('cForage').onclick = () => note(S.playerDo('forage'));
 $('aHit').onclick = () => doTo('attack', { mode: 'lethal' }); $('aSubdue').onclick = () => doTo('attack', { mode: 'nonlethal' }); $('aCarry').onclick = () => doTo('carry');
 $('aLie').onclick = () => {

@@ -106,6 +106,7 @@ const GOODS = {
   sap: { name: 'Sap', price: 3, shop: 'smithy', weapon: 'sap' }, shortsword: { name: 'Short sword', price: 8, shop: 'smithy', weapon: 'shortsword' },
   shortbow: { name: 'Short bow', price: 12, shop: 'smithy', weapon: 'shortbow' }, leather: { name: 'Leather armour', price: 10, shop: 'smithy', armor: 'leather' },
   cure: { name: 'Healing draught', price: 4, shop: 'store', heal: [1, 8] },
+  finery: { name: 'Fine clothes', price: 15, shop: 'store' },
 };
 
 // ------------------------------------------------------------- the town --
@@ -292,6 +293,7 @@ function Sim(opts = {}) {
       r.trust = clamp(0.35 + r.like * 0.4 + rnd(-0.1, 0.1));
       if (a.cls === 'rogue' || a.job === 'none') if (b.cls === 'rogue' || b.job === 'none') { r.like = clamp(r.like + 0.25, -1, 1); r.trust = clamp(r.trust + 0.2); }
     }
+    for (const a of everyone()) for (const b of everyone()) if (a !== b) { const r = R(a, b); r.worth = trueWorth(b) * rnd(0.6, 1.4); r.wconf = rnd(0.3, 0.6); }
     // a few marriages already
     const singles = everyone().filter(p => p.job !== 'mayor');
     for (let i = 0; i < 5; i++) {
@@ -322,7 +324,7 @@ function Sim(opts = {}) {
     for (const b of Object.values(sim.business)) b.mult = {};
     sim.business.farm.stock = { grain: 14, barley: 4, turnip: 16 };
     sim.business.bakery.stock = { bread: 24, pie: 3, grain: 4 }; sim.business.store.stock = { rope: 3, torch: 6, treats: 6, ball: 2, plank: 6, picks: 1, turnip: 4 };
-    sim.business.smithy.stock = { dagger: 3, club: 3, sap: 2, shortsword: 2, shortbow: 1, leather: 2 }; sim.business.tavern.stock = { ale: 20, meal: 8, barley: 1, turnip: 2 }; sim.business.store.stock.meat = 2; sim.business.store.stock.cure = 4;
+    sim.business.smithy.stock = { dagger: 3, club: 3, sap: 2, shortsword: 2, shortbow: 1, leather: 2 }; sim.business.tavern.stock = { ale: 20, meal: 8, barley: 1, turnip: 2 }; sim.business.store.stock.meat = 2; sim.business.store.stock.cure = 4; sim.business.store.stock.finery = 3;
     log('town', `Day 1. ${fullName(mayor)} is mayor. ${living().length} people live in Hollow Town.`);
   }
   function place(p, at) { p.x = at.x; p.z = at.z; p.area = areaOf(at); }
@@ -543,18 +545,19 @@ function Sim(opts = {}) {
     add('socialize', 0.8 + p.traits.sociability * 1.5);
     // romance / marriage (money counts as much as love for the greedy)
     if (!p.spouse && p.age < 60) {
-      const best = living().filter(q => q !== p && !q.spouse && q.kind === 'human' && attracted(p, q) > 0.3).map(q => ({ q, v: R(p, q).like * 3 + attracted(p, q) + (q.coin + (q.home != null ? HOUSES[q.home].stash : 0)) * 0.05 * p.traits.greed }))
+      const best = living().filter(q => q !== p && !q.spouse && q.kind === 'human' && attracted(p, q) > 0.3).map(q => ({ q, v: R(p, q).like * 3 + attracted(p, q) + seen(p, q).worth * 0.04 * p.traits.greed }))
         .sort((a, b) => b.v - a.v)[0];
       if (best && best.v > 0.8) add('court', best.v, { target: best.q });
     }
     // crime: priced by loot, desperation, greed, caution and risk
     const desp = desperation(p), honest = p.traits.honesty, moral = 4 + 22 * Math.pow(honest, 1.3) / desp;
-    const marks = living().filter(q => q !== p && conscious(q) && q.coin > 3 && dist2(p, q) < 40);
+    const marks = living().filter(q => q !== p && conscious(q) && seen(p, q).worth > 15 && dist2(p, q) < 40);
     for (const q of marks.slice(0, 6)) {
       const r = riskAt(p, q, 'theft'), skill = (p.skills.sleight + 10) / 20, retaliation = backers(q).length * 0.4;
-      const ev = Math.min(q.coin, 6) * 0.5 * skill * p.traits.greed * desp - r.caught * r.cost * p.traits.caution - retaliation - moral;
+      const purse = Math.min(seen(p, q).worth * 0.2, 25);
+      const ev = Math.min(purse, 6) * 0.5 * skill * p.traits.greed * desp - r.caught * r.cost * p.traits.caution - retaliation - moral;
       if (ev > 0 && !(p.cd?.pick > sim.t)) add('pickpocket', ev, { target: q });
-      const mug = Math.min(q.coin, 15) * 0.8 * p.traits.greed * desp * (might(p) / (might(p) + might(q))) - r.caught * r.cost * 1.5 * p.traits.caution - retaliation * 2 - moral * 1.4 + p.traits.aggression * 2;
+      const mug = Math.min(purse, 15) * 0.8 * p.traits.greed * desp * (might(p) / (might(p) + might(q))) - r.caught * r.cost * 1.5 * p.traits.caution - retaliation * 2 - moral * 1.4 + p.traits.aggression * 2;
       if (mug > 0) add('mug', mug, { target: q });
     }
     if (night() || h < 7) for (const hs of HOUSES) {
@@ -603,6 +606,9 @@ function Sim(opts = {}) {
       const v = seen * 4 * p.traits.greed * desp - moral * 1.3 - 4 + p.traits.aggression * 2 + (p.gang ? 2 : 0) - (inShift(p.job, h) ? wageOf(p) : 0);
       if (v > 0) add('ambush', v);
     }
+    // status: fine clothes for those who can afford to be seen; boasting for those who'd rather lie
+    if (!p.items.finery && p.coin >= 20 && shopOpen('store') && p.traits.greed > 0.5) add('buy', 1 + p.traits.greed * 2 + (p.court ? 1 : 0), { shop: 'store', item: 'finery' });
+    if (p.traits.honesty < 0.5 && !(p.cd?.boast > sim.t)) { const near = living().find(q => q !== p && q.kind === 'human' && dist2(q, p) < 4 && sameSpace(q, p)); if (near && seen(near, p).worth < trueWorth(p) * 2 + 30) add('boast', 1.5 + (1 - p.traits.honesty) * 2, { target: near }); }
     // rustling: a hungry, crooked person takes a beast from the ranch at night
     if ((h >= 22 || h < 4) && p.food < 0.4 && p.traits.honesty < 0.4 && !(p.cd?.rustle > sim.t)) add('rustle', 3 + (0.4 - p.food) * 10 - moral * 0.6);
     // sign on as a sellsword (anyone: honest folk escort caravans, others will take other work)
@@ -641,6 +647,39 @@ function Sim(opts = {}) {
   sim.reputation = reputation; sim.mercRate = mercRate;
   // the road's danger, as people have heard it: ambushes remembered in the last few days
   const roadDanger = p => p.memory.filter(m => m.ambush && sim.day - m.day <= 4).length + sim.events.filter(e => e.road && sim.t - e.t < 3 * 1440 && (p.knows?.has(e.id))).length;
+  // ======================================================== standing ==
+  // Nobody is assigned a caste. Everyone keeps a private guess of what everyone else is worth,
+  // from what they see (spending, fine clothes, a business, begging), what they're told (gossip,
+  // boasts) and what they catch out. "Standing" is just what the town believes on average,
+  // and it can be wrong: bluffed up, or ruined by a rumour.
+  function trueWorth(p) { const j = JOBS[p.job]; return p.coin + (p.home != null ? HOUSES[p.home].stash / Math.max(1, household(p).length) : 0) + (j?.owner ? 60 : 0) + (sim.wages[p.job] ?? j?.wage ?? 0) * 8 + (p.id === sim.mayorId ? 40 : 0); }
+  const seen = (a, b) => { const r = R(a, b); if (r.worth == null) { r.worth = 30; r.wconf = 0; } return r; };
+  function glimpse(a, b, value, weight) {      // a sees or hears something about b's wealth
+    const r = seen(a, b); const w = Math.min(0.6, weight); r.worth += (value - r.worth) * w; r.wconf = Math.min(1, r.wconf + w * 0.5);
+  }
+  function showWealth(p, value, weight = 0.15, upOnly = true) {   // everyone near sees it
+    for (const w of living()) if (w !== p && w.kind === 'human' && dist2(w, p) < 10 && sameSpace(w, p) && conscious(w)) { const r = seen(w, p); if (!upOnly || value > r.worth) glimpse(w, p, value, weight); }
+  }
+  function standing(p) {
+    let s = 0, n = 0; for (const q of living()) if (q !== p && q.kind === 'human' && !q.town && q.rel[p.id]?.worth != null) { const c = 0.2 + q.rel[p.id].wconf; s += q.rel[p.id].worth * c; n += c; }
+    return n ? s / n : 30;
+  }
+  function rankOf(p) {       // where the town puts you, by belief
+    const all = living().filter(q => q.kind === 'human' && !q.town).map(standing).sort((a, b) => a - b), mine = standing(p);
+    const pos = all.filter(v => v < mine).length / Math.max(1, all.length - 1);
+    return pos >= 0.85 ? 'gentry' : pos >= 0.5 ? 'freeholder' : pos >= 0.2 ? 'commoner' : 'lowborn';
+  }
+  sim.trueWorth = trueWorth; sim.standing = standing; sim.rankOf = rankOf; sim.showWealth = showWealth;
+  // a shopkeeper's price for you: the well-regarded get a little off, the low and unknown pay a little more
+  const priceFor = (owner, p) => owner && owner !== p && owner.kind === 'human' ? 1 + Math.max(-0.15, Math.min(0.1, (30 - seen(owner, p).worth) / 300)) : 1;
+  sim.priceFor = priceFor;
+  // boasting: claim to be worth more than you are (Bluff vs Sense Motive)
+  function boast(p, q, claimWorth) {
+    const r = seen(q, p), check = d(20) + p.skills.bluff + (p.items.finery ? 2 : 0), sense = d(20) + q.skills.sense + Math.round(r.wconf * 6);
+    if (check >= sense) { glimpse(q, p, Math.max(r.worth, claimWorth), 0.4); (q.heardBoast ||= {})[p.id] = claimWorth; return true; }
+    bump(q, p, 'trust', -0.1); glimpse(q, p, r.worth * 0.8, 0.2); remember(q, { text: `${p.name} put on airs and I saw through it` }); return false;
+  }
+  sim.boast = boast;
   function popularity(p) { return living().filter(q => q !== p).reduce((s, q) => s + R(q, p).like, 0); }
   sim.popularity = popularity;
 
@@ -751,6 +790,7 @@ function Sim(opts = {}) {
       case 'rescue': return setTask(p, 'rescue', { target: o.target.id, until: sim.t + 180 });
       case 'collect': return setTask(p, 'collect', { until: sim.t + 180 });
       case 'caravan': return startCaravan(p);
+      case 'boast': { cool(p, 'boast', 360); const q = o.target; const claim = Math.round(trueWorth(p) * 2 + 40); const ok = boast(p, q, claim); log('lie', `${p.name} lets ${q.name} know they're worth a good deal more than they look. ${ok ? q.name + ' believes it.' : q.name + " isn't fooled."}`, [p.id, q.id]); return setTask(p, 'idle', { until: sim.t + 10 }); }
       case 'rustle': { cool(p, 'rustle', 1440 * 2); const a = Object.values(sim.animals).filter(a => a.livestock && a.alive && a.species !== 'cow').sort(() => Math.random() - 0.5)[0]; if (!a) return; return setTask(p, 'rustle', { target: a.id, to: P(a.x, a.z), until: sim.t + 240 }); }
       case 'fence': cool(p, 'fence', 600); return setTask(p, 'caravan', { phase: 'home', fence: true, until: sim.t + 240 });
       case 'ambush': { cool(p, 'ambush', 720); if (!p.party) gatherParty(p, 'bandit', 3, true); return setTask(p, 'ambush', { to: P(rnd(-280, -160), rnd(-3, 3)), until: sim.t + 240 }); }
@@ -811,6 +851,7 @@ function Sim(opts = {}) {
         p.task = null; return;
       }
       case 'beg': {
+        showWealth(p, 2, 0.25, false);
         if (!arrive(p, tk.to, dt)) return;
         if (Math.random() < dt / 30) { const g = living().find(q => q !== p && dist2(p, q) < 4 && q.coin > 4 && R(q, p).like > 0 && Math.random() < 0.5); if (g) { pay(g, p, 1); bump(p, g, 'like', 0.1); log('life', `${g.name} gives ${p.name} a copper.`, [g.id, p.id]); } }
         return;
@@ -943,10 +984,13 @@ function Sim(opts = {}) {
   sim.priceOf = priceOf;
   function buy(p, shopId, item, n = 1) {
     const b = sim.business[shopId], g = GOODS[item]; if (!b || !g || (b.stock[item] || 0) < n) return false;
-    const cost = priceOf(shopId, item) * n; if (p.coin < cost) return false;   // nobody spends what they don't have
+    const owner0 = sim.people[b.owner], cost = Math.max(1, Math.round(priceOf(shopId, item) * n * priceFor(owner0, p)));
+    if (p.coin < cost) { if (owner0 && seen(owner0, p).worth > 40) glimpse(owner0, p, 10, 0.3); return false; }   // nobody spends what they don't have (and the shopkeeper notices)
     const owner = sim.people[b.owner];
     pay(p, owner && owner.alive ? owner : 'town', cost); b.stock[item] -= n; b.sales += cost; b.owed += cost * sim.taxRate;
+    if (cost >= 4) showWealth(p, cost * 8);
     if (b.debt && owner && owner.alive) for (const [sid, due] of Object.entries(b.debt)) { const sup = sim.people[sid]; if (!sup || !sup.alive) { delete b.debt[sid]; continue; } const n2 = Math.min(due, Math.max(0, owner.coin - 3)); if (n2 > 0) { pay(owner, sup, n2, 'credit repaid'); b.debt[sid] -= n2; if (b.debt[sid] <= 0) delete b.debt[sid]; } }
+    if (item === 'finery') { p.items.finery = 1; showWealth(p, 90, 0.3); return true; }
     if (g.weapon) p.weapon = g.weapon; else if (g.armor) p.armor = g.armor; else if (item === 'treats') p.items.treats = (p.items.treats || 0) + 3 * n; else p.items[item] = (p.items[item] || 0) + n;
     if (item === 'ale') { p.mood = clamp(p.mood + 0.1); p.items.ale--; p.water = Math.min(1, (p.water ?? 1) + 0.4); }
     if (b.insurance && sim.gangs[b.insurance]) { const cut = Math.ceil(cost * 0.2); const boss = sim.people[sim.gangs[b.insurance].boss]; if (owner && boss) pay(owner, boss, cut); }
@@ -1043,7 +1087,7 @@ function Sim(opts = {}) {
     const busy = inShift(q.job, H()) && JOBS[q.job]?.from != null ? wageOf(q) : 0;
     const will = r.like * 1.2 + r.trust * 0.4 + (purpose.startsWith('hunt') && q.food < 0.5 ? 0.4 : 0) + (q.spouse === L.id ? 0.8 : 0) + (q.gang && q.gang === L.gang ? 0.4 : 0) + q.traits.sociability * 0.2 - danger * q.traits.caution * 0.25 - busy * 0.1 + rnd(-0.15, 0.15);
     if (will > 0.6 && q.job !== 'mercenary') return { free: true };
-    const ask = q.job === 'mercenary' ? mercRate(q) : Math.max(1, Math.round(busy + danger * q.traits.caution * 2 + 1 - r.like * 4 + q.traits.greed * 2));
+    const ask = q.job === 'mercenary' ? mercRate(q) : Math.max(1, Math.round(busy + danger * q.traits.caution * 2 + 1 - r.like * 4 + q.traits.greed * 2 - Math.min(2, seen(q, L).worth / 80) + (q.traits.greed > 0.6 && seen(q, L).worth > 80 ? 2 : 0)));
     if (danger * q.traits.caution > 2.2 && might(q) < 4) return { no: 'scared', ask };
     return { ask };
   }
@@ -1093,6 +1137,7 @@ function Sim(opts = {}) {
     if (q.brain === 'human') return;
     bump(p, q, 'like', 0.02 * p.traits.sociability); bump(q, p, 'like', 0.02 * q.traits.sociability);
     bump(p, q, 'trust', 0.01); bump(q, p, 'trust', 0.01);
+    { const about = pick(living().filter(x => x !== p && x !== q && x.kind === 'human' && p.rel[x.id]?.worth != null)); if (about && R(q, p).trust > 0.3) glimpse(q, about, seen(p, about).worth, 0.15 * R(q, p).trust); }
     // pass on news (true) or a lie
     const news = p.memory.filter(m => m.ev && !q.knows?.has(m.ev) && m.actor !== q.id).slice(-1)[0];
     if (news && Math.random() < 0.6) { const ev = sim.events.find(e => e.id === news.ev) || { id: news.ev, type: news.type, actor: news.actor, victim: news.victim, lie: news.lie }; if (R(q, p).trust > 0.25) perceive(q, ev, 'told', p); }
@@ -1109,7 +1154,7 @@ function Sim(opts = {}) {
     if (!R(p, q).court) R(p, q).since = sim.day;
     R(p, q).court = (R(p, q).court || 0) + gain; bump(q, p, 'like', gain * 0.6);
     if (R(p, q).court > 1 && sim.day - (R(p, q).since || sim.day) >= 3 && !p.spouse && !q.spouse) {
-      const yes = like * 2 + a + (p.coin + (p.home != null ? HOUSES[p.home].stash : 0)) * 0.04 * q.traits.greed - 0.8 + rnd(-0.3, 0.3);
+      const yes = like * 2 + a + seen(q, p).worth * 0.03 * q.traits.greed - 0.8 + rnd(-0.3, 0.3);
       if (yes > 0) marry(p, q); else { bump(p, q, 'like', -0.1); R(p, q).court = 0; log('life', `${q.name} turns down ${p.name}'s proposal.`, [p.id, q.id]); }
     }
   }
@@ -1509,7 +1554,7 @@ function Sim(opts = {}) {
     for (const p of living()) {
       if (p.home == null || p.jailedUntil > 0 || p.brain === 'human' || p.town) continue;
       const due = sim.rent + (p.job !== 'none' ? sim.headTax : 0);
-      if (p.coin >= due) pay(p, 'town', due, 'rent+head'); else if (HOUSES[p.home].stash >= due) { HOUSES[p.home].stash -= due; sim.treasury += due; sim.flow.in['rent+head'] = (sim.flow.in['rent+head'] || 0) + due; } else if (due > 0) { p.unpaid = (p.unpaid || 0) + 1; if (p.unpaid >= 3) { log('life', `${fullName(p)} is evicted for unpaid rent.`, [p.id]); p.home = null; p.unpaid = 0; } }
+      if (p.coin >= due) pay(p, 'town', due, 'rent+head'); else if (HOUSES[p.home].stash >= due) { HOUSES[p.home].stash -= due; sim.treasury += due; sim.flow.in['rent+head'] = (sim.flow.in['rent+head'] || 0) + due; } else if (due > 0) { for (const q of living()) if (q.heardBoast?.[p.id] && Math.random() < 0.5) { glimpse(q, p, 5, 0.5); bump(q, p, 'trust', -0.2); delete q.heardBoast[p.id]; } p.unpaid = (p.unpaid || 0) + 1; if (p.unpaid >= 3) { log('life', `${fullName(p)} is evicted for unpaid rent.`, [p.id]); p.home = null; p.unpaid = 0; } }
     }
     for (const pl of sim.plots) if (pl.crop && sim.t > pl.planted + (CROPS[pl.crop].days + 2) * 1440) { log('trade', `A plot of ${pl.crop} rots in the field, unharvested.`); pl.crop = null; }
     for (const pl of sim.plots) if (pl.crop) pl.tended = Math.max(0, pl.tended - 0.1);
@@ -1588,7 +1633,7 @@ function Sim(opts = {}) {
       if (v.brain === 'human' || v.jailedUntil > 0 || v.town === 'marrow') continue;
       let best = null, bs = -99;
       for (const c of cands) {
-        let s = R(v, c).like * 3 + R(v, c).trust + (v.voteBribes?.[c.id] || 0) * v.traits.greed * 0.4 + (c.gang && v.gang === c.gang ? 3 : 0) + (v.spouse === c.id ? 5 : 0) + (v === c ? 10 : 0);
+        let s = R(v, c).like * 3 + R(v, c).trust + Math.min(2, seen(v, c).worth / 60) * (1 - v.traits.honesty * 0.5) + (v.voteBribes?.[c.id] || 0) * v.traits.greed * 0.4 + (c.gang && v.gang === c.gang ? 3 : 0) + (v.spouse === c.id ? 5 : 0) + (v === c ? 10 : 0);
         if (c.id === sim.mayorId) s += (v.unpaidWages ? -1.5 : 0.5) - crimeLately * 0.02 + (sim.taxRate < 0.12 ? 0.5 : -0.5);
         if (v.gang) { const boss = sim.people[sim.gangs[v.gang]?.boss]; if (boss && boss.voteFor === c.id) s += 2 * v.traits.loyalty; }
         s += rnd(-0.5, 0.5);
@@ -1676,7 +1721,8 @@ function Sim(opts = {}) {
       `Market prices: ${['bread', 'meal', 'turnip', 'meat', 'ale', 'grain'].map(k => `${k} ${priceOf(GOODS[k].shop === 'farm' ? 'farm' : GOODS[k].shop, k)}c`).join(', ')}. Food in stock: bakery ${sim.business.bakery.stock.bread || 0} bread, farm ${sim.business.farm.stock.grain || 0} grain / ${sim.business.farm.stock.turnip || 0} turnips.`,
       JOBS[p.job].owner ? `You own the ${JOBS[p.job].owner}: stock ${JSON.stringify(sim.business[JOBS[p.job].owner].stock)}, price multipliers ${JSON.stringify(sim.business[JOBS[p.job].owner].mult)}. You may set them with "prices":{"item":0.5-4}.` : '',
       `Family: ${p.spouse ? 'married to ' + sim.people[p.spouse]?.name : 'unmarried'}; household ${h.map(q => q.name).join(', ') || 'none'}. Gang: ${g ? g.name + (g.boss === p.id ? ' (you are boss)' : '') : 'none'}. On the guard's record: ${openRecord(p).length} open charges.`,
-      `People you feel strongly about: ${rels.map(([q, r]) => `${q.name} (${q.id}, ${JOBS[q.job].title.toLowerCase()}${q.gang ? ', ' + sim.gangs[q.gang]?.name : ''}) like ${r.like.toFixed(1)} trust ${r.trust.toFixed(1)}`).join('; ')}.`,
+      `People you feel strongly about: ${rels.map(([q, r]) => `${q.name} (${q.id}, ${JOBS[q.job].title.toLowerCase()}${q.gang ? ', ' + sim.gangs[q.gang]?.name : ''}) like ${r.like.toFixed(1)} trust ${r.trust.toFixed(1)}, you guess they're worth ~${Math.round(r.worth ?? 30)}c`).join('; ')}.`,
+      `The town seems to rank you as ${rankOf(p)} (by what people believe you're worth, ~${Math.round(standing(p))}c; you're really worth ~${Math.round(trueWorth(p))}c). Standing affects prices, votes, marriage offers, who'll work for you, and who robs you. It can be bluffed, and bluffs can be caught.`,
       `Recently: ${p.memory.slice(-8).map(m => m.text || (m.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (${m.how}${m.lie ? '' : ''})` : m.grave ? `${m.name} buried in plot ${m.grave}` : '')).filter(Boolean).join('; ') || 'nothing notable'}.`,
       `Town: treasury ${sim.treasury}c, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${sim.rent}c and head tax ${sim.headTax}c a day, mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, gangs ${Object.values(sim.gangs).map(g => `${g.name} (boss ${sim.people[g.boss]?.name}, ${gangMembers(g.id).length})`).join(', ') || 'none'}. Election every 7th day (next: day ${Math.ceil(sim.day / 7) * 7}).`,
       sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
@@ -1733,6 +1779,7 @@ function Sim(opts = {}) {
       // a dry throat wakes you and pulls you off work
       if (p.water < 0.12 && p.brain !== 'human' && conscious(p) && !p.fight && !(p.jailedUntil > 0) && p.task && !['drink', 'flee', 'jail'].includes(p.task.kind) && !p.carriedBy) { if (p.task.kind === 'follow' || p.task.kind === 'caravan' || p.task.kind === 'ambush') { const w = [...SPOTS.wells].sort((a, b) => dist2(p, a) - dist2(p, b))[0]; if (dist2(p, w) > 60) { p.water = 0.5; } else p.task = null; } else p.task = null; }
       if (p.state !== 'sleep') p.rest = Math.max(0, p.rest - dtMin / 60 / 18);
+      if (p.items.finery && Math.random() < dtMin / 120) showWealth(p, 70, 0.05);
       if (p.food <= 0) { p.starve = (p.starve || 0) + dtMin; if (p.starve > 3 * 1440 && p.hp > 1 && Math.random() < dtMin / 1440) p.hp -= 1; if (p.starve > 21 * 1440) { if (p.brain === 'human') { p.hp = -1; p.down = 'out'; p.downUntil = sim.t + 60; p.food = 0.3; p.starve = 0; } else die(p, null, 'starvation'); } } else p.starve = 0;
       if (p.down === 'out' && sim.t >= (p.downUntil || 0) && p.hp > 0) { p.down = null; p.nl = Math.min(p.nl, p.hp - 1); if (p.state === 'idle' || p.state === 'fight') p.task = null; }
       if (p.jailedUntil > 0) { if (sim.t >= p.jailedUntil) { p.jailedUntil = 0; p.task = null; place(p, SPOTS.desk); log('law', `${fullName(p)} is released from jail.`, [p.id]); } else { if (p.brain !== 'human' && night() && Math.random() < dtMin / 600) tryEscape(p); continue; } }
@@ -1857,6 +1904,11 @@ function Sim(opts = {}) {
         if (terms.free) { joinParty(t, me, purpose, 0); return `${t.name} comes along, no charge.`; }
         if (offer >= terms.ask) { joinParty(t, me, purpose, terms.ask); return `${t.name} comes along for ${terms.ask}c${offer > terms.ask ? ' (you offered more; they took what they asked)' : ''}.`; }
         return `${t.name}: "I'd do it for ${terms.ask}c."`;
+      }
+      case 'boast': {
+        if (!near(3) || t.kind !== 'human') return 'Get closer first.';
+        const amt = Math.max(10, extra.amount | 0), ok = boast(me, t, amt);
+        return ok ? `${t.name} takes you for someone worth about ${amt}c.` : `${t.name} doesn't buy it, and trusts you less.`;
       }
       case 'dismiss': { if (!me.party) return 'You have no party.'; disband(me); return 'You send your party home.'; }
       case 'fish': { if (dist2(me, SPOTS.pond) > 7) return 'Fish at the pond in the Wildwood.'; sim.t += 60; if (Math.random() < 0.6 * sim.fish / 40) { sim.fish--; me.items.fish = (me.items.fish || 0) + 1; return 'You catch a fish.'; } return 'An hour, and nothing bites.'; }
