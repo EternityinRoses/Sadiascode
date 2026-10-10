@@ -159,6 +159,25 @@ TOOLS = [
             "required": ["command"],
         },
     },
+    {
+        "name": "list_chats",
+        "description": "List the user's other Cloude chats (short id, brain, title), so you can talk to them "
+                       "with tell_chat. Other chats may be other brains: cloud, Claude Code or API.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "tell_chat",
+        "description": "Send a message to another Cloude chat (by its short id from list_chats). That chat's "
+                       "own brain answers it, and the answer comes back into THIS chat as a 📨 reply (you'll "
+                       "see it with the user's next message). Use it to ask what another chat did, e.g. which "
+                       "game files it edited, instead of guessing. Ask for a short summary.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"chat": {"type": "string", "description": "the other chat's short id"},
+                           "message": {"type": "string"}},
+            "required": ["chat", "message"],
+        },
+    },
 ]
 
 
@@ -270,7 +289,10 @@ TOOL_FUNCS = {
     "write_file": tool_write_file,
     "edit_file": tool_edit_file,
     "run_command": tool_run_command,
+    "list_chats": lambda args, chat=None: chats_overview(skip=chat and chat["id"]),
+    "tell_chat": lambda args, chat=None: tell_chat(chat["id"], args.get("chat"), args.get("message", "")),
 }
+CHAT_TOOLS = {"list_chats", "tell_chat"}       # these need to know which chat is asking
 
 
 def valid_input(name, args, schema):
@@ -464,7 +486,8 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
     content = list(extra_blocks or [])
     for att in attachments:
         content.extend(attachment_blocks(att))
-    model_text = with_handoff(chat, user_text, 120_000)
+    mail = [] if game else chat.pop("inbox", [])     # replies other chats sent while it was quiet
+    model_text = with_handoff(chat, ("\n\n".join(mail) + "\n\n---\n\n" if mail else "") + user_text, 120_000)
     if model_text:
         content.append({"type": "text", "text": model_text})
     if not content:
@@ -580,7 +603,9 @@ def run_turn(chat, user_text, attachments, emit, display_text=None, game=False, 
                         emit({"type": "approve", "id": approval_id, "command": args["command"]})
                         if not wait_for_approval(approval_id):
                             raise ToolError("The user said no to running that command.")
-                    out = TOOL_FUNCS[name](args)
+                    if name in CHAT_TOOLS and game:
+                        raise ToolError("Not during game turns.")
+                    out = (TOOL_FUNCS[name](args, chat) if name in CHAT_TOOLS else TOOL_FUNCS[name](args))
                     results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": out})
                 except ToolError as e:
                     record["ok"] = False
@@ -1146,6 +1171,23 @@ def check_mailbox():
                     save_chat(chat)
                     delivered += 1
                     continue
+                if len(words) >= 2 and words[1].lower() in ("chats", "tell"):
+                    if words[1].lower() == "chats":
+                        try:
+                            cloud_send(find_claude(), repo_root(), chat["cloud_session"],
+                                       f"[Cloude chat {short_id(chat['id'])}] CHATS\n\n{chats_overview(skip=chat['id'])}")
+                        except Exception as e:
+                            print(f"chats list failed: {e}")
+                    else:
+                        try:
+                            note = tell_chat(chat["id"], words[2] if len(words) >= 3 else "", body)
+                        except ToolError as e:
+                            note = str(e)
+                        chat["display"].append({"role": "assistant", "thoughts": "", "tools": [],
+                                                "text": f"📨 → chat {words[2] if len(words) >= 3 else '?'}: {body}\n\n({note})"})
+                    save_chat(chat)
+                    delivered += 1
+                    continue
                 if "scry" in header.lower().split()[1:]:
                     if chat.get("cloud_session"):
                         try:
@@ -1156,6 +1198,11 @@ def check_mailbox():
                     delivered += 1
                     continue
                 entry = {"role": "assistant", "text": body, "thoughts": "", "tools": []}
+                if chat.get("mail_from") and "ask" not in header.lower().split()[1:]:
+                    try:                                  # the answer to another chat's message
+                        tell_chat(chat["id"], chat.pop("mail_from"), body, reply=True)
+                    except Exception as e:
+                        print(f"couldn't pass a reply back: {e}")
                 if "ask" in header.lower().split()[1:]:
                     entry.update(ask=key)             # the cloud wants a yes/no first
                 chat["display"].append(entry)
@@ -1865,6 +1912,98 @@ def seat_runner():
         time.sleep(SEAT_POLL_S)
 
 
+# ---------------------------------------------------------- chats talking --
+# Chats can talk to each other, whatever their brain: the API brain has the
+# list_chats / tell_chat tools, the cloud writes '### <id> chats' or
+# '### <id> tell <other id>' blocks. A message makes the other chat's brain
+# answer it; that answer comes back as a 📨 reply. A reply is never answered
+# in turn, so two chats can't talk each other in circles.
+
+CHAT_MAIL_LIMIT = 8000
+BRAIN_NAMES = {"api": "🔑 API", "code": "💻 Claude Code", "cloud": "☁️ cloud"}
+
+
+def find_chat(ref):
+    """A chat by its id or its first 8 characters."""
+    ref = str(ref or "").strip().strip("[]#:")
+    if not re.fullmatch(r"[a-f0-9]{8,32}", ref):
+        return None
+    found = sorted(CHATS_DIR.glob(f"{ref}*.json"))
+    return found[0].stem if found else None
+
+
+def chats_overview(skip=None):
+    rows = [f"{short_id(r['id'])}  {BRAIN_NAMES.get(r['brain'], r['brain'])}  \"{r['title']}\""
+            for r in list_chats()[:30] if r["id"] != skip]
+    return "\n".join(rows) or "(no other chats)"
+
+
+def tell_chat(from_id, to_ref, message, reply=False):
+    to_id = find_chat(to_ref)
+    if not to_id:
+        raise ToolError(f"There's no chat '{to_ref}'. list_chats shows them.")
+    if to_id == from_id:
+        raise ToolError("That's this chat.")
+    if not str(message or "").strip():
+        raise ToolError("The message is empty.")
+    sender = load_chat(from_id)
+    who = f"chat {short_id(from_id)} ({BRAIN_NAMES.get(sender.get('brain', 'api'), '')}, \"{sender['title']}\")"
+    text = ((f"📨 Reply from {who}:\n\n" if reply
+             else f"📨 Message from {who}. Answer it here; your answer goes back to that chat by itself:\n\n")
+            + str(message).strip()[:CHAT_MAIL_LIMIT])
+    threading.Thread(target=deliver_mail, args=(from_id, to_id, text, reply), daemon=True).start()
+    return f"Sent to chat {short_id(to_id)}." + ("" if reply else " Its answer will come back here as a 📨 reply.")
+
+
+def deliver_mail(from_id, to_id, text, reply):
+    global ACTIVE_TURNS
+    answer = ""
+    try:
+        with chat_lock(to_id):
+            chat = load_chat(to_id)
+            brain = chat.get("brain", "api")
+            if brain == "cloud":
+                if not chat.get("cloud_session"):
+                    raise RuntimeError("that cloud chat isn't linked to a cloud session yet")
+                if not reply:
+                    chat["mail_from"] = from_id          # its next reply block is forwarded back
+                chat["display"].append({"role": "user", "text": text, "files": []})
+                save_chat(chat)
+                tag = short_id(to_id)
+                cloud_send(find_claude(), repo_root(), chat["cloud_session"], f"[Cloude chat {tag}] {text}"
+                           + ("" if reply else f"\n\n(Answer with a normal `### {tag}` block; Cloude passes it back.)"))
+                return
+            if reply:
+                # shown now, and handed to the brain with the user's next message
+                chat["display"].append({"role": "assistant", "text": text, "thoughts": "", "tools": []})
+                chat.setdefault("inbox", []).append(text)
+                save_chat(chat)
+                return
+            got = {"text": ""}
+
+            def emit(ev):
+                if ev.get("type") == "text":
+                    got["text"] += ev["text"]
+                elif ev.get("type") == "tool_start":
+                    got["text"] = ""
+
+            ACTIVE_TURNS += 1
+            try:
+                (run_turn_code if brain == "code" else run_turn)(chat, text, [], emit)
+            finally:
+                ACTIVE_TURNS -= 1
+            answer = got["text"].strip()
+    except Exception as e:
+        if not reply:
+            try:
+                tell_chat(to_id, from_id, f"(Couldn't deliver your message: {e})", reply=True)
+            except Exception:
+                pass
+        return
+    if answer and not reply:
+        tell_chat(to_id, from_id, answer, reply=True)
+
+
 # ------------------------------------------------------------------ server --
 
 class Handler(BaseHTTPRequestHandler):
@@ -2089,7 +2228,10 @@ class Handler(BaseHTTPRequestHandler):
         before = memory_snapshot()
         turn = {"code": run_turn_code, "cloud": run_turn_cloud}.get(chat.get("brain"), run_turn)
         try:
-            turn(chat, (body.get("text") or "").strip(), attachments, emit)
+            said = (body.get("text") or "").strip()
+            if turn is run_turn_code and chat.get("inbox"):
+                said = "\n\n".join(chat.pop("inbox")) + "\n\n---\n\n" + said
+            turn(chat, said, attachments, emit)
         except RuntimeError as e:
             emit({"type": "error", "text": str(e)})
         except Exception as e:

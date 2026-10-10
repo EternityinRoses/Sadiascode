@@ -77,6 +77,8 @@ A fixed copy is at `fixed/minds.js` on the branch.
 
 - Opus 5.5 in the Sadia seat hadn't been confirmed working after fixes 4 and 5. If it's still silent, check the `(no answer, …)` line in the room, the browser console (F12), and `GET /v1/models` with the key.
 
+- CHATS TALK TO EACH OTHER (Oct 10, Rose's ask, because the API chat and the cloud each edited the game without knowing about the other): API brain tools `list_chats` / `tell_chat`; cloud mailbox `### id chats` and `### id tell <id>`. Answers come back as 📨 replies; replies are never answered again (no loops). Before editing the game, ask the other chats what they changed.
+
 ## Cloude facts we tested
 
 - The ☁️ cloud brain works (confirmed on Windows). It needed `claude` on the PC signed in to the user's claude.ai account; a different login gave "Cloud sessions are disabled by your organization's policy". New sessions start in a terminal window, and the user pastes the session link into Cloude. Replies come back through a GitHub mailbox, the user's design: the cloud appends to `cloud_reply.md` under `### <chat id>` and pushes, Cloude polls every 20s, shows it, and empties the file. Teleport was tried first and dropped (it popped up windows and needed typing). The ☁️ brain also sends files (via the `cloude-inbox` branch), passes ⚙ model/effort as /model and /effort, and shows Allow/Deny cards for `### <id> ask` blocks. The thinking view can't be passed through. The cloud can also **scry** the PC (read-only list/read/grep/find in Cloude's folder and `D:\Sadias Canvas`) with `### <id> scry` blocks; results come back as SCRY RESULT messages. Confirmed working Oct 10: the first scry showed all the old Cloude's game fixes are still in `D:\Sadias Canvas\src`.
