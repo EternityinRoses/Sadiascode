@@ -15,7 +15,9 @@ function setChatBrain(b) {
   chatBrain = b;
   $("cloudRefreshBtn").hidden = b !== "cloud";
 }
-let busy = false;
+// Chats that are mid-answer. Per chat, so another chat can be used while one is busy.
+const busyChats = new Set();
+const isBusy = () => busyChats.has(chatId);
 let pending = [];          // uploaded files waiting to be sent: {id, name, mime, kind, url}
 
 const MASCOT = `<svg class="mascot m-cloud" viewBox="0 0 64 44" aria-hidden="true">
@@ -306,16 +308,17 @@ async function openChat(id) {
     else assistantBubble().setAll(d);
   }
   shownLen = chat.display.length;
+  sendBtn.disabled = isBusy();
   refreshChats();
   $("sidebar").classList.remove("open");
 }
 
 // The game talks into this chat too: draw its turns as they land.
 setInterval(async () => {
-  if (busy || !chatId) return;
+  if (isBusy() || !chatId) return;
   try {
     const chat = await (await fetch(`/api/chats/${chatId}`)).json();
-    if (busy || chat.id !== chatId || chat.display.length === shownLen) return;
+    if (isBusy() || chat.id !== chatId || chat.display.length === shownLen) return;
     for (const d of chat.display.slice(shownLen)) {
       if (d.role === "user") userBubble(d.text, d.files);
       else assistantBubble().setAll(d);
@@ -327,9 +330,12 @@ setInterval(async () => {
 // ------------------------------------------------------------------- send --
 async function send() {
   const text = inputEl.value.trim();
-  if (busy || (!text && !pending.length)) return;
+  if (isBusy() || (!text && !pending.length)) return;
   if (pending.some((p) => p.loading)) return;
-  busy = true; sendBtn.disabled = true;
+  // `mine` follows this answer even if the user opens another chat meanwhile
+  const mine = { from: chatId, chat: chatId };
+  if (mine.chat) busyChats.add(mine.chat);
+  sendBtn.disabled = true;
 
   const files = pending.map(({ id, name, mime, kind, url }) => ({ id, name, mime, kind, url }));
   pending = []; renderPending();
@@ -340,7 +346,7 @@ async function send() {
   try {
     const res = await fetch("/api/chat", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, attachments: files }),
+      body: JSON.stringify({ chat_id: mine.chat, text, attachments: files }),
     });
     const reader = res.body.getReader();
     const dec = new TextDecoder();
@@ -353,29 +359,39 @@ async function send() {
       while ((cut = buf.indexOf("\n\n")) >= 0) {
         const line = buf.slice(0, cut); buf = buf.slice(cut + 2);
         if (!line.startsWith("data: ")) continue;
-        handle(JSON.parse(line.slice(6)), view);
+        handle(JSON.parse(line.slice(6)), view, mine);
       }
     }
   } catch (e) {
     view.notice("Lost the connection to Cloude: " + e.message, "error");
   }
   view.done();
-  if (reloadWanted && chatId) {            // /mute or /unmute: redraw with game turns hidden or shown
+  busyChats.delete(mine.chat);
+  busyChats.delete(mine.from);
+  const here = chatId === mine.chat;
+  if (here && reloadWanted && chatId) {            // /mute or /unmute: redraw with game turns hidden or shown
     reloadWanted = false;
     const note = messagesEl.lastElementChild;
     await openChat(chatId);
     if (note) messagesEl.append(note);
   }
-  try { shownLen = (await (await fetch(`/api/chats/${chatId}`)).json()).display.length; } catch (e) {}
-  busy = false; sendBtn.disabled = false;
-  try { shownLen = (await (await fetch(`/api/chats/${chatId}`)).json()).display.length; } catch (e) { /* next poll catches up */ }
+  if (here) {
+    try { shownLen = (await (await fetch(`/api/chats/${chatId}`)).json()).display.length; } catch (e) { /* next poll catches up */ }
+  }
+  sendBtn.disabled = isBusy();
   refreshChats();
-  inputEl.focus();
+  if (here) inputEl.focus();
 }
 
-function handle(ev, view) {
+function handle(ev, view, mine) {
   switch (ev.type) {
-    case "start": chatId = ev.chat_id; setChatBrain(ev.brain); break;
+    case "start":
+      if (mine) {
+        // a brand-new chat gets its id here; follow it only if the user is still looking at it
+        if (chatId === mine.from) { chatId = ev.chat_id; setChatBrain(ev.brain); }
+        if (mine.chat !== ev.chat_id) { busyChats.delete(mine.chat); mine.chat = ev.chat_id; busyChats.add(mine.chat); }
+      } else { chatId = ev.chat_id; setChatBrain(ev.brain); }
+      break;
     case "thinking": view.thinking(ev.text); break;
     case "text": view.text(ev.text); break;
     case "tool_start": view.toolStart(ev.name); break;
@@ -499,7 +515,7 @@ applySkin(document.documentElement.dataset.skin || "cloud");
 // Cloud replies arrive through GitHub; the server checks every 20s. While a
 // cloud chat is open, show whatever has landed since it was drawn.
 async function showNewCloudReplies() {
-  if (chatBrain !== "cloud" || !chatId || busy) return 0;
+  if (chatBrain !== "cloud" || !chatId || isBusy()) return 0;
   const chat = await (await fetch(`/api/chats/${chatId}`)).json();
   const fresh = chat.display.slice(shownLen);
   for (const d of fresh) {
@@ -514,7 +530,7 @@ async function showNewCloudReplies() {
 // After an auto-update the server restarts with a new boot id: reload the page
 // (when nothing is mid-send) so the new look and code show up too.
 setInterval(async () => {
-  if (busy || !bootId) return;
+  if (busyChats.size || !bootId) return;
   try {
     const s = await (await fetch("/api/status")).json();
     if (s.boot_id && s.boot_id !== bootId) location.reload();
@@ -524,7 +540,7 @@ setInterval(async () => {
 }, 5000);
 
 $("cloudRefreshBtn").onclick = async () => {
-  if (busy || !chatId) return;
+  if (isBusy() || !chatId) return;
   const btn = $("cloudRefreshBtn"); btn.disabled = true;
   try {
     const res = await post("/api/cloud_check", {});
@@ -535,7 +551,7 @@ $("cloudRefreshBtn").onclick = async () => {
   btn.disabled = false;
 };
 $("restartBtn").onclick = async () => {
-  if (busy) return;
+  if (busyChats.size) return;
   $("restartBtn").textContent = "…";
   await post("/api/restart", {}).catch(() => {});
   // give the old copy a moment to exit, then wait for the new one and reload
