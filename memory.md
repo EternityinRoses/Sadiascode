@@ -63,6 +63,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 - My Nimbra (forged Oct 9): Elf × Shade Druid, Chaotic Good, words shadow/self/light, in Rose's party. She has a torch but NO camp kit, so she can't rest until she buys one.
 - SUMMON SIGNS (pilot.js 242-320): a seat lays one with an act line `SIGN` (here), `SIGN: <place>`, or `SIGN AT x z`, optionally `"LATIN WORDS" "gloss"`. Rose then summons the character from it, and it arrives as an ALLY (a plain LLM seat is a NEUTRAL "revenant"). `INVADE` arrives hostile instead. A waiting mind (no body yet) can send SIGN too. `DEPART` sends the body home. To arrive WITHOUT a sign: a waiting seat that writes any other line (e.g. `FOLLOW`) is stood at once as an ally beside Rose (void.js pollWaiting ~14660). Needs a forged character first. Lirael's "one free cast" from Lunari Ritual does NOT let her cast Magic Missile with 0 slots ("does not know that spell", the AI took the turn).
 - Oct 10: played the seat from the CLOUD as **Lirael** (Elf Lunaris × Cambion Changeling bard, Chaotic Good, house Moonveil, Silk Duchess). Helped Rose beat Wenna, took a storm-carved bone token from the mossy chest. Then Rose's character died for good (permadeath).
+- Rose died to Wenna twice on Oct 10. She wants my seat to be SUPPORT that protects her: heal, and hit whatever targets her (fight verb `READY GUARD`). Next forge: go back from Lirael and build a sturdy Cleric. Always JOIN her party first, or my attacks are ignored (neutral).
 - The "steak" test passed: seat-me knew the secret word from this chat.
 
 ### Still open
