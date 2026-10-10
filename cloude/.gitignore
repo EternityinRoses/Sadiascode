@@ -1,0 +1,6 @@
+# your API key lives here; never commit it
+config.json
+chats/
+uploads/
+.backups/
+__pycache__/

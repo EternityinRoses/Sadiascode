@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloude</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="sky" aria-hidden="true">
+  <span class="puff p1"></span><span class="puff p2"></span><span class="puff p3"></span>
+</div>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <svg class="mascot" viewBox="0 0 64 44" aria-hidden="true">
+        <path class="cloud-body" d="M16 40h34a12 12 0 0 0 1-24 16 16 0 0 0-30-4A13 13 0 0 0 16 40z"/>
+        <circle class="eye" cx="27" cy="26" r="2.6"/><circle class="eye" cx="39" cy="26" r="2.6"/>
+        <circle class="blush" cx="22" cy="31" r="2.6"/><circle class="blush" cx="44" cy="31" r="2.6"/>
+        <path class="smile" d="M30 31q3 3 6 0"/>
+      </svg>
+      <span>Cloude</span>
+    </div>
+    <button class="new-chat" id="newChat">+ New chat</button>
+    <nav class="chat-list" id="chatList"></nav>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn menu" id="menuBtn" title="Chats">☰</button>
+      <div class="chip" id="modelChip">…</div>
+      <div class="spacer"></div>
+      <button class="icon-btn" id="restartBtn" title="Restart Cloude (loads code changes)">↻</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
+    </header>
+
+    <section class="messages" id="messages">
+      <div class="empty" id="empty">
+        <svg class="mascot big" viewBox="0 0 64 44" aria-hidden="true">
+          <path class="cloud-body" d="M16 40h34a12 12 0 0 0 1-24 16 16 0 0 0-30-4A13 13 0 0 0 16 40z"/>
+          <circle class="eye" cx="27" cy="26" r="2.6"/><circle class="eye" cx="39" cy="26" r="2.6"/>
+          <circle class="blush" cx="22" cy="31" r="2.6"/><circle class="blush" cx="44" cy="31" r="2.6"/>
+          <path class="smile" d="M30 31q3 3 6 0"/>
+        </svg>
+        <h1>Hi, I'm Cloude!</h1>
+        <p>Talk to me, drop in pictures or files, or ask me to add something to myself.</p>
+      </div>
+    </section>
+
+    <form class="composer" id="composer">
+      <div class="attachments" id="attachments"></div>
+      <div class="row">
+        <label class="icon-btn attach" title="Attach pictures or files">
+          📎<input type="file" id="fileInput" multiple hidden>
+        </label>
+        <textarea id="input" rows="1" placeholder="Say something to Cloude…"></textarea>
+        <button class="send" id="sendBtn" type="submit" title="Send">➤</button>
+      </div>
+      <div class="hint">Enter to send · Shift+Enter for a new line · drop or paste files anywhere</div>
+    </form>
+  </main>
+</div>
+
+<div class="drop-veil" id="dropVeil">Drop it on me ☁️</div>
+
+<dialog id="settings">
+  <form method="dialog" class="settings-form" id="settingsForm">
+    <h2>Settings</h2>
+    <label>API key
+      <input type="password" id="keyInput" placeholder="sk-ant-… (leave empty to keep the current one)" autocomplete="off">
+    </label>
+    <label>Model
+      <input type="text" id="modelInput" placeholder="claude-opus-5-5">
+    </label>
+    <label>Effort
+      <select id="effortInput">
+        <option>low</option><option>medium</option><option>high</option><option>xhigh</option><option>max</option>
+      </select>
+    </label>
+    <p class="small">Your key is saved in <code>config.json</code> next to app.py, on this computer only.</p>
+    <div class="actions">
+      <button type="button" class="ghost" id="cancelSettings">Cancel</button>
+      <button value="save" id="saveSettings">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
