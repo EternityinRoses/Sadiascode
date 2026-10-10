@@ -37,7 +37,8 @@ function inline(s) {
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
 }
 function markdown(src) {
   const parts = src.split(/```/);
@@ -186,14 +187,35 @@ async function post(url, obj) {
   return r.json();
 }
 
+const BRAIN_ICON = { api: "🔑", code: "💻", cloud: "☁️" };
+const BRAIN_NAME = { api: "API", code: "Claude Code", cloud: "Cloud" };
+let status = {};
+
+function brainHint() {
+  const b = $("brainInput").value;
+  const lines = {
+    api: status.has_key ? "Uses your API key. Streams here, with my own tools." : "Needs an API key (below).",
+    code: status.claude_found ? "Runs the `claude` program on this PC (sign in once with `claude auth login`). Model and effort below apply."
+                              : "⚠ I can't find the `claude` program on this PC. Install Claude Code first.",
+    cloud: !status.claude_found ? "⚠ Needs the `claude` program on this PC, signed in to your claude.ai account."
+         : !status.in_git ? "⚠ Needs Cloude inside a git clone of your GitHub repo (see the README)."
+         : "Sends each chat to a Claude Code cloud session. Replies show up in the Claude app; results come back through GitHub.",
+  };
+  $("brainHint").textContent = lines[b];
+}
+
 async function refreshStatus() {
-  const s = await (await fetch("/api/status")).json();
-  $("modelChip").textContent = `${s.model} · ${s.effort}`;
+  const s = status = await (await fetch("/api/status")).json();
+  $("modelChip").textContent = s.brain === "cloud" ? `${BRAIN_ICON.cloud} Cloud session`
+    : `${BRAIN_ICON[s.brain]} ${BRAIN_NAME[s.brain]} · ${s.model} · ${s.effort}`;
+  $("brainInput").value = s.brain;
+  $("gitSyncInput").checked = s.git_sync;
+  brainHint();
   $("modelInput").value = s.model;
   $("effortInput").value = s.effort;
   $("autoApproveInput").checked = s.auto_approve;
   $("autoChip").hidden = !s.auto_approve;
-  if (!s.has_key) $("settings").showModal();
+  if (s.brain === "api" && !s.has_key) $("settings").showModal();
 }
 
 async function refreshChats() {
@@ -203,7 +225,7 @@ async function refreshChats() {
   for (const c of list) {
     const item = document.createElement("div");
     item.className = "chat-item" + (c.id === chatId ? " active" : "");
-    const title = document.createElement("span"); title.textContent = c.title;
+    const title = document.createElement("span"); title.textContent = `${BRAIN_ICON[c.brain] || ""} ${c.title}`;
     const del = document.createElement("button"); del.className = "del"; del.textContent = "✕"; del.title = "Delete chat";
     del.onclick = async (e) => {
       e.stopPropagation();
@@ -379,12 +401,14 @@ $("composer").onsubmit = (e) => { e.preventDefault(); send(); };
 $("newChat").onclick = startNew;
 $("menuBtn").onclick = () => $("sidebar").classList.toggle("open");
 $("settingsBtn").onclick = () => $("settings").showModal();
+$("brainInput").onchange = brainHint;
 $("cancelSettings").onclick = () => $("settings").close();
 $("settingsForm").onsubmit = async (e) => {
   if (e.submitter && e.submitter.value === "save") {
     await post("/api/settings", {
       api_key: $("keyInput").value, model: $("modelInput").value, effort: $("effortInput").value,
       auto_approve: $("autoApproveInput").checked,
+      brain: $("brainInput").value, git_sync: $("gitSyncInput").checked,
     });
     $("keyInput").value = "";
     refreshStatus();

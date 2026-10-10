@@ -94,6 +94,14 @@
 <dialog id="settings">
   <form method="dialog" class="settings-form" id="settingsForm">
     <h2>Settings</h2>
+    <label>Brain (which credit new chats spend)
+      <select id="brainInput">
+        <option value="api">🔑 API key · API credits</option>
+        <option value="code">💻 Claude Code on this PC · Agent SDK credits</option>
+        <option value="cloud">☁️ Cloud session · cloud credits (replies in the Claude app)</option>
+      </select>
+    </label>
+    <p class="small" id="brainHint"></p>
     <label>API key
       <input type="password" id="keyInput" placeholder="sk-ant-… (leave empty to keep the current one)" autocomplete="off">
     </label>
@@ -109,7 +117,12 @@
       <input type="checkbox" id="autoApproveInput">
       <span>Let Cloude run commands without asking</span>
     </label>
-    <p class="small warn">When this is on, Cloude can run any command on this computer by itself, like installing things or deleting files. Turn it off if you're unsure.</p>
+    <label class="switch">
+      <input type="checkbox" id="gitSyncInput">
+      <span>Share my memory through GitHub</span>
+    </label>
+    <p class="small">Pulls new notes when a chat starts and pushes <code>memory.md</code> when I change it, so all three brains remember the same things. Needs Cloude inside a git clone.</p>
+    <p class="small warn">When auto-run is on, Cloude can run any command on this computer by itself, like installing things or deleting files. Turn it off if you're unsure.</p>
     <p class="small">Your key is saved in <code>config.json</code> next to app.py, on this computer only.</p>
     <div class="actions">
       <button type="button" class="ghost" id="cancelSettings">Cancel</button>

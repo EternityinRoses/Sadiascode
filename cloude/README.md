@@ -14,6 +14,30 @@ A cozy little chat app for Claude that runs on your own computer with your own A
 - **Remembers things** in `memory.md`, which it reads at the start of every new chat and adds to by itself. It starts with notes from the Claude session that built it.
 - Before every edit it backs the old file up in `.backups/`, so nothing is lost.
 
+## Three brains, three credit pools
+
+Pick one in ⚙ settings. New chats use it; old chats keep the brain they started with (the chat list shows 🔑 💻 ☁️).
+
+| Brain | Spends | How it works |
+|---|---|---|
+| 🔑 **API key** | API credits (console.anthropic.com) | Streams here, with Cloude's own tools. Needs your API key. |
+| 💻 **Claude Code on this PC** | Claude Code's credit for scripted use (`claude -p`) | Runs the `claude` program on your PC and streams the answer here. Install Claude Code and run `claude auth login` once. With auto-run off it can edit files but not run commands. |
+| ☁️ **Cloud session** | Cloud-session credit, then your plan's usage | Hands the chat to a Claude Code cloud session. **Replies show up in the Claude app** (Cloude gives you the link); anything it pushes to GitHub comes back here. Needs `claude` signed in and Cloude inside a git clone. |
+
+Your normal subscription chat (the Claude app, or `claude` in a terminal) is a fourth pool, and it's used directly rather than through Cloude.
+
+### Shared memory
+
+All brains read `memory.md`. Turn on **Share my memory through GitHub** in settings (it's on by default) and run Cloude from a **git clone** instead of a zip. Then Cloude pulls new notes when a chat starts and pushes `memory.md` when it changes. Cloud sessions read the same notes through the repo's `CLAUDE.md`.
+
+```
+git clone https://github.com/EternityinRoses/Sadiascode.git
+cd Sadiascode
+git checkout claude/are-you-claude-93fk26
+cd cloude
+start.bat            (or ./start.sh)
+```
+
 ## Start it
 
 You need Python 3.10 or newer.

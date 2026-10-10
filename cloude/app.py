@@ -7,7 +7,12 @@ backups Cloude makes before it edits its own files.
 
 Cloude can read and edit the files in this folder, so it can grow itself:
 ask it for a feature, it edits app.py / static/*, and you press Restart.
-Shell commands always wait for you to press Allow in the chat first.
+Shell commands wait for you to press Allow, unless you turn on auto-run.
+
+Three "brains", each spending a different pool of credit:
+  api    your API key (API credits), streamed here, with Cloude's own tools
+  code   the `claude` program on this PC (Claude Code), streamed here
+  cloud  a Claude Code cloud session; replies appear in the Claude app
 """
 
 import base64
@@ -40,8 +45,15 @@ MEMORY_FILE = APP_DIR / "memory.md"
 HOST = "127.0.0.1"          # only this computer can reach it
 PORT = int(os.environ.get("CLOUDE_PORT", "8640"))
 
-DEFAULTS = {"model": "claude-opus-5-5", "effort": "medium", "max_tokens": 32000,
-            "auto_approve": False}   # True: run_command skips the Allow / Deny card
+DEFAULTS = {
+    "model": "claude-opus-5-5",
+    "effort": "medium",
+    "max_tokens": 32000,
+    "auto_approve": False,   # True: commands run without the Allow / Deny card
+    "brain": "api",          # api (API credits) | code (Claude Code on this PC) | cloud (cloud sessions)
+    "git_sync": True,        # share memory.md through GitHub when Cloude lives in a git clone
+}
+BRAINS = ("api", "code", "cloud")
 MAX_TOOL_ROUNDS = 30        # tool calls Cloude may chain for one message
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 IMAGE_LIMIT = 5 * 1024 * 1024          # the API's per-image size limit
@@ -286,10 +298,14 @@ def new_chat():
     # The system prompt and tool list are frozen per chat: the API rejects
     # replayed thinking blocks if either changes under an existing conversation.
     # So when Cloude edits its own prompt or tools, it shows up in new chats.
+    cfg = load_config()
+    if cfg.get("git_sync"):
+        pull_memory()                    # pick up notes the other brains left
     chat = {
         "id": uuid.uuid4().hex,
         "title": "New chat",
         "created": time.time(),
+        "brain": cfg["brain"] if cfg["brain"] in BRAINS else "api",
         "system": build_system(),
         "tools": TOOLS,
         "messages": [],     # exactly what is sent to the API, append-only
@@ -314,7 +330,8 @@ def list_chats():
     for p in CHATS_DIR.glob("*.json"):
         try:
             c = json.loads(p.read_text(encoding="utf-8"))
-            rows.append({"id": c["id"], "title": c["title"], "created": c["created"]})
+            rows.append({"id": c["id"], "title": c["title"], "created": c["created"],
+                         "brain": c.get("brain", "api")})
         except (OSError, ValueError, KeyError):
             continue
     return sorted(rows, key=lambda r: r["created"], reverse=True)
@@ -378,6 +395,14 @@ def clean_assistant_content(blocks):
     return [b for i, b in enumerate(blocks) if i > last_fb or b.get("type") not in drop]
 
 
+def log_user(chat, user_text, attachments):
+    chat["display"].append({"role": "user", "text": user_text,
+                            "files": [{k: a[k] for k in ("name", "kind", "url")} for a in attachments]})
+    if chat["title"] == "New chat":
+        chat["title"] = (user_text or (attachments[0]["name"] if attachments else "Chat"))[:48]
+    save_chat(chat)
+
+
 def run_turn(chat, user_text, attachments, emit):
     """Send one user message and keep going through tool calls. `emit(dict)`
     streams events to the page."""
@@ -393,11 +418,7 @@ def run_turn(chat, user_text, attachments, emit):
         return
     start_len = len(chat["messages"])
     chat["messages"].append({"role": "user", "content": content})
-    chat["display"].append({"role": "user", "text": user_text,
-                            "files": [{k: a[k] for k in ("name", "kind", "url")} for a in attachments]})
-    if chat["title"] == "New chat":
-        chat["title"] = (user_text or (attachments[0]["name"] if attachments else "Chat"))[:48]
-    save_chat(chat)
+    log_user(chat, user_text, attachments)
 
     shown = {"role": "assistant", "text": "", "thoughts": "", "tools": []}
     schemas = {t["name"]: t["input_schema"] for t in chat["tools"]}
@@ -530,6 +551,239 @@ def _drop_unanswered(chat, start_len):
         chat["messages"].pop()
 
 
+
+# ------------------------------------------------- the other two brains --
+
+CODE_PREFACE = """You're running through Claude Code on the user's PC this time, not the API.
+Use Claude Code's own tools (Read, Write, Edit, Bash, and so on) instead of
+list_files / read_file / write_file / edit_file / run_command. Your working
+folder is Cloude's folder, and files the user attaches are in uploads/."""
+
+
+def find_claude():
+    return shutil.which("claude")
+
+
+def code_system_text():
+    """Personality + memory for the Claude Code brain. If the repo's CLAUDE.md
+    already pulls in memory.md, Claude Code loads it by itself, so skip it here."""
+    parts = [CODE_PREFACE]
+    if SYSTEM_FILE.exists():
+        parts.append(SYSTEM_FILE.read_text(encoding="utf-8"))
+    root_md = APP_DIR.parent / "CLAUDE.md"
+    has_import = root_md.exists() and "@cloude/memory.md" in root_md.read_text(encoding="utf-8", errors="ignore")
+    if MEMORY_FILE.exists() and not has_import:
+        parts.append("# Your memory (memory.md)\n\n" + MEMORY_FILE.read_text(encoding="utf-8"))
+    return "\n\n".join(parts)
+
+
+def short_label(name, args):
+    if not isinstance(args, dict):
+        return ""
+    for key in ("file_path", "path", "command", "pattern", "url", "description"):
+        if isinstance(args.get(key), str):
+            return args[key]
+    return ""
+
+
+def run_turn_code(chat, user_text, attachments, emit):
+    """One message through `claude -p` on this PC (Claude Code), streamed back."""
+    exe = find_claude()
+    if not exe:
+        raise RuntimeError("I couldn't find the `claude` program. Install Claude Code, run "
+                           "`claude auth login`, then try again, or switch my brain in settings.")
+    cfg = load_config()
+    prompt = user_text
+    if attachments:
+        prompt += "\n\nAttached files (open them with the Read tool):\n" + "\n".join(
+            f"- uploads/{a['id']}  ({a['name']})" for a in attachments)
+    log_user(chat, user_text, attachments)
+
+    sys_file = APP_DIR / ".cloude_system.txt"
+    sys_file.write_text(code_system_text(), encoding="utf-8")
+    args = [exe, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+            "--model", cfg["model"], "--effort", cfg["effort"],
+            "--append-system-prompt-file", str(sys_file),
+            "--permission-mode", "bypassPermissions" if cfg.get("auto_approve") else "acceptEdits"]
+    if chat.get("cc_session"):
+        args += ["--resume", chat["cc_session"]]
+
+    shown = {"role": "assistant", "text": "", "thoughts": "", "tools": []}
+    pending_tools = {}                       # tool_use id -> (name, label)
+    got_result = False
+    proc = subprocess.Popen(args, cwd=APP_DIR, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+    err_lines = []
+    threading.Thread(target=lambda: err_lines.extend(proc.stderr), daemon=True).start()
+    try:
+        proc.stdin.write(prompt)             # the message goes in on stdin, never through a shell
+        proc.stdin.close()
+        new_round = False
+        for line in proc.stdout:
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            kind = ev.get("type")
+            if ev.get("session_id"):
+                chat["cc_session"] = ev["session_id"]
+            if ev.get("parent_tool_use_id"):
+                continue                     # a helper agent's inner chatter
+            if kind == "stream_event":
+                e = ev.get("event") or {}
+                if e.get("type") == "message_start":
+                    new_round = True
+                elif e.get("type") == "content_block_start":
+                    block = e.get("content_block") or {}
+                    if block.get("type") == "tool_use":
+                        emit({"type": "tool_start", "name": block.get("name", "tool")})
+                elif e.get("type") == "content_block_delta":
+                    d = e.get("delta") or {}
+                    if d.get("type") == "text_delta":
+                        piece = d.get("text", "")
+                        if new_round and shown["text"]:
+                            piece = "\n\n" + piece
+                        new_round = False
+                        shown["text"] += piece
+                        emit({"type": "text", "text": piece})
+                    elif d.get("type") == "thinking_delta":
+                        shown["thoughts"] += d.get("thinking", "")
+                        emit({"type": "thinking", "text": d.get("thinking", "")})
+            elif kind == "assistant":
+                for b in (ev.get("message") or {}).get("content") or []:
+                    if b.get("type") == "tool_use":
+                        pending_tools[b.get("id")] = (b.get("name", "tool"), short_label(b.get("name"), b.get("input")))
+            elif kind == "user":
+                content = (ev.get("message") or {}).get("content")
+                for b in content if isinstance(content, list) else []:
+                    if b.get("type") == "tool_result" and b.get("tool_use_id") in pending_tools:
+                        name, label = pending_tools.pop(b["tool_use_id"])
+                        record = {"name": name, "label": label, "ok": not b.get("is_error")}
+                        shown["tools"].append(record)
+                        emit({"type": "tool_done", **record})
+            elif kind == "result":
+                got_result = True
+                if ev.get("is_error") or ev.get("subtype") != "success":
+                    emit({"type": "error", "text": "Claude Code stopped: "
+                          + str(ev.get("result") or ev.get("subtype") or "unknown error")})
+                denied = ev.get("permission_denials") or []
+                if denied:
+                    names = ", ".join(sorted({d.get("tool_name", "?") for d in denied}))
+                    emit({"type": "notice", "text": f"Claude Code wasn't allowed to use: {names}. "
+                                                    "Turn on auto-run in settings to let it."})
+                if isinstance(ev.get("total_cost_usd"), (int, float)):
+                    emit({"type": "notice", "text": f"About ${ev['total_cost_usd']:.3f} of Claude Code credit."})
+        proc.wait()
+        if not got_result:
+            tail = "".join(err_lines)[-600:].strip()
+            emit({"type": "error", "text": "Claude Code didn't finish" + (f": {tail}" if tail else ".")})
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        if shown["text"] or shown["thoughts"] or shown["tools"]:
+            chat["display"].append(shown)
+        save_chat(chat)
+
+
+SESSION_RE = re.compile(r"(?:claude\.ai/code/)?\b((?:session|cse)_[A-Za-z0-9]+)")
+
+
+def run_turn_cloud(chat, user_text, attachments, emit):
+    """Hand the message to a Claude Code cloud session (cloud credit).
+    The cloud does the work; its replies show up in the Claude app."""
+    exe = find_claude()
+    if not exe:
+        raise RuntimeError("I couldn't find the `claude` program. Install Claude Code and run "
+                           "`claude auth login` (with your claude.ai account) first.")
+    root = repo_root()
+    if not root:
+        raise RuntimeError("The cloud brain needs Cloude inside a git clone of your GitHub repo, "
+                           "because the cloud session starts from GitHub. See the README.")
+    if not user_text:
+        raise RuntimeError("Tell the cloud what to do in words; pictures and files stay on this PC.")
+    log_user(chat, user_text, attachments)
+    shown = {"role": "assistant", "text": "", "thoughts": "", "tools": []}
+    try:
+        if attachments:
+            emit({"type": "notice", "text": "Heads up: the cloud can't see attached files on this PC. "
+                                            "Commit and push them if it needs them."})
+        if not chat.get("cloud_session"):
+            emit({"type": "notice", "text": "Starting a cloud session… this can take a minute."})
+            done = subprocess.run([exe, "--cloud", user_text], cwd=root, stdin=subprocess.DEVNULL,
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  timeout=300)
+            out = (done.stdout or "") + (done.stderr or "")
+            m = SESSION_RE.search(out)
+            if not m:
+                raise RuntimeError("The cloud session didn't start: " + (out.strip()[-600:] or f"exit code {done.returncode}"))
+            chat["cloud_session"] = m.group(1)
+        else:
+            done = subprocess.run([exe, "-p", "--cloud", chat["cloud_session"], "--output-format", "json"],
+                                  cwd=root, input=user_text, capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=120)
+            try:
+                res = json.loads(done.stdout)
+            except ValueError:
+                res = {"ok": False, "error": (done.stdout + done.stderr).strip()[-600:]}
+            if not res.get("ok"):
+                raise RuntimeError("Couldn't reach the cloud session: " + str(res.get("error")))
+        url = f"https://claude.ai/code/{chat['cloud_session']}"
+        shown["text"] = (f"☁️ Sent to your cloud session! It's working on it now, on cloud credit.\n\n"
+                         f"Watch it and read its replies here: [{chat['cloud_session']}]({url})\n\n"
+                         f"Anything it pushes to GitHub (code, memory notes) comes back to me "
+                         f"the next time I sync.")
+        emit({"type": "text", "text": shown["text"]})
+    except subprocess.TimeoutExpired:
+        emit({"type": "error", "text": "The `claude` program took too long to answer."})
+    finally:
+        if shown["text"]:
+            chat["display"].append(shown)
+        save_chat(chat)
+
+
+# ------------------------------------------------------- memory via git --
+
+def git(*args, timeout=30):
+    try:
+        return subprocess.run(["git", *args], cwd=APP_DIR, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def repo_root():
+    r = git("rev-parse", "--show-toplevel", timeout=10)
+    return r.stdout.strip() if r and r.returncode == 0 else None
+
+
+def pull_memory():
+    if repo_root():
+        git("pull", "--ff-only", "--quiet", timeout=20)
+
+
+def push_memory_async():
+    """Commit and push memory.md only, in the background, so the cloud brain
+    (and any other copy of Cloude) sees the new notes."""
+    def work():
+        if not repo_root():
+            return
+        git("add", "--", str(MEMORY_FILE))
+        c = git("commit", "-m", "Cloude: update memory", "--", str(MEMORY_FILE))
+        if c and c.returncode == 0:
+            p = git("push", timeout=60)
+            ok = p and p.returncode == 0
+            print("memory pushed to GitHub" if ok else "memory committed, but the push failed: "
+                  + ((p.stderr or "").strip()[-200:] if p else "git not found"))
+    threading.Thread(target=work, daemon=True).start()
+
+
+def memory_snapshot():
+    try:
+        return MEMORY_FILE.read_bytes()
+    except OSError:
+        return b""
+
+
 # ------------------------------------------------------------------ server --
 
 class Handler(BaseHTTPRequestHandler):
@@ -581,7 +835,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/status":
             cfg = load_config()
             return self.send_json({"has_key": bool(api_key()), "model": cfg["model"], "effort": cfg["effort"],
-                                  "auto_approve": bool(cfg.get("auto_approve"))})
+                                  "auto_approve": bool(cfg.get("auto_approve")), "brain": cfg["brain"],
+                                  "git_sync": bool(cfg.get("git_sync")), "claude_found": bool(find_claude()),
+                                  "in_git": bool(repo_root())})
         if path == "/api/chats":
             return self.send_json(list_chats())
         if path.startswith("/api/chats/"):
@@ -608,8 +864,11 @@ class Handler(BaseHTTPRequestHandler):
             for k in ("model", "effort"):
                 if body.get(k):
                     cfg[k] = body[k].strip()
-            if "auto_approve" in body:
-                cfg["auto_approve"] = bool(body["auto_approve"])
+            for k in ("auto_approve", "git_sync"):
+                if k in body:
+                    cfg[k] = bool(body[k])
+            if body.get("brain") in BRAINS:
+                cfg["brain"] = body["brain"]
             save_config(cfg)
             return self.send_json({"ok": True})
         if path == "/api/upload":
@@ -666,13 +925,17 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass                         # the page went away; keep working anyway
 
-        emit({"type": "start", "chat_id": chat["id"]})
+        emit({"type": "start", "chat_id": chat["id"], "brain": chat.get("brain", "api")})
+        before = memory_snapshot()
+        turn = {"code": run_turn_code, "cloud": run_turn_cloud}.get(chat.get("brain"), run_turn)
         try:
-            run_turn(chat, (body.get("text") or "").strip(), attachments, emit)
+            turn(chat, (body.get("text") or "").strip(), attachments, emit)
         except RuntimeError as e:
             emit({"type": "error", "text": str(e)})
         except Exception as e:
             emit({"type": "error", "text": f"{type(e).__name__}: {e}"})
+        if load_config().get("git_sync") and memory_snapshot() != before:
+            push_memory_async()
         emit({"type": "done", "title": chat["title"]})
 
 
