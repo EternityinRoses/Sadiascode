@@ -62,6 +62,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 - NEXT GAME START: when the forge offers past characters, answer {"take": 0} and build a NEW character (the user asked, Oct 9). Don't drop the old ones.
 - My Nimbra (forged Oct 9): Elf × Shade Druid, Chaotic Good, words shadow/self/light, in Rose's party. She has a torch but NO camp kit, so she can't rest until she buys one.
 - SUMMON SIGNS (pilot.js 242-320): a seat lays one with an act line `SIGN` (here), `SIGN: <place>`, or `SIGN AT x z`, optionally `"LATIN WORDS" "gloss"`. Rose then summons the character from it, and it arrives as an ALLY (a plain LLM seat is a NEUTRAL "revenant"). `INVADE` arrives hostile instead. A waiting mind (no body yet) can send SIGN too. `DEPART` sends the body home.
+- Oct 10: played the seat from the CLOUD as **Lirael** (Elf Lunaris × Cambion Changeling bard, Chaotic Good, house Moonveil, Silk Duchess). Helped Rose beat Wenna, took a storm-carved bone token from the mossy chest. Then Rose's character died for good (permadeath).
 - The "steak" test passed: seat-me knew the secret word from this chat.
 
 ### Still open
