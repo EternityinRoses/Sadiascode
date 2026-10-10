@@ -303,6 +303,7 @@ async function openChat(id) {
   chatId = chat.id;
   setChatBrain(chat.brain);
   clearMessages();
+  liveView = null;
   for (const d of chat.display) {
     if (d.role === "user") userBubble(d.text, d.files);
     else assistantBubble().setAll(d);
@@ -313,17 +314,37 @@ async function openChat(id) {
   $("sidebar").classList.remove("open");
 }
 
+// A turn nobody is streaming (another chat asked this one something) shows
+// what it's doing as a live bubble, redrawn on each poll until it finishes.
+let liveView = null;
+function dropLive() { if (liveView) { liveView.row.remove(); liveView = null; } }
+function showLive(live) {
+  dropLive();
+  if (!live) return;
+  const v = assistantBubble();
+  liveView = { view: v, row: messagesEl.lastElementChild };
+  for (const t of live.tools || []) {
+    if (t.ok === null || t.ok === undefined) v.toolStart(t.name); else v.toolDone(t);
+  }
+  if (live.thoughts) v.thinking(live.thoughts);
+  if (live.text) v.text(live.text);
+}
+
 // The game talks into this chat too: draw its turns as they land.
 setInterval(async () => {
   if (isBusy() || !chatId) return;
   try {
     const chat = await (await fetch(`/api/chats/${chatId}`)).json();
-    if (isBusy() || chat.id !== chatId || chat.display.length === shownLen) return;
-    for (const d of chat.display.slice(shownLen)) {
-      if (d.role === "user") userBubble(d.text, d.files);
-      else assistantBubble().setAll(d);
+    if (isBusy() || chat.id !== chatId) return;
+    if (chat.display.length !== shownLen) {
+      dropLive();
+      for (const d of chat.display.slice(shownLen)) {
+        if (d.role === "user") userBubble(d.text, d.files);
+        else assistantBubble().setAll(d);
+      }
+      shownLen = chat.display.length;
     }
-    shownLen = chat.display.length;
+    showLive(chat.live);
   } catch (e) { /* restarting; try again next tick */ }
 }, 2500);
 

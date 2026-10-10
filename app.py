@@ -1946,6 +1946,7 @@ def seat_runner():
 # in turn, so two chats can't talk each other in circles.
 
 CHAT_MAIL_LIMIT = 8000
+LIVE = {}      # chat id -> what a turn nobody is streaming is doing right now (the page polls it)
 BRAIN_NAMES = {"api": "🔑 API", "code": "💻 Claude Code", "cloud": "☁️ cloud"}
 
 
@@ -2006,13 +2007,24 @@ def deliver_mail(from_id, to_id, text, reply):
                 save_chat(chat)
                 return
             got = {"text": "", "errors": []}
+            live = LIVE[to_id] = {"text": "", "thoughts": "", "tools": []}
 
             def emit(ev):
-                if ev.get("type") == "text":
+                kind = ev.get("type")
+                if kind == "text":
                     got["text"] += ev["text"]
-                elif ev.get("type") == "tool_start":
+                    live["text"] += ev["text"]
+                elif kind == "thinking":
+                    live["thoughts"] += ev.get("text", "")
+                elif kind == "tool_start":
                     got["text"] = ""
-                elif ev.get("type") == "error":
+                    live["tools"].append({"name": ev.get("name", "tool"), "label": "", "ok": None})
+                elif kind == "tool_done":
+                    if live["tools"] and live["tools"][-1]["ok"] is None:
+                        live["tools"][-1] = {k: ev.get(k) for k in ("name", "label", "ok")}
+                    else:
+                        live["tools"].append({k: ev.get(k) for k in ("name", "label", "ok")})
+                elif kind == "error":
                     got["errors"].append(ev.get("text", ""))
 
             ACTIVE_TURNS += 1
@@ -2020,6 +2032,7 @@ def deliver_mail(from_id, to_id, text, reply):
                 (run_turn_code if brain == "code" else run_turn)(chat, text, [], emit)
             finally:
                 ACTIVE_TURNS -= 1
+                LIVE.pop(to_id, None)
             answer = got["text"].strip()
             if got["errors"]:
                 # errors only go to a live page, and nobody is watching this turn: keep them
@@ -2108,7 +2121,7 @@ class Handler(BaseHTTPRequestHandler):
             if load_config().get("game_muted"):
                 shown = [d for d in shown if not d.get("game")]
             return self.send_json({"id": chat["id"], "title": chat["title"], "display": shown,
-                                   "brain": chat.get("brain", "api")})
+                                   "brain": chat.get("brain", "api"), "live": LIVE.get(chat["id"])})
         self.send_error(404)
 
     def do_POST(self):
