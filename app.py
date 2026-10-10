@@ -1252,7 +1252,7 @@ def commit_self_edits():
     git("add", "-u")
     untracked = git("ls-files", "--others", "--exclude-standard").stdout.split()
     keep = [f for f in untracked
-            if (f.endswith((".py", ".md", ".txt", ".json")) and "/" not in f) or f.startswith("static/")]
+            if (f.endswith((".py", ".js", ".md", ".txt", ".json")) and "/" not in f) or f.startswith("static/")]
     if keep:
         git("add", "--", *keep)
     if git("diff", "--cached", "--quiet").returncode != 0:
