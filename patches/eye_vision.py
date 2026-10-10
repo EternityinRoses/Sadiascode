@@ -8,7 +8,7 @@ every /api/ call but the picture is answered with a fake "no", so it can't touch
 the save, the session lease or any seat's mailbox. It makes no sound.
 
 Run it once (double-click, or `python patches/eye_vision.py`). It backs up
-void.js into Desktop\cloude\backups first, checks every place it edits, and changes nothing if
+void.js into Desktop\\cloude\\backups first, checks every place it edits, and changes nothing if
 any of them doesn't match. Running it twice is safe.
 """
 import shutil
