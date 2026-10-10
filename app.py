@@ -2135,7 +2135,7 @@ def tell_chat(from_id, to_ref, message, reply=False):
 
 
 def deliver_mail(from_id, to_id, text, reply):
-    global ACTIVE_TURNS
+    global ACTIVE_TURNS, CHAT_TURNS, CHAT_QUIET_AT
     answer = ""
     try:
         with chat_lock(to_id):
@@ -2163,6 +2163,7 @@ def deliver_mail(from_id, to_id, text, reply):
             activity(f"chat {short_id(to_id)} is answering a message from chat {short_id(from_id)}")
 
             ACTIVE_TURNS += 1
+            CHAT_TURNS += 1
             try:
                 if brain == "code":
                     # Claude Code can't be held to read-only tools from here, so it answers in plan mode
@@ -2171,6 +2172,8 @@ def deliver_mail(from_id, to_id, text, reply):
                     run_turn(chat, text, [], emit, mail=True)
             finally:
                 ACTIVE_TURNS -= 1
+                CHAT_TURNS -= 1
+                CHAT_QUIET_AT = time.time()
                 LIVE.pop(to_id, None)
             answer = got["text"].strip()
             if got["errors"]:
@@ -2440,8 +2443,9 @@ class Handler(BaseHTTPRequestHandler):
                     pass                         # the page went away; keep working anyway
 
         emit({"type": "start", "chat_id": chat["id"], "brain": chat.get("brain", "api")})
-        global ACTIVE_TURNS
+        global ACTIVE_TURNS, CHAT_TURNS, CHAT_QUIET_AT
         ACTIVE_TURNS += 1                    # the updater won't restart mid-answer
+        CHAT_TURNS += 1                      # ...nor pull while a chat may be editing
         before = memory_snapshot()
         turn = {"code": run_turn_code, "cloud": run_turn_cloud}.get(chat.get("brain"), run_turn)
         try:
@@ -2454,6 +2458,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             emit({"type": "error", "text": f"{type(e).__name__}: {e}"})
         ACTIVE_TURNS -= 1
+        CHAT_TURNS -= 1
+        CHAT_QUIET_AT = time.time()
         funnel_notes()
         if load_config().get("git_sync") and memory_snapshot() != before:
             push_memory_async()
@@ -2469,6 +2475,9 @@ class Handler(BaseHTTPRequestHandler):
 BOOT_ID = uuid.uuid4().hex
 ACTIVE_TURNS = 0
 RESTART_PENDING = False   # an update is waiting: the seat runner starts no new turns
+CHAT_TURNS = 0            # chat answers in progress (not game turns, which can't edit files)
+CHAT_QUIET_AT = 0.0       # when the last chat answer ended
+QUIET_SEC = 20            # updates wait this long after the last chat answer
 UPDATE_EVERY_SEC = 60
 NO_RESTART_NEEDED = {"cloud_reply.md", "memory.md", "README.md", "CLAUDE.md", ".gitignore", "test"}
 
@@ -2554,6 +2563,8 @@ def update_once():
     global UPDATE_NOTE
     if not repo_root():
         return False
+    if CHAT_TURNS > 0 or time.time() - CHAT_QUIET_AT < QUIET_SEC:
+        return False     # a chat may be mid-edit: pulling or saving its edits now causes clashes
     if not git("fetch", "-q", timeout=60):
         return False
     funnel_notes()                  # so the commit below carries a fresh memory.md
