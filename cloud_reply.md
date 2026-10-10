@@ -1,3 +1,0 @@
-### 336297ad game 123970
-ACT: STAY
-CHOOSE 1
