@@ -1760,7 +1760,11 @@ def prove_awake(folder):
 
 
 def seat_runner():
-    seat_log("seat runner started")
+    cfg = load_config()
+    seat_log("seat runner started, watching " + (", ".join(f.name for f in seat_folders()) or "nothing")
+             + f"; played by {cfg.get('seat_brain', 'api')}"
+             + ("" if cfg.get("seats_on", True) else "; PAUSED (/resume)")
+             + ("" if api_key() or cfg.get("seat_brain") == "cloud" else "; NO API KEY, so idle"))
     while True:
         try:
             cfg = load_config()
