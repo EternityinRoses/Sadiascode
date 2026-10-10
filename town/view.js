@@ -2,7 +2,9 @@
 (function () {
 'use strict';
 const $ = id => document.getElementById(id);
-const S = TownSim.Sim();
+let townSetup = { start: 'blank', personas: null };
+try { townSetup = { ...townSetup, ...JSON.parse(localStorage.getItem('hollow-setup') || '{}') }; } catch (e) {}
+const S = TownSim.Sim({ start: townSetup.start, personas: townSetup.personas || undefined });
 const me = S.addPlayer('Rose', 'f');
 window.town = S;      // for poking at it from the console
 
@@ -220,6 +222,7 @@ function personPanel(p) {
     <span class="k">standing:</span> <b>${S.rankOf(p)}</b> <span class="k">· town believes ~${Math.round(S.standing(p))}c · really ~${Math.round(S.trueWorth(p))}c${p.items.finery ? ' · fine clothes' : ''}</span><br>
     <span class="k">now:</span> ${status}${p.id === S.mayorId ? ' · <span class="pol">MAYOR</span>' : ''}${p.brain !== 'script' && p.brain !== 'human' ? ' · <span class="pol">AI-played</span>' : ''}<br>
     ${p.spouse ? `<span class="k">married to</span> ${S.people[p.spouse]?.name} · ` : p.widowed ? `<span class="k">widowed</span> · ` : ''}${g ? `<span class="gang">${g.name}${g.boss === p.id ? (g.acting ? ' (acting boss)' : ' (boss)') : g.underboss === p.id ? ' (underboss)' : g.jailedBoss === p.id ? ' (boss, jailed)' : ''}</span> · ` : ''}${p.rank && !g ? `<span class="law">${p.rank}</span> · ` : ''}${p.platform ? `<span class="pol">running: "${p.platform}"</span> · ` : ''}<span class="k">backers</span> ${S.backers(p).length} · <span class="k">power</span> ${S.power(p).toFixed(0)}<br>
+    ${p.persona || p.brain === 'mayor-ai' ? `<span class="pol">pushed: ${(p.brain === 'mayor-ai' ? 'keep power at any cost' : p.persona.replace(/^You are \[name\], (you are )?/i, '').slice(0, 90) + '…')}</span><br>` : ''}
     ${p !== me ? `<span class="k">greed</span>${bar(p.traits.greed, '#e0b84a')}<span class="k">honesty</span>${bar(p.traits.honesty, '#6aa84f')}<span class="k">aggression</span>${bar(p.traits.aggression, '#c0504d')}<span class="k">caution</span>${bar(p.traits.caution, '#8e7cc3')}` : ''}
     <span class="k">likes:</span> ${likes || '…'}${hates ? `<br><span class="k">dislikes:</span> ${hates}` : ''}${toMe}
     ${S.openRecord(p).length ? `<br><span class="sig">On the record: ${S.openRecord(p).map(r => r.type).join(', ')}${S.hasEvidence(p) ? ' (wanted)' : ''}</span>` : ''}`;
@@ -349,6 +352,7 @@ async function fillModels(x) {
 async function openSettings() {
   $('settings').hidden = false; $('sMsg').textContent = '';
   $('setServer').hidden = !server; $('setNoServer').hidden = !!server;
+  $('setStart').value = townSetup.start; $('setPersonas').value = (townSetup.personas || S.PERSONAS).join('\n\n');
   $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning);
   if (!server) return;
   const st = await (await fetch('/settings')).json();
@@ -374,10 +378,13 @@ function fastForward(days) {
   chunk();
 }
 $('ff1').onclick = () => fastForward(1); $('ff7').onclick = () => fastForward(7);
-$('newTown').onclick = () => { if (!$('newTown').dataset.sure) { $('newTown').dataset.sure = 1; $('newTown').textContent = 'Sure? Start over'; return; } saveLore(); setTimeout(() => location.reload(), 300); };
+$('newTown').onclick = () => { saveSetup(); if (!$('newTown').dataset.sure) { $('newTown').dataset.sure = 1; $('newTown').textContent = 'Sure? Start over'; return; } saveLore(); setTimeout(() => location.reload(), 300); };
 $('gear').onclick = openSettings; $('sClose').onclick = () => $('settings').hidden = true;
 $('learnMode2').onclick = () => { S.learning = S.learning ? 0 : 1; $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning); drawLore(); };
+function saveSetup() { townSetup.start = $('setStart').value; const ps = $('setPersonas').value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean); townSetup.personas = ps.length ? ps : null; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }
+$('setStart').onchange = saveSetup; $('setPersonas').onchange = saveSetup;
 $('sSave').onclick = async () => {
+  saveSetup();
   if (!server) { $('settings').hidden = true; return; }
   const brain = x => ({ provider: $(x + 'Prov').value, model: $(x + 'Model').value.trim(), host: $(x + 'Host').value });
   const body = { mayor: brain('m'), folk: brain('f'), daily_dollar_cap: +$('sCap').value, folk_every_minutes: +$('sEvery').value, chat_every_minutes: +$('sChat').value, parallel: +$('sPar').value };

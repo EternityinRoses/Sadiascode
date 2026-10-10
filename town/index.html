@@ -143,6 +143,11 @@ select{background:#0006;color:var(--fg);border:1px solid var(--line);border-radi
     <div id="sKeys" class="k"></div>
     <div id="sMsg" class="k"></div>
   </div>
+  <h3>New towns</h3>
+  <div class="grid two"><label for="setStart">How a town starts</label><select id="setStart"><option value="blank">Blank: everyone starts with nothing (Claude is mayor)</option><option value="classic">Classic: jobs and roles already handed out</option></select></div>
+  <div class="k" style="margin-top:8px">Soft pushes: one per paragraph, each given to a random townsperson (only an AI brain reads it). [name] becomes their name.</div>
+  <textarea id="setPersonas" rows="7" style="width:100%;margin-top:4px;background:#0006;color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px;font:inherit;font-size:12px"></textarea>
+  <div class="k">Used from the next New town.</div>
   <h3>Training</h3>
   <div class="row" style="align-items:center"><button id="ff1">Run 1 day</button><button id="ff7">Run 7 days</button><button id="newTown">New town</button><span id="ffNote" class="k">Fast, no drawing, plain brains only. A new town keeps what the town mind learned.</span></div>
   <h3>The town mind</h3>
