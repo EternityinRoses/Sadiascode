@@ -411,7 +411,15 @@ $("settingsForm").onsubmit = async (e) => {
       brain: $("brainInput").value, git_sync: $("gitSyncInput").checked,
     });
     $("keyInput").value = "";
-    refreshStatus();
+    const switched = status.brain !== $("brainInput").value;
+    await refreshStatus();
+    // A chat keeps the brain it started with, so a new brain means a new chat.
+    if (switched && chatId) {
+      startNew();
+      const v = assistantBubble();
+      v.notice(`New chat on ${BRAIN_ICON[status.brain]} ${BRAIN_NAME[status.brain]}. Your older chats keep the brain they started with.`);
+      v.done();
+    }
   }
 };
 // Skins: "cloud" (default) or "rose". Remembered in this browser only.
