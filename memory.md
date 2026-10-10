@@ -68,6 +68,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 - Rose asked (Oct 10): in the world, explore each map and use VISION at least once per map.
 - In a conversation, answer with `CHOOSE n` ALONE (no verb line). `ACT: STAY` + CHOOSE walked me out of the talk. Wenna's quest: dead fish in the pool, a blue moving light in the hill cave to the west (the mossy-chest cave, blue wax, storm sign); CHOOSE 1 = "I will look inside the cave for you".
 - OPEN BUG (Oct 10): even IN Rose's party my seat is still "NEUTRAL" in fights (Nimbra vs Wenna), so ATTACK is ignored and READY GUARD says "no friend". Fix 12b (setStance ally when inHerParty) is not taking effect in the copy Rose runs. Worth checking void.js fight-forging sites with a scry.
+- VISION FROM ANOTHER MAP (Oct 10, written, NOT yet applied or tested): `patches/eye_vision.py` patches `D:\Sadias Canvas\src\world\void.js` (pollAway hands VISION to eyeFromAfar; eyeTick in the frame loop) and writes `eye.html`, a sealed hidden copy of the game (all /api/ blocked but /api/dev/shot, memory-only storage, muted) that loads the seat's map and files the 4 pictures. Backs up to .backups first; safe to run twice. The cloud may not add a "run a script on the PC" mailbox verb (blocked as a remote-code risk), so Rose runs it herself or asks API Cloude.
 - The "steak" test passed: seat-me knew the secret word from this chat.
 
 ### Still open
