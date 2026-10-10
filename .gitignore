@@ -21,3 +21,6 @@ seats/world_state.md
 seats/shot_*
 seats/transcripts/
 .memory_built 
+town/town_brains.json
+town/brains/
+town/lore.json
