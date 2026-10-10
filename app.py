@@ -246,13 +246,21 @@ def tool_read_file(args):
     return text
 
 
+def write_whole(target, text):
+    """Write a file in one step: a temp copy first, then swapped in. If Cloude is
+    closed halfway, the old file is still whole instead of cut off."""
+    tmp = target.with_name(f".{target.name}.cloude-tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, target)
+
+
 def tool_write_file(args):
     target = safe_path(args["path"])
     if target.name in SECRET_FILES:
         raise ToolError("I don't overwrite the API key file.")
     target.parent.mkdir(parents=True, exist_ok=True)
     backup(target)
-    target.write_text(args["content"], encoding="utf-8")
+    write_whole(target, args["content"])
     return f"Wrote {shown_path(target)} ({len(args['content'])} chars)."
 
 
@@ -267,7 +275,7 @@ def tool_edit_file(args):
     if count != 1:
         raise ToolError(f"old_text appears {count} times; it must appear exactly once.")
     backup(target)
-    target.write_text(text.replace(args["old_text"], args["new_text"], 1), encoding="utf-8")
+    write_whole(target, text.replace(args["old_text"], args["new_text"], 1))
     return f"Edited {shown_path(target)}."
 
 
@@ -2408,7 +2416,19 @@ def open_window(url):
     except ImportError:
         return False
     try:
-        webview.create_window("Cloude", url, width=1150, height=800, min_size=(380, 500))
+        win = webview.create_window("Cloude", url, width=1150, height=800, min_size=(380, 500))
+
+        def closing():
+            # Closing mid-answer cuts a chat off halfway (maybe in the middle of a change), so ask first.
+            if ACTIVE_TURNS <= 0:
+                return True
+            try:
+                return win.create_confirmation_dialog(
+                    "A chat is still working",
+                    "A chat is in the middle of an answer. Close anyway? It will be cut off where it is.")
+            except Exception:
+                return True
+        win.events.closing += closing
         # private_mode off + a storage folder: the window remembers your skin choice
         webview.start(private_mode=False, storage_path=str(APP_DIR / ".window"))
     except Exception as e:                       # no GUI backend, etc.
