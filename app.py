@@ -292,8 +292,8 @@ TOOL_FUNCS = {
     "list_chats": lambda args, chat=None: chats_overview(skip=chat and chat["id"]),
     "tell_chat": lambda args, chat=None: tell_chat(chat["id"], args.get("chat"), args.get("message", "")),
 }
-CHAT_TOOLS = {"list_chats", "tell_chat"}
-STOPS = set()          # chat ids whose answer the user stopped (checked between steps)       # these need to know which chat is asking
+CHAT_TOOLS = {"list_chats", "tell_chat"}       # these need to know which chat is asking
+STOPS = set()          # chat ids whose answer the user stopped (checked between steps)
 
 
 def valid_input(name, args, schema):
