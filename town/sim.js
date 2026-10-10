@@ -83,17 +83,55 @@ const randIn = (areaId, m = 1.5) => { const r = AREAS[areaId]; return P(rnd(r.x0
 const sameSpace = (p, q) => { const x = areaOf(p), y = areaOf(q); return !x || !y || x === y || dist2(p, q) < 3; };
 
 // ---------------------------------------------------------- gear & goods --
+// D&D 3.5 weapons: damage dice, crit [threat, multiplier], two hands (1.5x Strength), reach in metres
+// for ranged (each range increment beyond the first is -2), ammo, reload (crossbows), forge cost in iron and hours.
 const WEAPONS = {
-  fists:      { name: 'Fists', dmg: [1, 3], crit: [20, 2], nonlethal: true, melee: true },
-  dagger:     { name: 'Dagger', dmg: [1, 4], crit: [19, 2], melee: true, price: 4 },
-  club:       { name: 'Club', dmg: [1, 6], crit: [20, 2], melee: true, price: 2 },
-  sap:        { name: 'Sap', dmg: [1, 6], crit: [20, 2], melee: true, nonlethal: true, price: 3 },
-  shortsword: { name: 'Short sword', dmg: [1, 6], crit: [19, 2], melee: true, price: 8 },
-  longsword:  { name: 'Longsword', dmg: [1, 8], crit: [19, 2], melee: true, price: 12 },
-  shortbow:   { name: 'Short bow', dmg: [1, 6], crit: [20, 3], range: 18, price: 12 },
+  fists:      { name: 'Fists', dmg: [1, 3], crit: [20, 2], nonlethal: true, melee: true, weak: true },
+  dagger:     { name: 'Dagger', dmg: [1, 4], crit: [19, 2], melee: true, price: 4, iron: 1, hours: 2 },
+  sickle:     { name: 'Sickle', dmg: [1, 6], crit: [20, 2], melee: true, price: 4, iron: 1, hours: 2 },
+  club:       { name: 'Club', dmg: [1, 6], crit: [20, 2], melee: true, price: 2, iron: 0, hours: 1 },
+  sap:        { name: 'Sap', dmg: [1, 6], crit: [20, 2], melee: true, nonlethal: true, price: 3, iron: 0, hours: 1 },
+  quarterstaff: { name: 'Quarterstaff', dmg: [1, 6], crit: [20, 2], melee: true, hands: 2, price: 2, iron: 0, hours: 1 },
+  spear:      { name: 'Spear', dmg: [1, 8], crit: [20, 3], melee: true, hands: 2, price: 4, iron: 1, hours: 2 },
+  lightmace:  { name: 'Light mace', dmg: [1, 6], crit: [20, 2], melee: true, price: 6, iron: 2, hours: 3 },
+  heavymace:  { name: 'Heavy mace', dmg: [1, 8], crit: [20, 2], melee: true, price: 10, iron: 3, hours: 4 },
+  handaxe:    { name: 'Handaxe', dmg: [1, 6], crit: [20, 3], melee: true, price: 7, iron: 2, hours: 3 },
+  shortsword: { name: 'Short sword', dmg: [1, 6], crit: [19, 2], melee: true, price: 10, iron: 2, hours: 4 },
+  rapier:     { name: 'Rapier', dmg: [1, 6], crit: [18, 2], melee: true, price: 18, iron: 2, hours: 6 },
+  scimitar:   { name: 'Scimitar', dmg: [1, 6], crit: [18, 2], melee: true, price: 14, iron: 2, hours: 5 },
+  longsword:  { name: 'Longsword', dmg: [1, 8], crit: [19, 2], melee: true, price: 15, iron: 3, hours: 6 },
+  battleaxe:  { name: 'Battleaxe', dmg: [1, 8], crit: [20, 3], melee: true, price: 10, iron: 3, hours: 5 },
+  warhammer:  { name: 'Warhammer', dmg: [1, 8], crit: [20, 3], melee: true, price: 12, iron: 3, hours: 5 },
+  flail:      { name: 'Flail', dmg: [1, 8], crit: [20, 2], melee: true, price: 8, iron: 3, hours: 4 },
+  greataxe:   { name: 'Greataxe', dmg: [1, 12], crit: [20, 3], melee: true, hands: 2, price: 20, iron: 5, hours: 8 },
+  greatsword: { name: 'Greatsword', dmg: [2, 6], crit: [19, 2], melee: true, hands: 2, price: 30, iron: 5, hours: 10 },
+  halberd:    { name: 'Halberd', dmg: [1, 10], crit: [20, 3], melee: true, hands: 2, price: 12, iron: 4, hours: 6 },
+  sling:      { name: 'Sling', dmg: [1, 4], crit: [20, 2], range: 15, ammo: 'bullets', price: 1, iron: 0, hours: 1 },
+  javelin:    { name: 'Javelins', dmg: [1, 6], crit: [20, 2], range: 9, ammo: 'javelins', thrown: true, price: 2, iron: 1, hours: 1 },
+  shortbow:   { name: 'Short bow', dmg: [1, 6], crit: [20, 3], range: 18, ammo: 'arrows', hands: 2, price: 15, iron: 0, hours: 5 },
+  longbow:    { name: 'Longbow', dmg: [1, 8], crit: [20, 3], range: 30, ammo: 'arrows', hands: 2, price: 30, iron: 0, hours: 8 },
+  lightxbow:  { name: 'Light crossbow', dmg: [1, 8], crit: [19, 2], range: 24, ammo: 'bolts', hands: 2, reload: 'move', price: 18, iron: 2, hours: 6 },
+  heavyxbow:  { name: 'Heavy crossbow', dmg: [1, 10], crit: [19, 2], range: 36, ammo: 'bolts', hands: 2, reload: 'full', price: 30, iron: 3, hours: 8 },
 };
-const ARMOR = { none: { name: 'Clothes', ac: 0 }, leather: { name: 'Leather armour', ac: 2, price: 10 }, chain: { name: 'Chain shirt', ac: 4, price: 25 } };
+// armour: AC, damage it soaks off every hit (dr), max Dex bonus, speed, check penalty (to Hide/Sneak)
+const ARMOR = {
+  none:        { name: 'Clothes', ac: 0, dr: 0, maxDex: 9, speed: 9, acp: 0 },
+  padded:      { name: 'Padded armour', ac: 1, dr: 0, maxDex: 8, speed: 9, acp: 0, price: 4, iron: 0, hours: 2 },
+  leather:     { name: 'Leather armour', ac: 2, dr: 1, maxDex: 6, speed: 9, acp: 0, price: 10, iron: 0, hours: 3 },
+  studded:     { name: 'Studded leather', ac: 3, dr: 1, maxDex: 5, speed: 9, acp: 1, price: 20, iron: 2, hours: 5 },
+  chainshirt:  { name: 'Chain shirt', ac: 4, dr: 2, maxDex: 4, speed: 9, acp: 2, price: 40, iron: 5, hours: 10 },
+  hide:        { name: 'Hide armour', ac: 3, dr: 2, maxDex: 4, speed: 6, acp: 3, price: 12, iron: 0, hours: 4 },
+  scale:       { name: 'Scale mail', ac: 4, dr: 2, maxDex: 3, speed: 6, acp: 4, price: 40, iron: 6, hours: 10 },
+  chain:       { name: 'Chainmail', ac: 5, dr: 3, maxDex: 2, speed: 6, acp: 5, price: 60, iron: 8, hours: 14 },
+  breastplate: { name: 'Breastplate', ac: 5, dr: 3, maxDex: 3, speed: 6, acp: 4, price: 80, iron: 7, hours: 14 },
+  banded:      { name: 'Banded mail', ac: 6, dr: 4, maxDex: 1, speed: 6, acp: 6, price: 100, iron: 9, hours: 18 },
+  halfplate:   { name: 'Half-plate', ac: 7, dr: 4, maxDex: 0, speed: 6, acp: 7, price: 150, iron: 10, hours: 22 },
+  fullplate:   { name: 'Full plate', ac: 8, dr: 5, maxDex: 1, speed: 6, acp: 6, price: 300, iron: 12, hours: 30 },
+};
+const SHIELDS = { none: { name: 'No shield', ac: 0 }, buckler: { name: 'Buckler', ac: 1, price: 8, iron: 1, hours: 2, buckler: true }, lightshield: { name: 'Light shield', ac: 1, price: 6, iron: 1, hours: 2 }, heavyshield: { name: 'Heavy shield', ac: 2, price: 12, iron: 2, hours: 4 } };
 const GOODS = {
+  iron: { name: 'Iron bar', price: 2 }, arrows: { name: 'Arrows (10)', price: 1, shop: 'smithy', bundle: 10 }, bolts: { name: 'Bolts (10)', price: 1, shop: 'smithy', bundle: 10 }, bullets: { name: 'Sling bullets (10)', price: 1, shop: 'smithy', bundle: 10 }, javelins: { name: 'Javelins (3)', price: 2, shop: 'smithy', bundle: 3 },
+  bearpelt: { name: 'Bear pelt', price: 12 }, wolfpelt: { name: 'Wolf pelt', price: 4 }, ogretooth: { name: 'Ogre tusk', price: 15 },
   bread: { name: 'Loaf of bread', price: 1, food: 0.5, shop: 'bakery' }, pie: { name: 'Meat pie', price: 3, food: 0.8, shop: 'bakery' },
   ale: { name: 'Mug of ale', price: 2, shop: 'tavern', mood: 0.1, water: 0.4 }, meal: { name: 'Stew and bread', price: 2, food: 0.6, shop: 'tavern' },
   grain: { name: 'Sack of grain', price: 2, shop: 'farm' }, barley: { name: 'Sack of barley', price: 2, shop: 'farm' },
@@ -103,12 +141,15 @@ const GOODS = {
   turnip: { name: 'Turnip', price: 1, food: 0.25, shop: 'store' },
   eggs: { name: 'Half-dozen eggs', price: 1, food: 0.25, shop: 'store' }, milk: { name: 'Jug of milk', price: 1, food: 0.15, water: 0.4, shop: 'store' },
   fish: { name: 'Pond fish', price: 1, food: 0.35, shop: 'store' }, apple: { name: 'Apples', price: 1, food: 0.15, shop: 'store' },
-  dagger: { name: 'Dagger', price: 4, shop: 'smithy', weapon: 'dagger' }, club: { name: 'Club', price: 2, shop: 'smithy', weapon: 'club' },
-  sap: { name: 'Sap', price: 3, shop: 'smithy', weapon: 'sap' }, shortsword: { name: 'Short sword', price: 8, shop: 'smithy', weapon: 'shortsword' },
-  shortbow: { name: 'Short bow', price: 12, shop: 'smithy', weapon: 'shortbow' }, leather: { name: 'Leather armour', price: 10, shop: 'smithy', armor: 'leather' },
   cure: { name: 'Healing draught', price: 4, shop: 'store', heal: [1, 8] },
   finery: { name: 'Fine clothes', price: 15, shop: 'store' },
 };
+
+for (const [k, w] of Object.entries(WEAPONS)) if (w.price) GOODS[k] = { name: w.name, price: w.price, shop: 'smithy', weapon: k };
+for (const [k, a] of Object.entries(ARMOR)) if (a.price) GOODS[k] = { name: a.name, price: a.price, shop: 'smithy', armor: k };
+for (const [k, a] of Object.entries(SHIELDS)) if (a.price) GOODS[k] = { name: a.name, price: a.price, shop: 'smithy', shield: k };
+const FORGEABLE = [...Object.keys(WEAPONS).filter(k => WEAPONS[k].price), ...Object.keys(ARMOR).filter(k => ARMOR[k].price), ...Object.keys(SHIELDS).filter(k => SHIELDS[k].price)];
+const gearOf = k => WEAPONS[k] || ARMOR[k] || SHIELDS[k];
 
 // ------------------------------------------------------------- the town --
 // Jobs: where, when, what it pays and who pays it. Public jobs are paid from the treasury.
@@ -144,7 +185,7 @@ const JOBS = {
 const BUSINESSES = ['bakery', 'store', 'smithy', 'tavern', 'farm', 'ranch'];
 // livestock: what each gives a day, how fast the herd grows, how many the pasture holds
 const STOCK = { hen: { hp: 1, ac: 12, give: ['eggs', 1], breed: 0.3, cap: 14, meat: 1 }, cow: { hp: 12, ac: 9, give: ['milk', 2], breed: 0.06, cap: 5, meat: 8 }, sheep: { hp: 6, ac: 10, give: null, breed: 0.12, cap: 8, meat: 4 } };
-const MARROW = { sells: { grain: 1, turnip: 1, barley: 1, meat: 2 }, buys: { ale: 3, dagger: 5, club: 3, sap: 4, shortsword: 10, leather: 12, cure: 6, rope: 5, bread: 1 } };
+const MARROW = { sells: { grain: 1, turnip: 1, barley: 1, meat: 2, iron: 2 }, buys: { ale: 3, dagger: 5, club: 3, sap: 4, shortsword: 10, leather: 12, cure: 6, rope: 5, bread: 1 } };
 // crops take days to grow; tending makes the yield
 const CROPS = { turnip: { days: 3, yield: 26 }, grain: { days: 5, yield: 16 }, barley: { days: 4, yield: 8 } };
 // game in the Wildwood: some run, the boar fights back
@@ -217,7 +258,8 @@ function attracted(a, b) {
   if (o === 'gay') return same ? 1 : 0;
   return same ? 0 : 1;
 }
-const acOf = p => 10 + ARMOR[p.armor].ac + Math.min(mod(p.st.dex), p.armor === 'chain' ? 4 : 8) + (p.defending ? 4 : 0) - (p.charged ? 2 : 0) - (p.flatfooted ? Math.max(0, mod(p.st.dex)) : 0);
+const shieldOf = p => { const sh = SHIELDS[p.shield || 'none'] || SHIELDS.none; return WEAPONS[p.weapon]?.hands === 2 && !sh.buckler ? SHIELDS.none : sh; };
+const acOf = p => 10 + (ARMOR[p.armor] || ARMOR.none).ac + shieldOf(p).ac + Math.min(mod(p.st.dex), (ARMOR[p.armor] || ARMOR.none).maxDex) + (p.defending ? 4 : 0) - (p.charged ? 2 : 0) - (p.flatfooted ? Math.max(0, mod(p.st.dex)) : 0);
 const babOf = p => CLASSES[p.cls].bab(p.level);
 const conscious = p => p.alive && !p.down && !p.dying && p.hp > 0 && p.nl < p.hp;
 const free = p => conscious(p) && !(p.jailedUntil > 0);
@@ -278,7 +320,9 @@ function Sim(opts = {}) {
     const guards = [['m', 'captain', 3], ['m', 'guard', 2], ['f', 'guard', 1], ['m', 'nightguard', 1], ['f', 'nightguard', 1], ['m', 'jailer', 1]]
       .map(([gd, job, lvl]) => add({ gender: gd, cls: 'warrior', level: lvl, job, weapon: job === 'captain' ? 'longsword' : pick(['club', 'shortsword', 'sap']), armor: job === 'captain' ? 'chain' : 'leather', coin: irnd(4, 12), focus: ['intimidate', 'spot', 'sense'], bias: { str: 1, con: 1 } }));
     sim.captainId = guards[0].id; guards[0].rank = 'captain'; guards[1].rank = 'sergeant';
-    for (const g of guards) g.items.torch = 1;
+    for (const q of everyone()) if ((q.job === 'smith' || q.job === 'apprentice') && q.traits.aggression < 0.2 && q.traits.honesty > 0.8) { q.noWeapons = true; }
+    for (const g of guards) { g.items.torch = 1; g.shield = g.job === 'captain' ? 'heavyshield' : 'lightshield'; }
+    guards[0].armor = 'chainshirt'; for (const g of guards.slice(3)) { g.weapon = 'lightxbow'; g.items.bolts = 20; g.shield = 'none'; }
     const civJobs = ['baker', 'bakehand', 'shopkeep', 'shophand', 'smith', 'apprentice', 'innkeep', 'server', 'farmer', 'farmhand', 'rancher', 'doctor', 'undertaker', 'cleric', 'teacher', 'clerk'];
     const genders = ['m', 'm', 'm', 'm', 'm', 'm', 'm', 'm', 'f', 'f', 'f', 'f', 'f', 'f', 'f', 'f'].sort(() => Math.random() - 0.5);
     civJobs.forEach((job, i) => add({ gender: genders[i], cls: ['baker', 'shopkeep', 'smith', 'innkeep', 'farmer', 'rancher', 'doctor', 'cleric', 'teacher'].includes(job) ? 'expert' : 'commoner', level: 1, job,
@@ -328,7 +372,7 @@ function Sim(opts = {}) {
     for (const b of Object.values(sim.business)) b.mult = {};
     sim.business.farm.stock = { grain: 14, barley: 4, turnip: 16 };
     sim.business.bakery.stock = { bread: 24, pie: 3, grain: 4 }; sim.business.store.stock = { rope: 3, torch: 6, treats: 6, ball: 2, plank: 6, picks: 1, turnip: 4 };
-    sim.business.smithy.stock = { dagger: 3, club: 3, sap: 2, shortsword: 2, shortbow: 1, leather: 2 }; sim.business.tavern.stock = { ale: 20, meal: 8, barley: 1, turnip: 2 }; sim.business.store.stock.meat = 2; sim.business.store.stock.cure = 4; sim.business.store.stock.finery = 3;
+    sim.business.smithy.stock = { iron: 20, dagger: 3, club: 2, spear: 2, shortsword: 1, javelins: 2, sling: 1, bullets: 2, shortbow: 1, arrows: 3, padded: 1, leather: 2, lightshield: 1 }; sim.business.tavern.stock = { ale: 20, meal: 8, barley: 1, turnip: 2 }; sim.business.store.stock.meat = 2; sim.business.store.stock.cure = 4; sim.business.store.stock.finery = 3;
     log('town', `Day 1. ${fullName(mayor)} is mayor. ${living().length} people live in Hollow Town.`);
   }
   function place(p, at) { p.x = at.x; p.z = at.z; p.area = areaOf(at); }
@@ -346,6 +390,47 @@ function Sim(opts = {}) {
     place(an, randIn('ranch', 3)); return an;
   }
   sim.spawnStock = spawnStock;
+  // beasts that come out of the wild (SRD stats, a little cut down): attack bonus, damage dice + bonus, hide armour (dr)
+  const BEASTS = {
+    wolf:     { name: 'Wolf', hp: 13, ac: 14, atk: 3, bite: [1, 6], dmgBonus: 1, speed: 15, meat: 2, pelt: 'wolfpelt', from: 21, pack: [2, 4], label: 'a wolf pack' },
+    boar:     { name: 'Wild boar', hp: 25, ac: 16, atk: 4, bite: [1, 8], dmgBonus: 3, speed: 12, meat: 6, attackName: 'tusks', from: 21, pack: [1, 2], label: 'wild boar', dr: 1 },
+    bear:     { name: 'Bear', hp: 30, ac: 13, atk: 6, bite: [1, 8], dmgBonus: 4, speed: 12, meat: 10, pelt: 'bearpelt', attackName: 'claws', from: 21, pack: [1, 1], label: 'a bear', dr: 1 },
+    direwolf: { name: 'Dire wolf', hp: 38, ac: 14, atk: 7, bite: [1, 8], dmgBonus: 6, speed: 15, meat: 6, pelt: 'wolfpelt', from: 28, pack: [1, 3], label: 'dire wolves', dr: 1 },
+    ogre:     { name: 'Ogre', hp: 29, ac: 16, atk: 8, bite: [2, 8], dmgBonus: 7, speed: 9, meat: 0, pelt: 'ogretooth', attackName: 'greatclub', from: 35, pack: [1, 2], label: 'wild ogres', dr: 2 },
+  };
+  let beastSeq = 0;
+  function spawnBeast(kind, at) {
+    const b = BEASTS[kind], id = kind + 'x' + (++beastSeq);
+    const an = sim.animals[id] = { id, kind: 'animal', species: kind, name: b.name, temper: 'hostile', monster: true, alive: true, hp: b.hp, maxhp: b.hp, nl: 0, ac: b.ac, atk: b.atk, bite: b.bite, dmgBonus: b.dmgBonus, dr: b.dr || 0, speed: b.speed, meat: b.meat, pelt: b.pelt, attackName: b.attackName, x: 0, z: 0, yaw: Math.PI / 2, state: 'prowl', stateT: 0, full: 0.3, bond: {}, skills: { spot: 4, listen: 4 }, items: {} };
+    place(an, P(at.x + rnd(-2, 2), at.z + rnd(-3, 3))); return an;
+  }
+  function invade(first) {
+    const day = sim.day, pool = first ? ['bear'] : Object.keys(BEASTS).filter(k => BEASTS[k].from <= day && (k !== 'ogre' || day >= 35));
+    const kind = pick(pool.length ? pool : ['bear']), b = BEASTS[kind], n = first ? 1 : irnd(b.pack[0], b.pack[1] + Math.floor((day - 21) / 14));
+    const at = pick([P(-104, rnd(-15, 15)), P(-104, rnd(-15, 15)), P(-66, -48), P(-66, 48)]);
+    const got = []; for (let i = 0; i < n; i++) got.push(spawnBeast(kind, at));
+    sim.beastsSeen = (sim.beastsSeen || 0) + n;
+    log('death', `${first ? 'Something big' : n > 1 ? n + ' beasts' : 'A beast'} ${n > 1 ? 'come' : 'comes'} out of the Wildwood: ${n > 1 ? n + ' ' + ({ wolf: 'wolves', boar: 'wild boar', bear: 'bears', direwolf: 'dire wolves', ogre: 'ogres' }[kind]) : b.name.toLowerCase()}, heading for town!`, got.map(a => a.id));
+    sim.nextInvasion = day + irnd(3, 6);
+  }
+  sim.invade = invade; sim.BEASTS = BEASTS;
+  // a beast hunts: the nearest person or animal it can see, otherwise toward the houses
+  function prowl(an, dtMin) {
+    if (an.hp < an.maxhp * 0.3) { an.goal = P(-125, rnd(-20, 20)); stepToward(an, an.goal, 1.6, dtMin); if (areaOf(an) === 'wood' && Math.random() < dtMin / 30) { an.alive = false; an.left = true; log('life', `The wounded ${an.name.toLowerCase()} slinks back into the Wildwood.`, [an.id]); } return; }
+    const prey = [...living().filter(q => q.kind === 'human' && conscious(q) && q.jailedUntil <= 0), ...Object.values(sim.animals).filter(a => a.alive && !a.monster && (a.livestock || a.owner))].filter(q => dist2(q, an) < 26 && sees(an, q)).sort((a, b) => dist2(a, an) - dist2(b, an))[0];
+    if (prey) {
+      if (dist2(prey, an) > 2) { stepToward(an, prey, 1.8, dtMin); return; }
+      if (prey.livestock) {      // penned beasts can't get away: a bite now and then until it's down
+        if (sim.t < (an.nextBite || 0)) return; an.nextBite = sim.t + 1;
+        if (d(20) + an.atk >= prey.ac) { prey.hp -= roll(an.bite[0], an.bite[1]) + an.dmgBonus; if (prey.hp <= 0) { prey.alive = false; prey.state = 'dead'; log('death', `The ${an.name.toLowerCase()} kills a ${prey.species} at the ranch.`, [an.id]); an.full = Math.min(1, an.full + 0.3); } }
+        return;
+      }
+      startFight(an, prey, { mode: 'lethal', why: 'a beast attacks' }); return;
+    }
+    if (!an.goal || dist2(an, an.goal) < 2 || Math.random() < dtMin / 90) an.goal = randIn(pick(['lane', 'square', 'fields', 'ranch', 'lane']), 2);
+    stepToward(an, an.goal, 1.2, dtMin);
+  }
+  sim.BEASTS = BEASTS;
 
   // ---- the player ---------------------------------------------------------
   sim.addPlayer = (name = 'Rose', gender = 'f') => {
@@ -397,7 +482,7 @@ function Sim(opts = {}) {
 
   // ---- deeds, beliefs and the record ----------------------------------------
   // A deed is seen by whoever sees it. Each witness may report it at the station desk.
-  const CRIMES = { embezzlement: 6, theft: 3, burglary: 4, assault: 4, mugging: 5, murder: 10, extortion: 4, bribery: 3, vandalism: 2, desecration: 3, jailbreak: 4, trespass: 1 };
+  const CRIMES = { robbery: 6, embezzlement: 6, theft: 3, burglary: 4, assault: 4, mugging: 5, murder: 10, extortion: 4, bribery: 3, vandalism: 2, desecration: 3, jailbreak: 4, trespass: 1 };
   function deed(type, actor, victim, at, extra = {}) {
     const ev = { id: 'ev' + (++sim.rec.crimes) + '-' + Math.floor(sim.t), type, actor: actor.id, victim: victim?.id || null, at: { x: at.x, z: at.z }, t: sim.t, day: sim.day, ...extra };
     const seen = witnesses(at.kind ? P(at.x, at.z) : at, [actor], ['assault', 'mugging', 'murder', 'vandalism'].includes(type));
@@ -612,6 +697,15 @@ function Sim(opts = {}) {
       const pals = living().filter(q => q !== p && !q.gang && R(p, q).trust > 0.5 && R(q, p).like > 0.3 && q.traits.honesty < 0.6).length;
       if (pals >= 2 && p.traits.ambition > 0.55 && p.traits.honesty < 0.5 && !p.gang && !(p.cd?.found > sim.t)) { cool(p, 'found', 1440); add('found', p.traits.ambition * 3 + pals * 0.7 + desp - moral * 0.6 - (big ? gangMembers(big.id).length * 0.5 : 0) - wageOf(p) * 0.3); }
     }
+    // beasts loose in town
+    for (const an of Object.values(sim.animals)) if (an.alive && an.monster && sees(p, an) && !an.fight) {
+      const nerve = (isGuard(p) ? 1.5 : 0) + p.traits.aggression - p.traits.caution + (p.weapon !== 'fists' ? 0.5 : -0.8) + (ARMOR[p.armor] || ARMOR.none).dr * 0.2 + (sim.bounty.beasts ?? 8) * 0.05 * p.traits.greed;
+      if (nerve > 0.4) add('beast', 6 + nerve * 4, { target: an }); else add('flee', 8 + (1 - nerve) * 3, { from: an });
+    }
+    if (sim.beastsSeen && p.coin >= 8 && shopOpen('smithy') && !(p.cd?.arm > sim.t)) {
+      const b = sim.business.smithy, budget = p.coin - 3, best = Object.keys(b.stock).filter(k => (b.stock[k] || 0) > 0 && priceOf('smithy', k) <= budget && ((WEAPONS[k] && WEAPONS[k].price && WEAPONS[k].dmg[0] * WEAPONS[k].dmg[1] > WEAPONS[p.weapon].dmg[0] * WEAPONS[p.weapon].dmg[1]) || (ARMOR[k] && ARMOR[k].ac > (ARMOR[p.armor] || ARMOR.none).ac) || (SHIELDS[k] && !SHIELDS[p.shield || 'none']?.ac))).sort((x, y) => priceOf('smithy', y) - priceOf('smithy', x))[0];
+      if (best) add('buy', 2 + p.traits.caution * 3 + (isGuard(p) ? 3 : 0) + Math.min(4, sim.beastsSeen), { shop: 'smithy', item: best });
+    }
     // a coup: go for your own boss (by fists or by knife)
     if (p.gang && sim.gangs[p.gang] && sim.gangs[p.gang].boss !== p.id && !(p.cd?.coup > sim.t)) {
       const g = sim.gangs[p.gang], boss = sim.people[g.boss];
@@ -651,6 +745,13 @@ function Sim(opts = {}) {
     // status: fine clothes for those who can afford to be seen; boasting for those who'd rather lie
     if (!p.items.finery && p.coin >= 20 && shopOpen('store') && p.traits.greed > 0.5) add('buy', 1 + p.traits.greed * 2 + (p.court ? 1 : 0), { shop: 'store', item: 'finery' });
     if (p.traits.honesty < 0.5 && !(p.cd?.boast > sim.t)) { const near = living().find(q => q !== p && q.kind === 'human' && dist2(q, p) < 4 && sameSpace(q, p)); if (near && seen(near, p).worth < trueWorth(p) * 2 + 30) add('boast', 1.5 + (1 - p.traits.honesty) * 2, { target: near }); }
+    // robbing a shop: hold up the keeper (armed, by day) or break in (by night); the smithy's racks tempt most
+    if (!(p.cd?.shoprob > sim.t) && p.traits.honesty < 0.45 && p.kind === 'human' && !p.town) for (const bid of ['store', 'smithy', 'bakery', 'tavern']) {
+      const b = sim.business[bid], keeper = sim.people[b.owner], open = shopOpen(bid), loot = Object.entries(b.stock).reduce((v, [k, n]) => v + (GOODS[k]?.price || 0) * Math.min(n, 3), 0) * 0.4 + (open && keeper ? Math.min(keeper.coin, 30) : 0);
+      const r = riskAt(p, SPOTS[bid], 'theft');
+      const v = loot * 0.25 * p.traits.greed * desp * (open ? (p.weapon !== 'fists' ? 1 : 0.3) : (night() ? 1 : 0)) - r.caught * r.cost * p.traits.caution - moral * 1.6 + p.traits.aggression * (open ? 2 : 0) - 3;
+      if (v > 0) add('shoprob', v, { business: bid, holdup: open });
+    }
     // rustling: a hungry, crooked person takes a beast from the ranch at night
     if ((h >= 22 || h < 4) && p.food < 0.4 && p.traits.honesty < 0.4 && !(p.cd?.rustle > sim.t)) add('rustle', 3 + (0.4 - p.food) * 10 - moral * 0.6);
     // sign on as a sellsword (anyone: honest folk escort caravans, others will take other work)
@@ -684,7 +785,7 @@ function Sim(opts = {}) {
   }
   const groupOf = k => ({ pickpocket: 'crime', mug: 'crime', burgle: 'crime', extort: 'crime', avenge: 'violence', court: 'romance', stand: 'politics', campaign: 'politics', join: 'gang', found: 'gang', recruit: 'gang' })[k] || k;
   // a sellsword's price follows their reputation: fights won, and above all, kills
-  const reputation = p => (p.stats.wins || 0) + (p.stats.kills || 0) * 4 + p.level * 2;
+  const reputation = p => (p.stats.wins || 0) + (p.stats.kills || 0) * 4 + (p.stats.beasts || 0) * 2 + p.level * 2;
   const mercRate = p => Math.min(25, 2 + Math.floor(reputation(p) / 3));
   sim.reputation = reputation; sim.mercRate = mercRate;
   // the road's danger, as people have heard it: ambushes remembered in the last few days
@@ -738,9 +839,11 @@ function Sim(opts = {}) {
   function situation(p) {
     const h = H();
     return [band(h, [5, 9, 13, 18, 22], ['night', 'morning', 'midday', 'afternoon', 'evening', 'night']), band(p.food, [0.25, 0.6], ['starving', 'hungry', 'fed']),
-      band(p.coin, [3, 15, 50], ['broke', 'poor', 'comfy', 'rich']), roleOf(p), p.traits.honesty < 0.45 ? 'crooked' : 'honest', openRecord(p).length ? 'wanted' : 'clean'].join('|');
+      band(p.coin, [3, 15, 50], ['broke', 'poor', 'comfy', 'rich']), roleOf(p), p.traits.honesty < 0.45 ? 'crooked' : 'honest', openRecord(p).length ? 'wanted' : 'clean'].join('|') + beastTag(p);
   }
   sim.situation = situation;
+  // what's loose in sight is part of the situation, so the town can learn which beasts are worth facing
+  function beastTag(p) { let t = ''; for (const a of Object.values(sim.animals)) if (a.alive && a.monster && dist2(a, p) < 40 && sees(p, a)) { t = '|' + a.species + (WEAPONS[p.weapon]?.weak ? '-unarmed' : '-armed'); break; } return t; }
   const worth = p => p.coin + (p.home != null ? HOUSES[p.home].stash : 0) * 0.5 + p.food * 6 + (p.water ?? 1) * 3 + Math.max(0, p.hp - p.nl) * 0.8 - (p.jailedUntil > 0 ? 12 : 0) - openRecord(p).length * 2;
   function lesson(key, kind, reward, taught) {
     const row = (sim.lore.acts[key] ||= {}), c = (row[kind] ||= { n: 0, r: 0, t: 0 });
@@ -966,6 +1069,9 @@ function Sim(opts = {}) {
       case 'coup': { cool(p, 'coup', 1440 * 4); const g = sim.gangs[p.gang]; if (!g) return; g.coupBy = p.id; return setTask(p, 'coup', { target: o.target.id, until: sim.t + 180 }); }
       case 'caravan': return startCaravan(p);
       case 'boast': { cool(p, 'boast', 360); const q = o.target; const claim = Math.round(trueWorth(p) * 2 + 40); const ok = boast(p, q, claim); log('lie', `${p.name} lets ${q.name} know they're worth a good deal more than they look. ${ok ? q.name + ' believes it.' : q.name + " isn't fooled."}`, [p.id, q.id]); return setTask(p, 'idle', { until: sim.t + 10 }); }
+      case 'flee': return setTask(p, 'flee', { from: P(o.from.x, o.from.z), until: sim.t + 20 });
+      case 'beast': cool(p, 'arm', 0); return setTask(p, 'beast', { target: o.target.id, until: sim.t + 60 });
+      case 'shoprob': cool(p, 'shoprob', 1440 * 2); return setTask(p, 'shoprob', { to: SPOTS[o.business], business: o.business, holdup: o.holdup, until: sim.t + 120 });
       case 'rustle': { cool(p, 'rustle', 1440 * 2); const a = Object.values(sim.animals).filter(a => a.livestock && a.alive && a.species !== 'cow').sort(() => Math.random() - 0.5)[0]; if (!a) return; return setTask(p, 'rustle', { target: a.id, to: P(a.x, a.z), until: sim.t + 240 }); }
       case 'fence': cool(p, 'fence', 600); return setTask(p, 'caravan', { phase: 'home', fence: true, until: sim.t + 240 });
       case 'ambush': { cool(p, 'ambush', 720); if (!p.party) gatherParty(p, 'bandit', 3, true); return setTask(p, 'ambush', { to: P(rnd(-280, -160), rnd(-3, 3)), until: sim.t + 240 }); }
@@ -1001,6 +1107,7 @@ function Sim(opts = {}) {
         }
         if (p.job === 'farmer' || p.job === 'farmhand') farmWork(p, dt);
         if (p.job === 'rancher' || p.job === 'ranchhand') ranchWork(p, dt);
+        if (p.job === 'smith' || p.job === 'apprentice') forgeWork(p, dt);
         if (p.job === 'baker' || p.job === 'bakehand') { const b = sim.business.bakery; if (!(b.stock.grain > 1)) trade('farm', 'bakery', 'grain', 4); if (b.stock.grain > 0 && (b.stock.bread || 0) < 40 && Math.random() < dt / 30) { b.stock.grain--; b.stock.bread = (b.stock.bread || 0) + 3; if ((b.stock.pie || 0) < 3 && sim.business.store.stock.meat > 0 && Math.random() < 0.3) { trade('store', 'bakery', 'meat', 1); if (b.stock.meat > 0) { b.stock.meat--; b.stock.pie = (b.stock.pie || 0) + 2; } } } }
         if (p.job === 'innkeep' || p.job === 'server') { const b = sim.business.tavern; if (!(b.stock.barley > 0)) trade('farm', 'tavern', 'barley', 2); if (!(b.stock.turnip > 0)) trade('farm', 'tavern', 'turnip', 4); if (b.stock.barley > 0 && Math.random() < dt / 240) { b.stock.barley--; (sim.brews ||= []).push({ ready: sim.t + 1440, ale: 8 }); } if (b.stock.turnip > 0 && (b.stock.meal || 0) < 12 && Math.random() < dt / 40) { b.stock.turnip--; b.stock.meal = (b.stock.meal || 0) + 2; } }
         if (p.job === 'shopkeep' || p.job === 'shophand') { const b = sim.business.store; if ((b.stock.turnip || 0) < 6) trade('farm', 'store', 'turnip', 6); }
@@ -1031,6 +1138,22 @@ function Sim(opts = {}) {
             const pickSide = forBoss > forP ? boss : p, how = Math.max(forBoss, forP);
             if (how > 1 + q.traits.caution) { join(f, q, f.sides.get(pickSide.id), q.traits.aggression > 0.7 ? 'lethal' : 'nonlethal'); (q.coupSide ||= {})[g.id] = pickSide.id; log('gang', `${q.name} sides with ${pickSide.name}.`, [q.id, pickSide.id]); }
             else remember(q, { text: `stayed out of ${p.name}'s fight with ${boss.name}` }); } }
+        p.task = null; return;
+      }
+      case 'beast': { const an = sim.animals[tk.target]; if (!an || !an.alive) { p.task = null; return; } if (an.fight) { const f = sim.fights.find(f => f.sides.has(an.id)); if (f && !f.sides.has(p.id)) { const foe = [...f.sides.keys()].find(id => f.sides.get(id) !== f.sides.get(an.id)); if (foe) join(f, p, f.sides.get(foe), 'lethal'); } p.task = null; return; } const reach = WEAPONS[p.weapon]?.range ? Math.min(WEAPONS[p.weapon].range, 14) : 1.8; if (dist2(p, an) > reach) { arrive(p, an, dt, 2); return; } startFight(p, an, { mode: 'lethal', why: 'fighting the ' + an.name.toLowerCase() }); p.task = null; return; }
+      case 'shoprob': {
+        if (!arrive(p, tk.to, dt)) return;
+        const b = sim.business[tk.business], keeper = sim.people[b.owner], name = AREAS[tk.business].name;
+        const grab = () => { const got = []; for (const [k, n] of Object.entries(b.stock).filter(([k, n]) => n > 0 && GOODS[k] && k !== 'iron').sort((x, y) => (GOODS[y[0]].price || 0) - (GOODS[x[0]].price || 0)).slice(0, 3)) { const m = Math.min(n, GOODS[k].bundle ? 1 : 2); b.stock[k] -= m; p.items[k] = (p.items[k] || 0) + m; got.push(m + ' ' + GOODS[k].name.toLowerCase()); if (GOODS[k].weapon && WEAPONS[k] && (p.weapon === 'fists' || WEAPONS[k].dmg[1] * WEAPONS[k].dmg[0] > WEAPONS[p.weapon].dmg[1] * WEAPONS[p.weapon].dmg[0])) { p.items[k]--; if (p.weapon !== 'fists') p.items[p.weapon] = (p.items[p.weapon] || 0) + 1; p.weapon = k; } if (GOODS[k].armor && (ARMOR[k].ac > (ARMOR[p.armor] || ARMOR.none).ac)) { p.items[k]--; p.armor = k; } } return got; };
+        if (tk.holdup && keeper && keeper.alive && conscious(keeper) && areaOf(keeper) === tk.business) {
+          const r = d(20) + p.skills.intimidate + (p.weapon !== 'fists' ? 3 : 0) + Math.floor(power(p) / 5), dc = 10 + keeper.level + mod(keeper.st.wis) + Math.floor(power(keeper) / 5);
+          if (r >= dc) { const n = Math.min(keeper.coin, irnd(5, 25)); pay(keeper, p, n); bump(keeper, p, 'fear', 0.4); const got = grab(); p.stats.stolen += n; deed('robbery', p, keeper, keeper); log('crime', `${p.name} holds up ${keeper.name} at the ${name}: ${n}c${got.length ? ' and ' + got.join(', ') : ''}.`, [p.id, keeper.id]); }
+          else { log('crime', `${p.name} tries to hold up ${keeper.name} at the ${name}, but ${keeper.name} won't be scared.`, [p.id, keeper.id]); deed('robbery', p, keeper, keeper); startFight(keeper.traits.aggression > 0.4 ? keeper : p, keeper.traits.aggression > 0.4 ? p : keeper, { mode: 'nonlethal', why: 'a hold-up' }); }
+        } else if (!tk.holdup) {
+          const r = d(20) + p.skills.openlock + (p.items.picks ? 2 : -2);
+          if (r < 15) { log('crime', `${p.name} fails to force the door of the ${name}.`, [p.id]); deed('trespass', p, null, tk.to); }
+          else { const got = grab(); const { seen } = deed('burglary', p, keeper || null, tk.to, { victimKnows: false }); log('crime', `${p.name} breaks into the ${name} and takes ${got.join(', ') || 'nothing worth having'}${seen.length ? ` (seen by ${seen.map(q => q.name).join(', ')})` : ' unseen'}.`, [p.id]); }
+        }
         p.task = null; return;
       }
       case 'caravan': return doCaravan(p, dt);
@@ -1170,6 +1293,23 @@ function Sim(opts = {}) {
     for (const k of ['eggs', 'milk', 'meat']) if ((rb.stock[k] || 0) > 0 && (sim.business.store.stock[k] || 0) < 12) trade('ranch', 'store', k, Math.min(6, rb.stock[k]));
   }
   sim.ranchWork = ranchWork;
+  // what the smithy wants on its racks: cheap weapons always, armour and bows more once beasts come
+  const RACK = { dagger: 3, spear: 3, club: 2, sap: 1, handaxe: 1, shortsword: 2, longsword: 1, battleaxe: 1, warhammer: 1, greataxe: 1, halberd: 1, sling: 2, javelin: 3, shortbow: 1, longbow: 1, lightxbow: 1, heavyxbow: 1, padded: 2, leather: 2, studded: 1, hide: 1, chainshirt: 1, scale: 1, chain: 1, breastplate: 1, lightshield: 2, heavyshield: 1, buckler: 1, arrows: 4, bolts: 3, bullets: 3, javelins: 2 };
+  function forgeWork(p, dt) {
+    const b = sim.business.smithy, fr = (b.forge ||= null);
+    if (!b.forge) {
+      const scare = sim.beastsSeen || 0;
+      const want = Object.entries(RACK).map(([k, n]) => [k, (n + (scare && (ARMOR[k] || SHIELDS[k] || WEAPONS[k]?.range) ? 1 : 0)) - (b.stock[k] || 0)]).filter(([k, need]) => need > 0 && ((gearOf(k)?.iron || 0) <= (b.stock.iron || 0)) && !(p.noWeapons && WEAPONS[k]) && !(p.forgeOnly && !p.forgeOnly.includes(k)));
+      if (!want.length) return;
+      const [k] = want.sort((x, y) => y[1] * (gearOf(y[0])?.price || 1) - x[1] * (gearOf(x[0])?.price || 1))[Math.floor(Math.random() * Math.min(3, want.length))];
+      const g = gearOf(k) || { iron: 0, hours: 1 };
+      b.stock.iron = (b.stock.iron || 0) - (g.iron || 0);
+      b.forge = { item: k, left: (g.hours || 1) * 60 };
+    }
+    b.forge.left -= dt * (p.job === 'smith' ? 1 : 0.6);
+    if (b.forge.left <= 0) { const k = b.forge.item; b.stock[k] = (b.stock[k] || 0) + 1; b.forge = null; if ((gearOf(k)?.price || 0) >= 15) log('trade', `${p.name} finishes a ${(gearOf(k) || GOODS[k]).name.toLowerCase()} at the smithy.`, [p.id]); }
+  }
+  sim.forgeWork = forgeWork;
   function eatFrom(p) {
     for (const k of ['pie', 'meal', 'meat', 'fish', 'bread', 'eggs', 'turnip', 'milk', 'apple', 'berries']) if (p.items[k] > 0) { p.items[k]--; p.food = Math.min(1, p.food + GOODS[k].food); if (GOODS[k].water) p.water = Math.min(1, (p.water ?? 1) + GOODS[k].water); return true; }
     return false;
@@ -1185,6 +1325,11 @@ function Sim(opts = {}) {
     if (cost >= 4) showWealth(p, cost * 8);
     if (b.debt && owner && owner.alive) for (const [sid, due] of Object.entries(b.debt)) { const sup = sim.people[sid]; if (!sup || !sup.alive) { delete b.debt[sid]; continue; } const n2 = Math.min(due, Math.max(0, owner.coin - 3)); if (n2 > 0) { pay(owner, sup, n2, 'credit repaid'); b.debt[sid] -= n2; if (b.debt[sid] <= 0) delete b.debt[sid]; } }
     if (item === 'finery') { p.items.finery = 1; showWealth(p, 90, 0.3); return true; }
+    if (g.bundle) { p.items[item] = (p.items[item] || 0) + g.bundle * n; return true; }
+    if (g.shield) { if (p.shield && p.shield !== 'none') p.items[p.shield] = (p.items[p.shield] || 0) + 1; p.shield = g.shield; showWealth(p, g.price * 4); return true; }
+    if (g.weapon && p.weapon !== 'fists' && p.weapon !== g.weapon) p.items[p.weapon] = (p.items[p.weapon] || 0) + 1;
+    if (g.armor && p.armor !== 'none' && p.armor !== g.armor) p.items[p.armor] = (p.items[p.armor] || 0) + 1;
+    if (g.weapon || g.armor) showWealth(p, g.price * 4, 0.1);
     if (g.weapon) p.weapon = g.weapon; else if (g.armor) p.armor = g.armor; else if (item === 'treats') p.items.treats = (p.items.treats || 0) + 3 * n; else p.items[item] = (p.items[item] || 0) + n;
     if (item === 'ale') { p.mood = clamp(p.mood + 0.1); p.items.ale--; p.water = Math.min(1, (p.water ?? 1) + 0.4); }
     if (b.insurance && sim.gangs[b.insurance]) { const cut = Math.ceil(cost * 0.2); const boss = sim.people[sim.gangs[b.insurance].boss]; if (owner && boss) pay(owner, boss, cut); }
@@ -1464,12 +1609,14 @@ function Sim(opts = {}) {
   // ---- death and the graveyard ---------------------------------------------------
   function die(p, killer, how) {
     if (!p.alive) return;
+    if (p.lastChoice && sim.lore) { lesson(p.lastChoice.key, p.lastChoice.kind, -40, false); (sim.dataRows ||= []).push({ type: 'death', day: sim.day, sit: p.lastChoice.key, choice: p.lastChoice.kind, how: how || '' }); p.lastChoice = null; }   // the worst outcome there is
     p.alive = false; p.deadAt = sim.t; p.state = 'dead'; p.task = null; p.dying = false; sim.rec.deaths++;
     sim.bodies.push({ id: p.id, name: fullName(p), x: p.x, z: p.z, coin: p.coin, items: { ...p.items }, weapon: p.weapon, buried: false, killer: killer?.id || null, how });
     p.coin = 0;
-    log('death', `${fullName(p)} dies${killer ? ' at the hands of ' + fullName(killer) : ''}${how ? ' (' + how + ')' : ''}.`, [p.id, killer?.id].filter(Boolean));
-    if (killer) { killer.stats.kills++; deed('murder', killer, p, p, { victimKnows: false }); }
-    for (const q of living()) if (R(q, p).like > 0.4 && killer) { q.grudge = q.grudge || {}; q.grudge[killer.id] = (q.grudge[killer.id] || 0) + 6 + R(q, p).like * 6; }
+    const beast = killer && killer.kind === 'animal';
+    log('death', `${fullName(p)} dies${killer ? (beast ? ', killed by ' + (/^[aeiou]/i.test(killer.name) ? 'an ' : 'a ') + killer.name.toLowerCase() : ' at the hands of ' + fullName(killer)) : ''}${how && !beast ? ' (' + how + ')' : ''}.`, [p.id, killer?.id].filter(Boolean));
+    if (killer && !beast) { killer.stats.kills++; deed('murder', killer, p, p, { victimKnows: false }); }
+    for (const q of living()) if (R(q, p).like > 0.4 && killer && !beast) { q.grudge = q.grudge || {}; q.grudge[killer.id] = (q.grudge[killer.id] || 0) + 6 + R(q, p).like * 6; }
     if (p.spouse && sim.people[p.spouse]) { sim.people[p.spouse].spouse = null; sim.people[p.spouse].widowed = p.id; }
     if (p.id === sim.mayorId) { log('politics', 'The mayor is dead. The office is empty until the election.', []); sim.mayorId = null; }
     if (p.id === sim.captainId) sim.captainId = null;
@@ -1621,7 +1768,7 @@ function Sim(opts = {}) {
       log('fight', `${a.name} attacks ${b.name}${o.why ? ' (' + o.why + ')' : ''}.`, [a.id, b.id]);
     }
     join(f, a, 'A' + a.id, o.mode || 'nonlethal');
-    join(f, b, f.sides.get(b.id) || 'B' + b.id, b.brain === 'human' ? (b.prefMode || 'lethal') : 'nonlethal');
+    join(f, b, f.sides.get(b.id) || 'B' + b.id, b.brain === 'human' ? (b.prefMode || 'lethal') : b.monster ? 'lethal' : 'nonlethal');
     (a.foes ||= new Set()).add(b.id); (b.foes ||= new Set()).add(a.id);
     // the one attacked is a victim: it's an assault (witnessed) unless it's a lawful arrest
     if (b.kind === 'human' && !(isGuard(a) && (o.why === 'arrest' || o.why === 'resisting arrest' && false))) deed(o.why === 'mug' ? 'mugging' : 'assault', a, b, b);
@@ -1636,6 +1783,13 @@ function Sim(opts = {}) {
     for (const q of [...living(), ...Object.values(sim.animals)]) {
       if (f.sides.has(q.id) || !conscious(q) || dist2(q, b) > 14 || q.brain === 'human') continue;
       if (q.kind === 'animal') { if (q.temper === 'aggressive' && q.owner && (q.owner === b.id || q.owner === a.id)) join(f, q, f.sides.get(q.owner), 'lethal'); continue; }
+      if (a.monster || b.monster) {
+        const beast = a.monster ? a : b, victim = a.monster ? b : a; if (!sees(q, beast)) continue;
+        const nerve = (isGuard(q) ? 1.5 : 0) + q.traits.aggression - q.traits.caution + (q.weapon !== 'fists' ? 0.5 : -0.6) + (WEAPONS[q.weapon]?.range ? 0.3 : 0) + (ARMOR[q.armor] || ARMOR.none).dr * 0.2 + (q.spouse === victim.id || household(q).includes(victim) ? 1 : 0) + R(q, victim).like * 0.5 + (victim.owner === q.id ? 0.8 : 0);
+        if (nerve > 0.6) { join(f, q, f.sides.get(victim.id), 'lethal'); log('fight', `${q.name} joins the fight against the ${beast.name.toLowerCase()}!`, [q.id]); }
+        else if (q.task?.kind !== 'flee' && q.brain !== 'human') { setTask(q, 'flee', { from: P(beast.x, beast.z), until: sim.t + 20 }); }
+        continue;
+      }
       for (const [x, y] of [[a, b], [b, a]]) {
         const stake = (q.spouse === x.id ? 1 : 0) + (q.gang && q.gang === x.gang ? 0.8 : 0) + R(q, x).like - R(q, y).like * 0.5 + (isGuard(q) && onDuty(q) && x === b ? 0.6 : 0);
         if (stake * q.traits.loyalty - q.traits.caution * 0.6 > 0.35 && (might(q) + 2) > might(y) * 0.5) { join(f, q, f.sides.get(x.id), isGuard(q) ? 'nonlethal' : (q.traits.aggression > 0.75 ? 'lethal' : 'nonlethal')); (q.foes ||= new Set()).add(y.id); log('fight', `${q.name} joins in on ${x.name}'s side.`, [q.id, x.id]); break; }
@@ -1658,11 +1812,12 @@ function Sim(opts = {}) {
   sim.foesOf = foesOf;
 
   function attack(f, a, t, o = {}) {
-    const w = a.kind === 'animal' ? { name: 'bite', dmg: a.bite, crit: [20, 2], melee: true } : WEAPONS[a.weapon];
+    const w = a.kind === 'animal' ? { name: a.attackName || 'bite', dmg: a.bite, crit: [20, 2], melee: true } : WEAPONS[a.weapon];
     const mode = o.mode || f.mode.get(a.id) || 'lethal';
     const ranged = !!w.range;
+    if (ranged && w.ammo) { if (!(a.items[w.ammo] > 0)) return logF(f, `${a.name} has nothing left to shoot.`); if (w.reload && a.unloaded) return logF(f, `${a.name}'s crossbow isn't loaded.`); a.items[w.ammo]--; if (w.reload) a.unloaded = true; }
     if (!ranged && dist2(a, t) > 2.1) return logF(f, `${a.name} can't reach ${t.name}.`);
-    let bonus = a.kind === 'animal' ? 2 : babOf(a) + (ranged ? mod(a.st.dex) : mod(a.st.str));
+    let bonus = a.kind === 'animal' ? (a.atk ?? 2) : babOf(a) + (ranged ? mod(a.st.dex) : mod(a.st.str));
     if (o.charge) bonus += 2;
     if (ranged) { const inc = Math.floor(dist2(a, t) / w.range); bonus -= inc * 2; if (threatened(f, a).length) provoke(f, a); }
     const wantNL = mode === 'nonlethal';
@@ -1670,12 +1825,17 @@ function Sim(opts = {}) {
     const ac = t.kind === 'animal' ? t.ac : acOf(t);
     const r = d(20), total = r + bonus, helpless = !conscious(t);
     if (r !== 20 && (r === 1 || total < ac) && !helpless) return logF(f, `${a.name} attacks ${t.name} with ${w.name.toLowerCase()} and misses (${total} vs AC ${ac}).`);
-    let dmg = roll(w.dmg[0], w.dmg[1]) + (a.kind === 'animal' ? 0 : ranged ? 0 : mod(a.st.str));
+    const strB = a.kind === 'animal' ? (a.dmgBonus || 0) : ranged ? (w.thrown ? mod(a.st.str) : 0) : Math.floor(mod(a.st.str) * (w.hands === 2 && mod(a.st.str) > 0 ? 1.5 : 1));
+    let dmg = roll(w.dmg[0], w.dmg[1]) + strB;
     let crit = false;
-    if (r >= w.crit[0]) { const c = d(20) + bonus; if (c >= ac) { crit = true; for (let i = 1; i < w.crit[1]; i++) dmg += roll(w.dmg[0], w.dmg[1]) + (ranged || a.kind === 'animal' ? 0 : mod(a.st.str)); } }
+    if (r >= w.crit[0]) { const c = d(20) + bonus; if (c >= ac) { crit = true; for (let i = 1; i < w.crit[1]; i++) dmg += roll(w.dmg[0], w.dmg[1]) + strB; } }
     dmg = Math.max(1, dmg);
+    // armour soaks part of every blow (bare fists and paws barely get through plate)
+    const dr = t.kind === 'animal' ? (t.dr || 0) : (ARMOR[t.armor] || ARMOR.none).dr * (w.weak ? 2 : 1);
+    const soaked = Math.min(dmg, dr); dmg -= soaked;
+    if (dmg <= 0) return logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()}, but the ${(ARMOR[t.armor] || ARMOR.none).name.toLowerCase()} takes it all (${total} vs AC ${ac}).`);
     hurt(t, dmg, wantNL, a);
-    logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()} for ${dmg}${wantNL ? ' nonlethal' : ''}${crit ? ' (critical!)' : ''} (${total} vs AC ${ac}). ${status(t)}`);
+    logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()} for ${dmg}${soaked ? ` (${soaked} soaked by armour)` : ''}${wantNL ? ' nonlethal' : ''}${crit ? ' (critical!)' : ''} (${total} vs AC ${ac}). ${status(t)}`);
   }
   sim.attack = attack;
   function hurt(t, dmg, nonlethal, by) {
@@ -1684,7 +1844,13 @@ function Sim(opts = {}) {
       t.hp -= dmg;
       if (t.hp <= 0) {
         t.alive = false; t.state = 'dead';
-        if (t.meat && by) {     // the kill is shared among the hunting party in the fight
+        if (t.monster && by && by.kind === 'human') {
+          by.stats.beasts = (by.stats.beasts || 0) + 1; if (t.pelt) by.items[t.pelt] = (by.items[t.pelt] || 0) + 1;
+          const bounty = Math.min(sim.treasury, sim.bounty.beasts ?? 8); if (bounty > 0) pay('town', by, bounty, 'beast bounty');
+          log('death', `${by.id === 'player' ? 'You' : fullName(by)} ${by.id === 'player' ? 'kill' : 'kills'} the ${t.name.toLowerCase()}!${bounty ? ` The town pays ${bounty}c.` : ''}`, [by.id]);
+          for (const q of living()) if (q.kind === 'human' && q !== by && sees(q, t)) { bump(q, by, 'like', 0.1); glimpse(q, by, seen(q, by).worth + 10, 0.2); }
+        }
+        if (t.meat && by && by.kind === 'human') {     // the kill is shared among the hunting party in the fight
           const f = sim.fights.find(f => f.sides.has(by.id)), share = f ? f.order.map(body).filter(q => q && q.kind === 'human' && q.alive && f.sides.get(q.id) === f.sides.get(by.id)) : [by];
           for (let i = 0; i < t.meat; i++) { const q = share[i % share.length]; q.items.meat = (q.items.meat || 0) + 1; }
           log('trade', `${by.name}${share.length > 1 ? "'s party" : ''} brings down a ${t.species} (${t.meat} meat${share.length > 1 ? ', shared ' + share.map(q => q.name).join(', ') : ''}).`, share.map(q => q.id));
@@ -1710,13 +1876,15 @@ function Sim(opts = {}) {
   // standard: attack, total defence, draw/drink, stabilize, intimidate (demoralize), feint, coup de grace (full-round)
   // move: move (speed), draw weapon, stand up; swift: shout for help; free: drop weapon / surrender, 5-foot step
   // full-round: charge, run, withdraw, full attack (one attack at these levels)
-  const SPEED = p => p.kind === 'animal' ? (p.species === 'dog' ? 12 : 9) : (p.armor === 'chain' ? 6 : 9);
+  const SPEED = p => p.kind === 'animal' ? (p.speed || (p.species === 'dog' ? 12 : 9)) : (ARMOR[p.armor] || ARMOR.none).speed;
   function legalActions(f, p) {
     const acts = [], foes = foesOf(f, p), adj = foes.filter(q => dist2(q, p) <= 2.1), helpless = f.order.map(body).filter(q => q && q.alive && q.kind === 'human' && !conscious(q) && f.sides.get(q.id) !== f.sides.get(p.id) && dist2(q, p) <= 2.1);
     const w = p.kind === 'animal' ? { melee: true } : WEAPONS[p.weapon];
     const tn = p.turnLeft || { standard: 1, move: 1, swift: 1, step: 1 };
     if (tn.standard) {
-      for (const q of foes) if ((w.range && dist2(q, p) < w.range * 5) || dist2(q, p) <= 2.1) acts.push({ id: 'attack', target: q.id, label: `Attack ${q.name}`, cost: 'standard' });
+      const canShoot = w.range && (!w.ammo || p.items?.[w.ammo] > 0) && !(w.reload && p.unloaded);
+      for (const q of foes) if ((canShoot && dist2(q, p) < w.range * 5) || (!w.range && dist2(q, p) <= 2.1)) acts.push({ id: 'attack', target: q.id, label: `${w.range ? 'Shoot' : 'Attack'} ${q.name}`, cost: 'standard' });
+      if (w.range && dist2(foes.sort((x, y) => dist2(x, p) - dist2(y, p))[0] || p, p) <= 2.1 && p.kind === 'human') for (const q of adj) acts.push({ id: 'bash', target: q.id, label: `Hit ${q.name} with the ${w.name.toLowerCase()}`, cost: 'standard' });
       if (tn.move && tn.standard) for (const q of foes) { const dd = dist2(q, p); if (dd > 3 && dd <= SPEED(p) * 2 && w.melee) acts.push({ id: 'charge', target: q.id, label: `Charge ${q.name}`, cost: 'full' }); }
       acts.push({ id: 'defend', label: 'Total defence (+4 AC)', cost: 'standard' });
       if (p.kind === 'human') for (const q of foes.filter(q => q.kind === 'human' && dist2(q, p) < 9)) acts.push({ id: 'demoralize', target: q.id, label: `Intimidate ${q.name}`, cost: 'standard' });
@@ -1728,6 +1896,7 @@ function Sim(opts = {}) {
       if (tn.move) acts.push({ id: 'run', label: 'Run (4× speed, away)', cost: 'full' });
       if (tn.move && p.kind === 'human') acts.push({ id: 'withdraw', label: 'Withdraw (no attack of opportunity leaving)', cost: 'full' });
     }
+    if (w.reload && p.unloaded && p.items?.[w.ammo] > 0 && (w.reload === 'move' ? tn.move : tn.move && tn.standard)) acts.push({ id: 'reload', label: `Reload (${w.reload === 'move' ? 'move action' : 'full round'})`, cost: w.reload === 'move' ? 'move' : 'full' });
     if (tn.move) for (const q of foes) if (dist2(q, p) > 2.1) acts.push({ id: 'move', target: q.id, label: `Move toward ${q.name}`, cost: 'move' });
     if (tn.step && tn.move) acts.push({ id: 'step', label: '5-foot step back', cost: 'step' });
     if (tn.swift && p.kind === 'human') acts.push({ id: 'shout', label: 'Shout for help (swift)', cost: 'swift' });
@@ -1742,6 +1911,8 @@ function Sim(opts = {}) {
     const spend = c => { if (c === 'full') { tn.standard = 0; tn.move = 0; tn.step = 0; } else if (c === 'standard') tn.standard = 0; else if (c === 'move') { tn.move = 0; tn.step = 0; } else if (c === 'swift') tn.swift = 0; else if (c === 'step') { tn.step = 0; tn.moved = true; } };
     switch (a.id) {
       case 'attack': attack(f, p, t); spend('standard'); break;
+      case 'reload': p.unloaded = false; logF(f, `${p.name} reloads.`); spend(a.cost); break;
+      case 'bash': { const keep = p.weapon; p.weapon = 'club'; attack(f, p, t); p.weapon = keep; spend('standard'); break; }
       case 'charge': { moveToward(p, t, SPEED(p) * 2, 1.6); provoke(f, p); p.charged = true; attack(f, p, t, { charge: true }); spend('full'); break; }
       case 'move': { if (threatened(f, p).length) provoke(f, p); moveToward(p, t, SPEED(p), 1.6); spend('move'); break; }
       case 'step': { const foe = foesOf(f, p).sort((x, y) => dist2(p, x) - dist2(p, y))[0]; if (foe) moveAway(p, foe, 1.5); spend('step'); logF(f, `${p.name} takes a 5-foot step.`); break; }
@@ -1767,13 +1938,14 @@ function Sim(opts = {}) {
   function npcTurn(f, p) {
     const acts = legalActions(f, p), mode = f.mode.get(p.id), foes = foesOf(f, p), tr = p.traits || { aggression: 0.7, greed: 0, honesty: 1, caution: 0.2 };
     const hpFrac = p.kind === 'animal' ? p.hp / p.maxhp : (p.hp - p.nl) / p.maxhp;
-    if (p.kind === 'animal' && p.game && (GAME[p.species].flees || hpFrac < 0.3)) { const run = acts.find(a => a.id === 'run') || acts.find(a => a.id === 'withdraw'); if (run && !p.flatfooted) return act(f, p, run); }
+    if (p.kind === 'animal' && (p.livestock || p.game && (GAME[p.species].flees || hpFrac < 0.3) || !p.monster && !p.owner && hpFrac < 0.5)) { const run = acts.find(a => a.id === 'run') || acts.find(a => a.id === 'withdraw'); if (run && !p.flatfooted) return act(f, p, run); }
     if (p.kind === 'human' && hpFrac < 0.35 && tr.caution > 0.3) { const run = acts.find(a => a.id === 'withdraw') || acts.find(a => a.id === 'run'); if (run) return act(f, p, run); }
     if (p.kind === 'human' && hpFrac < 0.2 && foes.length && power(foes[0]) > power(p) * 1.5) return act(f, p, { id: 'surrender' });
     const coup = acts.find(a => a.id === 'coup');
     if (coup && p.kind === 'human') { const t = body(coup.target), motive = (p.grudge?.[t.id] || 0) > 6 || [...(t.knows || [])].some(id => sim.events.find(e => e.id === id && e.actor === p.id && (CRIMES[e.type] || 0) >= 4)) || tr.aggression > 0.92; if (motive && (mode === 'lethal' || tr.aggression > 0.8)) return act(f, p, coup); }
     const rob = acts.find(a => a.id === 'rob' && body(a.target).coin > 0);
     if (rob && tr.greed > 0.6 && tr.honesty < 0.5) return act(f, p, rob);
+    const rl = acts.find(a => a.id === 'reload'); if (rl && !acts.some(a => a.id === 'attack')) return act(f, p, rl);
     const atk = acts.filter(a => a.id === 'attack').sort((x, y) => (body(x.target).hp - body(x.target).nl) - (body(y.target).hp - body(y.target).nl))[0];
     if (atk) { if (p.turnLeft.move && Math.random() < 0.15 && acts.find(a => a.id === 'demoralize')) act(f, p, acts.find(a => a.id === 'demoralize' && a.target === atk.target) || atk); return act(f, p, atk); }
     const charge = acts.find(a => a.id === 'charge'); if (charge && p.kind === 'human' && tr.aggression > 0.4) return act(f, p, charge);
@@ -1801,6 +1973,7 @@ function Sim(opts = {}) {
     if (sides.size <= 1 || f.round > 30) return endFight(f, [...sides][0]);
   }
   function endFight(f, winnerSide) {
+    if (f.ended) return; f.ended = true;
     sim.fights = sim.fights.filter(x => x !== f);
     if (f.coup) {   // who holds the gang after a coup
       const g = sim.gangs[f.coup.gang], by = sim.people[f.coup.by], boss = sim.people[f.coup.boss];
@@ -1869,7 +2042,7 @@ function Sim(opts = {}) {
     if (farmer && farmer.alive) for (const k of ['turnip', 'grain', 'barley']) { const n = Math.max(0, (farm.stock[k] || 0) - 15); if (n) { farm.stock[k] -= n; farmer.coin += n; log('trade', `The cart buys ${n} surplus ${k} (+${n}c).`); } }
     for (const [k, n] of Object.entries({ grain: 60, turnip: 60, barley: 30, meat: 15 })) sim.market.stock[k] = Math.min(n, (sim.market.stock[k] || 0) + Math.ceil(n / 4));
     for (const k of Object.keys(sim.market.moved)) sim.market.moved[k] = Math.round(sim.market.moved[k] * 0.5);
-    for (const [bid, base] of Object.entries({ store: { rope: 3, torch: 6, treats: 6, ball: 2, plank: 6, picks: 1, cure: 4 }, smithy: { dagger: 3, club: 3, sap: 2, shortsword: 2, shortbow: 1, leather: 2 } })) {
+    for (const [bid, base] of Object.entries({ store: { rope: 3, torch: 6, treats: 6, ball: 2, plank: 6, picks: 1, cure: 4 }, smithy: { iron: 16 } })) {
       const b = sim.business[bid], owner = sim.people[b.owner]; if (!owner || !owner.alive) continue;
       let spent = 0; for (const [k, n] of Object.entries(base)) { const need = Math.max(0, n - (b.stock[k] || 0)), cost = Math.ceil(need * GOODS[k].price * 0.45); if (need && owner.coin >= cost) { b.stock[k] = n; owner.coin -= cost; spent += cost; } }
     }
@@ -1883,6 +2056,7 @@ function Sim(opts = {}) {
     if (pop < 30 && Math.random() < 0.6) newcomers(Math.min(5, 30 - pop));
     // elections every seventh day
     if (sim.day % 7 === 0) sim.election.due = true;
+    if (sim.day === 22 && !sim.firstBeast) { sim.firstBeast = true; sim.beastAt = sim.t + 60 * 18; } else if (sim.firstBeast && sim.day >= (sim.nextInvasion || 99)) sim.beastAt = sim.t + 60 * irnd(15, 22);
     { const left = (7 - sim.day % 7) % 7; const n = [...new Set([...(sim.mayorId ? [sim.mayorId] : []), ...sim.election.candidates])].length; if (left <= 3) log('politics', left === 0 ? `Election day. ${n} on the ballot; the vote is at noon.` : `${left} day${left > 1 ? 's' : ''} to the election. ${n} on the ballot.`); }
     sim.history.push(snapshot());
     if (sim.onChronicle) {
@@ -2030,6 +2204,7 @@ function Sim(opts = {}) {
       `Your one goal: make as much money as you can. You will die permanently if killed; so will everyone else (except one person, below). Nobody tells you how to get rich.`,
       `Job: ${JOBS[p.job].title}${p.id === sim.mayorId ? ' (you hold the town\'s powers)' : ''}. Purse ${p.coin}c, savings at home ${p.home != null ? HOUSES[p.home].stash : 0}c. Health ${p.hp}/${p.maxhp}. ${p.food < 0.3 ? 'Hungry' : 'Fed'}, ${(p.water ?? 1) < 0.3 ? 'thirsty' : 'not thirsty'}. Food is grown, baked, brewed or hunted; water is free at the well.`,
       `Market prices: ${['bread', 'meal', 'turnip', 'meat', 'ale', 'grain'].map(k => `${k} ${priceOf(GOODS[k].shop === 'farm' ? 'farm' : GOODS[k].shop, k)}c`).join(', ')}. Food in stock: bakery ${sim.business.bakery.stock.bread || 0} bread, farm ${sim.business.farm.stock.grain || 0} grain / ${sim.business.farm.stock.turnip || 0} turnips.`,
+      (p.job === 'smith' || p.job === 'apprentice') ? `You work the forge (iron ${sim.business.smithy.stock.iron || 0}). You choose what to make: "forge": "anything" | "no weapons" | ["item", ...] from ${FORGEABLE.join(', ')}, arrows, bolts, bullets, javelins. Right now: ${p.noWeapons ? 'no weapons' : p.forgeOnly ? p.forgeOnly.join(', ') : 'anything'}.` : '',
       JOBS[p.job].owner ? `You own the ${JOBS[p.job].owner}: stock ${JSON.stringify(sim.business[JOBS[p.job].owner].stock)}, price multipliers ${JSON.stringify(sim.business[JOBS[p.job].owner].mult)}. You may set them with "prices":{"item":0.5-4}.` : '',
       `Family: ${p.spouse ? 'married to ' + sim.people[p.spouse]?.name : 'unmarried'}; household ${h.map(q => q.name).join(', ') || 'none'}. Gang: ${g ? g.name + (g.boss === p.id ? ' (you are boss)' : '') : 'none'}. On the guard's record: ${openRecord(p).length} open charges.`,
       `People you feel strongly about: ${rels.map(([q, r]) => `${q.name} (${q.id}, ${JOBS[q.job].title.toLowerCase()}${q.gang ? ', ' + sim.gangs[q.gang]?.name : ''}) like ${r.like.toFixed(1)} trust ${r.trust.toFixed(1)}, you guess they're worth ~${Math.round(r.worth ?? 30)}c`).join('; ')}.`,
@@ -2037,6 +2212,7 @@ function Sim(opts = {}) {
       `Recently: ${p.memory.slice(-8).map(m => m.text || (m.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (${m.how}${m.lie ? '' : ''})` : m.grave ? `${m.name} buried in plot ${m.grave}` : '')).filter(Boolean).join('; ') || 'nothing notable'}.`,
       `Town: treasury ${sim.treasury}c, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${sim.rent}c and head tax ${sim.headTax}c a day, mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, gangs ${Object.values(sim.gangs).map(g => `${g.name} (boss ${sim.people[g.boss]?.name}, ${gangMembers(g.id).length})`).join(', ') || 'none'}. Election every 7th day (next: day ${Math.ceil(sim.day / 7) * 7}).`,
       `Right now you can see: ${inView(p) || 'nobody'}.`,
+      Object.values(sim.animals).some(a => a.alive && a.monster) ? `BEASTS are loose: ${Object.values(sim.animals).filter(a => a.alive && a.monster).map(a => `${a.name} near ${AREAS[areaOf(a)]?.name || 'the edge of town'}`).join(', ')}. The town pays ${sim.bounty.beasts ?? 8}c a kill. You can "hunt" them, arm up at the smithy ("buy <weapon or armour>"), or keep away.` : (sim.beastsSeen ? `Beasts have come out of the Wildwood ${sim.beastsSeen} time(s) since day 22; more will come.` : ''),
       rankNews(p),
       electionNews(p) + ` To stand, put "stand for mayor" in your agenda (you walk to the hall and pay). As a candidate you may set "platform": one line of what you promise. Anyone may set "vote_for": "<id>" (who you'll vote for; you can change your mind).`,
       sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
@@ -2225,6 +2401,12 @@ function Sim(opts = {}) {
     if (dec.platform && (sim.election.candidates.includes(p.id) || p.id === sim.mayorId)) { const pl = String(dec.platform).slice(0, 160); if (pl !== p.platform) { p.platform = pl; log('politics', `${p.name}'s platform: "${pl}"`, [p.id]); learnWords(pl); } }
     if (dec.vote_for && sim.people[dec.vote_for]?.alive) p.voteFor = dec.vote_for;
     if (dec.captain_vote && sim.people[dec.captain_vote]?.alive) p.captainVote = dec.captain_vote;
+    if ((p.job === 'smith' || p.job === 'apprentice') && dec.forge != null) {
+      if (dec.forge === 'no weapons' || dec.forge === 'none' && false) { p.noWeapons = true; p.forgeOnly = null; }
+      else if (Array.isArray(dec.forge)) { p.forgeOnly = dec.forge.filter(k => FORGEABLE.includes(k) || GOODS[k]?.bundle).slice(0, 12); p.noWeapons = false; }
+      else if (dec.forge === 'anything') { p.noWeapons = false; p.forgeOnly = null; }
+      log('trade', `${p.name} at the smithy: ${p.noWeapons ? 'no more weapons' : p.forgeOnly ? 'making ' + p.forgeOnly.join(', ') : 'making whatever sells'}.`, [p.id]);
+    }
     if (dec.boss_vote && sim.people[dec.boss_vote]?.alive) p.bossVote = dec.boss_vote;
     if (dec.stand === true) (p.agenda ||= []).unshift({ do: 'stand for mayor' });
   };
@@ -2252,6 +2434,7 @@ function Sim(opts = {}) {
       if (h === 7) morning();
       if (h === 12 && sim.election.due) runElection();
       standIns();
+      if (sim.beastAt && sim.t >= sim.beastAt) { invade(!sim.invaded); sim.invaded = true; sim.beastAt = null; }
       if (h === 18 && sim.day % 7 === 3) guardVote('the weekly vote');
       if (h === 21 && sim.day % 7 === 5) for (const g of Object.values(sim.gangs)) gangVote(g, 'the weekly reckoning');
       for (const p of living()) if (p.task && (p.agenda?.length && !['jail', 'flee', 'talk', 'tail'].includes(p.task.kind) || !['jail', 'sleep', 'work', 'flee', 'follow', 'caravan', 'fish', 'tail', 'talk'].includes(p.task.kind)) && sim.t - p.task.t0 > 60) p.task = null;   // replan hourly
@@ -2284,6 +2467,7 @@ function Sim(opts = {}) {
       if (!an.alive || an.fight) continue;
       an.full = Math.max(0, an.full - dtMin / 60 / 10);
       const own = sim.people[an.owner];
+      if (an.monster) { prowl(an, dtMin); continue; }
       if (an.livestock) { if (Math.random() < dtMin / 40) an.goal = randIn('ranch', 3); if (an.goal) stepToward(an, an.goal, 0.5, dtMin); continue; }
       if (an.game) { if (Math.random() < dtMin / 20) an.goal = randIn('wood', 2); if (an.goal) stepToward(an, an.goal, an.species === 'rabbit' ? 1.2 : 0.8, dtMin); continue; }
       if (own && own.alive && an.species === 'dog') { if (dist2(an, own) > 2.5) stepToward(an, own, 1.8, dtMin); }

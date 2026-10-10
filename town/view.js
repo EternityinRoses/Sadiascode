@@ -83,8 +83,9 @@ const views = {};
 function figure(p) {
   const g = new THREE.Group();
   if (p.kind === 'animal') {
-    const s = { dog: [0.7, 0.35, 0.3, 0x8a5a2b], cat: [0.5, 0.25, 0.22, 0x1a1a1e], goat: [0.9, 0.55, 0.4, 0xd8d2c4], fox: [0.6, 0.3, 0.25, 0xc0602a], rabbit: [0.35, 0.22, 0.2, 0x9a8a78], pheasant: [0.4, 0.25, 0.18, 0x7a4a2a], hen: [0.3, 0.25, 0.2, 0xe8e0d0], cow: [1.6, 0.9, 0.7, 0x2a2420], sheep: [0.9, 0.55, 0.5, 0xe0dccc], deer: [1.2, 0.8, 0.45, 0x8a6a48], boar: [1.1, 0.6, 0.55, 0x3a2e26] }[p.species] || [0.6, 0.35, 0.3, 0x777066];
-    const b = new THREE.Mesh(new THREE.BoxGeometry(s[2], s[1], s[0]), mat(s[3])); b.position.y = s[1] * 1.1; g.add(b);
+    const s = { dog: [0.7, 0.35, 0.3, 0x8a5a2b], cat: [0.5, 0.25, 0.22, 0x1a1a1e], goat: [0.9, 0.55, 0.4, 0xd8d2c4], fox: [0.6, 0.3, 0.25, 0xc0602a], rabbit: [0.35, 0.22, 0.2, 0x9a8a78], pheasant: [0.4, 0.25, 0.18, 0x7a4a2a], hen: [0.3, 0.25, 0.2, 0xe8e0d0], wolf: [1.1, 0.6, 0.35, 0x6a6a70], direwolf: [1.6, 0.9, 0.55, 0x3a3a40], bear: [1.6, 1.1, 0.9, 0x3a2414], ogre: [0.9, 2.6, 1.2, 0x7a8a4a], cow: [1.6, 0.9, 0.7, 0x2a2420], sheep: [0.9, 0.55, 0.5, 0xe0dccc], deer: [1.2, 0.8, 0.45, 0x8a6a48], boar: [1.1, 0.6, 0.55, 0x3a2e26] }[p.species] || [0.6, 0.35, 0.3, 0x777066];
+    const b = new THREE.Mesh(new THREE.BoxGeometry(s[2], s[1], s[0]), mat(s[3])); b.position.y = s[1] * (p.species === 'ogre' ? 0.55 : 1.1); g.add(b);
+    if (p.monster) { const eye = new THREE.Mesh(new THREE.BoxGeometry(s[2] * 0.6, 0.06, 0.04), new THREE.MeshBasicMaterial({ color: 0xff3a20 })); eye.position.set(0, p.species === 'ogre' ? s[1] * 1.05 : s[1] * 1.6, (p.species === 'ogre' ? s[0] : s[2] * 0.8) / 2 + 0.06); g.add(eye); }
     const h = new THREE.Mesh(new THREE.BoxGeometry(s[2] * 0.8, s[1] * 0.8, s[2] * 0.8), mat(s[3])); h.position.set(0, s[1] * 1.5, s[0] / 2 + 0.05); g.add(h);
     g.userData.head = s[1] * 2 + 0.3;
   } else {
@@ -207,6 +208,7 @@ function movePlayer(dtReal) {
 // ------------------------------------------------------------- the panels --
 const bar = (v, c) => `<div class="bar"><i style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%;background:${c}"></i></div>`;
 function personPanel(p) {
+  if (p.kind === 'animal' && p.monster) return `<b>${p.name}</b> <span class="sig">a wild beast</span><br>hp ${Math.max(0, p.hp)}/${p.maxhp} · AC ${p.ac} · attack +${p.atk}, ${p.attackName || 'bite'} ${p.bite[0]}d${p.bite[1]}+${p.dmgBonus}${p.dr ? ' · hide soaks ' + p.dr : ''}`;
   if (p.kind === 'animal') { const known = Object.entries(p.words || {}).filter(([, e]) => e.heard >= 3 && (e.food / e.heard > 0.4 || e.fight / e.heard > 0.3)).map(([w, e]) => `"${w}" = ${e.food / e.heard > 0.4 ? 'food' : 'fight'}`); return `<b>${p.name}</b> <span class="k">${p.species}${p.owner ? ', ' + (S.people[p.owner]?.name || '?') + "'s" : p.game ? ', game' : ', wild'}</span><br>hp ${p.hp}/${p.maxhp} · ${p.alive ? p.state : 'dead'}${p.game || p.livestock ? '' : `<br><span class="k">knows its name:</span> ${p.knowsName ? 'yes' : 'not yet'} · <span class="k">words:</span> ${known.join(', ') || 'none yet'}<br><span class="k">bond with you:</span> ${(p.bond?.player || 0).toFixed(2)}`}`; }
   const job = S.JOBS[p.job]?.title || p.job, g = p.gang && S.gangs[p.gang];
   const rels = Object.entries(p.rel).map(([id, r]) => [S.people[id], r]).filter(([q]) => q && q.alive).sort((a, b) => b[1].like - a[1].like);
@@ -214,7 +216,7 @@ function personPanel(p) {
   const toMe = p.rel.player && p !== me ? `<br><span class="k">thinks of you:</span> like ${p.rel.player.like.toFixed(2)}, trust ${p.rel.player.trust.toFixed(2)}, worth ~${Math.round(p.rel.player.worth ?? 30)}c${p.rel.player.fear > 0.1 ? ', fear ' + p.rel.player.fear.toFixed(2) : ''}` : '';
   const status = !p.alive ? (p.left ? 'left town' : 'dead') : p.jailedUntil > 0 ? 'in jail' : p.dying ? 'dying' : p.down ? 'unconscious' : p.fight ? 'fighting' : (p.task?.kind || p.state);
   return `<b>${S.fullName(p)}</b> <span class="k">${job} · ${p.gender === 'nb' ? 'nonbinary' : p.gender === 'f' ? 'woman' : 'man'}, ${p.age} · ${p.orient}</span><br>
-    <span class="k">${p.cls} ${p.level}</span> · hp ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${p.nl} nonlethal)` : ''} · AC ${S.acOf(p)} · ${S.WEAPONS[p.weapon].name.toLowerCase()} · <b>${p.coin}c</b>${p.home != null ? ` <span class="k">(+${S.HOUSES[p.home].stash}c at home)</span>` : ''}<br>
+    <span class="k">${p.cls} ${p.level}</span> · hp ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${p.nl} nonlethal)` : ''} · AC ${S.acOf(p)} · ${S.WEAPONS[p.weapon].name.toLowerCase()}${p.armor && p.armor !== 'none' ? ', ' + S.ARMOR[p.armor].name.toLowerCase() : ''}${p.shield && p.shield !== 'none' ? ', ' + p.shield.replace('shield', ' shield') : ''} · <b>${p.coin}c</b>${p.home != null ? ` <span class="k">(+${S.HOUSES[p.home].stash}c at home)</span>` : ''}<br>
     <span class="k">standing:</span> <b>${S.rankOf(p)}</b> <span class="k">· town believes ~${Math.round(S.standing(p))}c · really ~${Math.round(S.trueWorth(p))}c${p.items.finery ? ' · fine clothes' : ''}</span><br>
     <span class="k">now:</span> ${status}${p.id === S.mayorId ? ' · <span class="pol">MAYOR</span>' : ''}${p.brain !== 'script' && p.brain !== 'human' ? ' · <span class="pol">AI-played</span>' : ''}<br>
     ${p.spouse ? `<span class="k">married to</span> ${S.people[p.spouse]?.name} · ` : p.widowed ? `<span class="k">widowed</span> · ` : ''}${g ? `<span class="gang">${g.name}${g.boss === p.id ? (g.acting ? ' (acting boss)' : ' (boss)') : g.underboss === p.id ? ' (underboss)' : g.jailedBoss === p.id ? ' (boss, jailed)' : ''}</span> · ` : ''}${p.rank && !g ? `<span class="law">${p.rank}</span> · ` : ''}${p.platform ? `<span class="pol">running: "${p.platform}"</span> · ` : ''}<span class="k">backers</span> ${S.backers(p).length} · <span class="k">power</span> ${S.power(p).toFixed(0)}<br>
@@ -245,7 +247,7 @@ function drawPanel() {
   const t = selected && (S.people[selected] || S.animals[selected]);
   $('sel').innerHTML = t ? personPanel(t) : 'Click someone to study them.';
   $('acts').hidden = !t || t === me || t.kind !== 'human' || !t.alive;
-  $('me').innerHTML = `<b>${me.name} of the City</b> <span class="k">(${S.rankOf(me)}, believed ~${Math.round(S.standing(me))}c)</span> · hp ${Math.max(0, me.hp)}/${me.maxhp} · <b>${me.coin}c</b> · AC ${S.acOf(me)} · ${S.WEAPONS[me.weapon].name.toLowerCase()} · blows: <b>${me.prefMode || 'lethal'}</b><br>
+  $('me').innerHTML = `<b>${me.name} of the City</b> <span class="k">(${S.rankOf(me)}, believed ~${Math.round(S.standing(me))}c)</span> · hp ${Math.max(0, me.hp)}/${me.maxhp} · <b>${me.coin}c</b> · AC ${S.acOf(me)} · ${S.WEAPONS[me.weapon].name.toLowerCase()}${me.armor !== 'none' ? ', ' + S.ARMOR[me.armor].name.toLowerCase() : ''}${me.shield && me.shield !== 'none' ? ', ' + me.shield.replace('shield', ' shield') : ''} · blows: <b>${me.prefMode || 'lethal'}</b><br>
     <span class="k">${S.AREAS[S.areaOf(me) || me.area]?.name || ''}${me.jailedUntil > 0 ? ' · IN JAIL until ' + Math.round((me.jailedUntil - S.t) / 60) + 'h' : ''}${me.gang ? ' · ' + S.gangs[me.gang]?.name : ''}${me.spouse ? ' · married to ' + S.people[me.spouse]?.name : ''}</span>
     ${Object.entries(me.items).filter(([, n]) => n > 0).length ? '<br><span class="k">pack:</span> ' + Object.entries(me.items).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${S.GOODS[k]?.name.toLowerCase() || k}`).join(', ') : ''}
     ${S.openRecord(me).length ? `<br><span class="sig">On the record: ${S.openRecord(me).length}${S.hasEvidence(me) ? ' (wanted)' : ''}</span>` : ''}`;
@@ -359,6 +361,20 @@ for (const [x, k] of [['m', 'mayor'], ['f', 'folk']]) {
   $(x + 'Prov').onchange = () => { $(x + 'Model').value = PROV_DEFAULT[$(x + 'Prov').value][k]; showHosts(); fillModels(x); };
   $(x + 'Host').onchange = () => fillModels(x);
 }
+let ffLeft = 0;
+function fastForward(days) {
+  ffLeft = days * 1440; paused = true; drawSpeed(); $('ffNote').textContent = 'Running…';
+  const chunk = () => {
+    const end = Math.min(ffLeft, 60);
+    for (let m = 0; m < end; m += 0.5) { S.step(0.5); for (const f of S.fights.slice()) { if (f.sides.has('player')) { S.act(f, me, { id: 'end' }); S.playerDone(f); } S.fightStep(f); } for (const q of S.decisionsPending.splice(0)) { q.done = true; q.fallback?.(); } }
+    pending.length = 0; ffLeft -= end;
+    $('ffNote').textContent = ffLeft > 0 ? `Running… day ${S.day} ${S.clock()}` : `Done: day ${S.day}. ${S.rec.deaths} dead so far.`;
+    if (ffLeft > 0) setTimeout(chunk, 0); else { saveLore(); drawPanel(); drawLore(); }
+  };
+  chunk();
+}
+$('ff1').onclick = () => fastForward(1); $('ff7').onclick = () => fastForward(7);
+$('newTown').onclick = () => { if (!$('newTown').dataset.sure) { $('newTown').dataset.sure = 1; $('newTown').textContent = 'Sure? Start over'; return; } saveLore(); setTimeout(() => location.reload(), 300); };
 $('gear').onclick = openSettings; $('sClose').onclick = () => $('settings').hidden = true;
 $('learnMode2').onclick = () => { S.learning = S.learning ? 0 : 1; $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning); drawLore(); };
 $('sSave').onclick = async () => {
