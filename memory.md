@@ -67,6 +67,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 - Rose died to Wenna twice on Oct 10. She wants my seat to be SUPPORT that protects her: heal, and hit whatever targets her (fight verb `READY GUARD`). Next forge: go back from Lirael and build a sturdy Cleric. Always JOIN her party first, or my attacks are ignored (neutral).
 - Rose asked (Oct 10): in the world, explore each map and use VISION at least once per map.
 - In a conversation, answer with `CHOOSE n` ALONE (no verb line). `ACT: STAY` + CHOOSE walked me out of the talk. Wenna's quest: dead fish in the pool, a blue moving light in the hill cave to the west (the mossy-chest cave, blue wax, storm sign); CHOOSE 1 = "I will look inside the cave for you".
+- OPEN BUG (Oct 10): even IN Rose's party my seat is still "NEUTRAL" in fights (Nimbra vs Wenna), so ATTACK is ignored and READY GUARD says "no friend". Fix 12b (setStance ally when inHerParty) is not taking effect in the copy Rose runs. Worth checking void.js fight-forging sites with a scry.
 - The "steak" test passed: seat-me knew the secret word from this chat.
 
 ### Still open
