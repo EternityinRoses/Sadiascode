@@ -734,6 +734,37 @@ def run_turn_code(chat, user_text, attachments, emit):
 SESSION_RE = re.compile(r"(?:claude\.ai/code/)?\b((?:session|cse)_[A-Za-z0-9]+)")
 
 
+CLOUD_OPENER = ("Hi! I'm Cloude, the user's local chat app on their PC. I'll pass their "
+                "messages to you from here on, so please wait for the next one.")
+
+
+def open_cloud_terminal(exe, root):
+    """`claude --cloud` only starts a session from a real terminal, so open one.
+    It shows the session link, and the session's replies, as they come.
+    Returns False where we can't pop a window (then the user runs it by hand)."""
+    if os.name != "nt":
+        return False
+    try:
+        subprocess.Popen([exe, "--cloud", CLOUD_OPENER], cwd=root,
+                         creationflags=subprocess.CREATE_NEW_CONSOLE)
+        return True
+    except OSError:
+        return False
+
+
+def cloud_send(exe, root, session, message):
+    """Queue one message into an existing cloud session (works without a terminal)."""
+    done = subprocess.run([exe, "-p", "--cloud", session, "--output-format", "json"],
+                          cwd=root, input=message, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=120)
+    try:
+        res = json.loads(done.stdout)
+    except ValueError:
+        res = {"ok": False, "error": (done.stdout + done.stderr).strip()[-600:]}
+    if not res.get("ok"):
+        raise RuntimeError("Couldn't reach the cloud session: " + str(res.get("error")))
+
+
 def run_turn_cloud(chat, user_text, attachments, emit):
     """Hand the message to a Claude Code cloud session (cloud credit).
     The cloud does the work; its replies show up in the Claude app."""
@@ -749,41 +780,43 @@ def run_turn_cloud(chat, user_text, attachments, emit):
         raise RuntimeError("Tell the cloud what to do in words; pictures and files stay on this PC.")
     log_user(chat, user_text, attachments)
     shown = {"role": "assistant", "text": "", "thoughts": "", "tools": []}
+
+    def say(text):
+        shown["text"] = text
+        emit({"type": "text", "text": text})
+
     try:
         if attachments:
             emit({"type": "notice", "text": "Heads up: the cloud can't see attached files on this PC. "
                                             "Commit and push them if it needs them."})
-        message = with_handoff(chat, user_text, 60_000)
         if not chat.get("cloud_session"):
-            emit({"type": "notice", "text": "Starting a cloud session… this can take a minute."})
-            # The opening task goes on the command line, which is short and mangles
-            # some characters on Windows, so it's kept plain; the real message
-            # (with any carried-over chat) follows on stdin below.
-            opener = ("Hi! I'm Cloude, the user's local chat app. Their message follows in "
-                      "the next message, please wait for it and answer that.")
-            done = subprocess.run([exe, "--cloud", opener], cwd=root, stdin=subprocess.DEVNULL,
-                                  capture_output=True, text=True, encoding="utf-8", errors="replace",
-                                  timeout=300)
-            out = (done.stdout or "") + (done.stderr or "")
-            m = SESSION_RE.search(out)
-            if not m:
-                raise RuntimeError("The cloud session didn't start: " + (out.strip()[-600:] or f"exit code {done.returncode}"))
-            chat["cloud_session"] = m.group(1)
-        done = subprocess.run([exe, "-p", "--cloud", chat["cloud_session"], "--output-format", "json"],
-                              cwd=root, input=message, capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=120)
-        try:
-            res = json.loads(done.stdout)
-        except ValueError:
-            res = {"ok": False, "error": (done.stdout + done.stderr).strip()[-600:]}
-        if not res.get("ok"):
-            raise RuntimeError("Couldn't reach the cloud session: " + str(res.get("error")))
+            link = SESSION_RE.search(user_text)
+            if not link:
+                # No session yet: remember what they said and get one started.
+                waiting = chat.get("cloud_waiting", "")
+                chat["cloud_waiting"] = (waiting + "\n\n" + user_text).strip()
+                opened = open_cloud_terminal(exe, root)
+                say(("☁️ I opened a terminal window that's starting a cloud session for us. "
+                     if opened else
+                     "☁️ To start a cloud session, open a terminal in your Sadiascode folder and run "
+                     "`claude --cloud \"Hi from Cloude\"`. ")
+                    + "When it shows the session link (`claude.ai/code/session_…`), **paste the link "
+                      "here** and I'll send your message to it.\n\n"
+                      "Already have a cloud session going? Paste its link instead.")
+                return
+            chat["cloud_session"] = link.group(1)
+            message = chat.pop("cloud_waiting", "")
+            if not message:
+                say("☁️ Linked to that cloud session! I'll pass your messages to it from now on.\n\n"
+                    f"Watch it here: https://claude.ai/code/{chat['cloud_session']}")
+                return
+        else:
+            message = user_text
+        cloud_send(exe, root, chat["cloud_session"], with_handoff(chat, message, 60_000))
         url = f"https://claude.ai/code/{chat['cloud_session']}"
-        shown["text"] = (f"☁️ Sent to your cloud session! It's working on it now, on cloud credit.\n\n"
-                         f"Watch it and read its replies here: [{chat['cloud_session']}]({url})\n\n"
-                         f"Anything it pushes to GitHub (code, memory notes) comes back to me "
-                         f"the next time I sync.")
-        emit({"type": "text", "text": shown["text"]})
+        say("☁️ Sent to your cloud session! It's working on it now, on cloud credit.\n\n"
+            f"Watch it and read its replies here: {url}\n\n"
+            "Anything it pushes to GitHub (code, memory notes) comes back to me the next time I sync.")
     except subprocess.TimeoutExpired:
         emit({"type": "error", "text": "The `claude` program took too long to answer."})
     finally:
