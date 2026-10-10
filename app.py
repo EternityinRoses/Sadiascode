@@ -616,8 +616,8 @@ def code_system_text():
     parts = [CODE_PREFACE]
     if SYSTEM_FILE.exists():
         parts.append(SYSTEM_FILE.read_text(encoding="utf-8"))
-    root_md = APP_DIR.parent / "CLAUDE.md"
-    has_import = root_md.exists() and "@cloude/memory.md" in root_md.read_text(encoding="utf-8", errors="ignore")
+    root_md = APP_DIR / "CLAUDE.md"
+    has_import = root_md.exists() and "@memory.md" in root_md.read_text(encoding="utf-8", errors="ignore")
     if MEMORY_FILE.exists() and not has_import:
         parts.append("# Your memory (memory.md)\n\n" + MEMORY_FILE.read_text(encoding="utf-8"))
     return "\n\n".join(parts)
@@ -774,8 +774,8 @@ def run_turn_cloud(chat, user_text, attachments, emit):
                            "`claude auth login` (with your claude.ai account) first.")
     root = repo_root()
     if not root:
-        raise RuntimeError("The cloud brain needs Cloude inside a git clone of your GitHub repo, "
-                           "because the cloud session starts from GitHub. See the README.")
+        raise RuntimeError("The cloud brain needs Cloude to be a git clone of your GitHub repo, because the "
+                           "cloud session starts from GitHub. The README's 'Set up' part shows how.")
     if not user_text:
         raise RuntimeError("Tell the cloud what to do in words; pictures and files stay on this PC.")
     log_user(chat, user_text, attachments)
@@ -798,7 +798,7 @@ def run_turn_cloud(chat, user_text, attachments, emit):
                 opened = open_cloud_terminal(exe, root)
                 say(("☁️ I opened a terminal window that's starting a cloud session for us. "
                      if opened else
-                     "☁️ To start a cloud session, open a terminal in your Sadiascode folder and run "
+                     "☁️ To start a cloud session, open a terminal in your Cloude folder and run "
                      "`claude --cloud \"Hi from Cloude\"`. ")
                     + "When it shows the session link (`claude.ai/code/session_…`), **paste the link "
                       "here** and I'll send your message to it.\n\n"

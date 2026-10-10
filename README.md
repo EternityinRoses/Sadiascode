@@ -30,13 +30,21 @@ Your normal subscription chat (the Claude app, or `claude` in a terminal) is a f
 
 All brains read `memory.md`. Turn on **Share my memory through GitHub** in settings (it's on by default) and run Cloude from a **git clone** instead of a zip. Then Cloude pulls new notes when a chat starts and pushes `memory.md` when it changes. Cloud sessions read the same notes through the repo's `CLAUDE.md`.
 
+### Set up (Windows, Command Prompt)
+
+This makes your `Desktop\cloude` folder a git clone, keeping your key and chats:
+
 ```
-git clone https://github.com/EternityinRoses/Sadiascode.git
-cd Sadiascode
-git checkout claude/are-you-claude-93fk26
+cd %USERPROFILE%\Desktop
+ren cloude cloude_old
+git clone -b claude/are-you-claude-93fk26 https://github.com/EternityinRoses/Sadiascode.git cloude
+copy cloude_old\config.json cloude\
+xcopy /E /I cloude_old\chats cloude\chats
 cd cloude
-start.bat            (or ./start.sh)
+python app.py
 ```
+
+To get updates later: `git pull` inside `Desktop\cloude`.
 
 ### Keeping long chats cheap (API brain)
 
