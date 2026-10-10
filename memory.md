@@ -99,7 +99,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 
 ## Hollow NPC (built Oct 10, Rose's real interest)
 
-- Rose wants a learning background NPC for D&D-style games: it studies players and talks back, not very smart, but with an "uncanny valley" feel. Prototype: `npc/npc.py` (stdlib only, 127.0.0.1:8644, `npc/NPC.bat`). It has a naive Bayes intent classifier (self-training), per-player profiles (visits, topics, phrases, mood, time of day, typing style), a word chain from all players, and "creep" lines that grow with familiarity (echoes, gossip, mimicry). Persona is in `npc/persona.json` (default Old Maud, Drowned Lantern inn). API: POST /talk {player, text}. NOT wired into Harpine (someone else's game, so ask first).
+- Rose wants a learning background NPC for D&D-style games: it studies players and talks back, not very smart, but with an "uncanny valley" feel. Prototype: `npc/npc.py` (stdlib only, 127.0.0.1:8644, `npc/NPC.bat`). It has a naive Bayes intent classifier (self-training), per-player profiles (visits, topics, phrases, mood, time of day, typing style), a word chain from all players, and "creep" lines that grow with familiarity (echoes, gossip, mimicry). Persona is in `npc/persona.json` (default Old Maud, Drowned Lantern inn). API: POST /talk {player, text}. Rose (Oct 10): it's its OWN experiment, so DON'T wire it into Harpine or any game for now.
 - Drizzle's "study" upgrade was cancelled (Rose pressed Stop) and was never applied.
 
 ## Notes funnel (built Oct 10, Rose's idea)
