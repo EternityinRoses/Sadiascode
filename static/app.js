@@ -236,6 +236,7 @@ async function refreshStatus() {
   $("brainInput").value = s.brain;
   $("gitSyncInput").checked = s.git_sync;
   $("autoUpdateInput").checked = s.auto_update;
+  $("cloudScryInput").checked = s.cloud_scry;
   if (!bootId) bootId = s.boot_id;
   $("updateChip").hidden = !s.update_note;
   $("updateChip").title = s.update_note || "";
@@ -466,7 +467,7 @@ $("settingsForm").onsubmit = async (e) => {
       api_key: $("keyInput").value, model: $("modelInput").value, effort: $("effortInput").value,
       auto_approve: $("autoApproveInput").checked,
       brain: $("brainInput").value, git_sync: $("gitSyncInput").checked,
-      auto_update: $("autoUpdateInput").checked,
+      auto_update: $("autoUpdateInput").checked, cloud_scry: $("cloudScryInput").checked,
     });
     $("keyInput").value = "";
     const switched = status.brain !== $("brainInput").value;

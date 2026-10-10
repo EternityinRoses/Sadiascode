@@ -16,6 +16,7 @@ Three "brains", each spending a different pool of credit:
 """
 
 import base64
+import fnmatch
 import hashlib
 import json
 import mimetypes
@@ -56,6 +57,7 @@ DEFAULTS = {
     "compact_at": 100000,    # API brain: summarize older messages once a chat reaches this many tokens (min 50000)
     "cache_ttl": "1h",       # API brain: how long the sent chat stays cheap to resend ("5m" or "1h")
     "auto_update": True,     # pull new versions from GitHub by itself and restart
+    "cloud_scry": True,      # let the cloud session read files here (read-only, approved folders only)
     # Folders outside Cloude's home that its file tools may also reach (approved by the user).
     "extra_roots": [r"D:\Sadias Canvas"],
 }
@@ -966,6 +968,126 @@ def chat_for_header(header):
     return load_chat(matches[0].stem) if matches else None
 
 
+# ------------------------------------------------------------------ scry --
+# The cloud session can't see this PC, so it asks: a '### <chat id> scry' block
+# in the mailbox lists look-ups, one per line, and Cloude answers by sending the
+# results to that chat's cloud session. Read-only, and only inside the folders
+# Cloude's own tools may reach (its folder + extra_roots). Secrets never leave.
+#
+#   list <folder>
+#   read <file>              read <file> 120-260
+#   grep <pattern> in <file or folder>
+#   find <name pattern> in <folder>
+
+SCRY_LIMIT = 60_000               # characters per answer; ask again for more
+SKIP_DIRS = {".git", "node_modules", "__pycache__", ".backups", ".cloud_mirror", "chats", "uploads"}
+
+
+def scry_secret(p):
+    n = p.name.lower()
+    return (n in {"config.json", "credentials.json", "secrets.json"} or n.startswith(".env")
+            or n.endswith((".pem", ".key", ".pfx", ".p12")) or n in {"id_rsa", "id_ed25519"})
+
+
+def scry_text(p):
+    if scry_secret(p):
+        raise ToolError(f"{p.name} holds secrets, so it stays on this PC.")
+    if p.stat().st_size > 5_000_000:
+        raise ToolError(f"{p.name} is too big ({p.stat().st_size} bytes); grep it instead.")
+    data = p.read_bytes()
+    if b"\0" in data[:4096]:
+        raise ToolError(f"{p.name} isn't a text file.")
+    return data.decode("utf-8", errors="replace")
+
+
+def scry_walk(root):
+    if root.is_file():
+        yield root
+        return
+    for dirpath, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for f in files:
+            yield Path(dirpath) / f
+
+
+def scry_one(line):
+    verb, _, rest = line.partition(" ")
+    verb, rest = verb.lower(), rest.strip()
+    if verb == "list":
+        p = safe_path(rest or ".")
+        rows = []
+        for c in sorted(p.iterdir(), key=lambda c: (not c.is_dir(), c.name.lower()))[:400]:
+            rows.append(c.name + "/" if c.is_dir() else f"{c.name}  ({c.stat().st_size} bytes)")
+        return "\n".join(rows) or "(empty)"
+    if verb == "read":
+        m = re.match(r"(.*?)\s+(\d+)-(\d+)$", rest)
+        path, a, b = (m.group(1), int(m.group(2)), int(m.group(3))) if m else (rest, 1, None)
+        lines = scry_text(safe_path(path)).splitlines()
+        b = min(b or len(lines), len(lines))
+        return f"({len(lines)} lines in all)\n" + "\n".join(f"{i}: {lines[i - 1]}" for i in range(max(a, 1), b + 1))
+    if verb in ("grep", "find"):
+        m = re.match(r"(.+?)\s+in\s+(.+)$", rest)
+        if not m:
+            raise ToolError(f"Use: {verb} <pattern> in <path>")
+        pattern, root = m.group(1).strip().strip("\"'"), safe_path(m.group(2).strip())
+        hits = []
+        if verb == "find":
+            for f in scry_walk(root):
+                if fnmatch.fnmatch(f.name.lower(), pattern.lower()):
+                    hits.append(str(f))
+                    if len(hits) >= 300:
+                        break
+            return "\n".join(hits) or "(nothing found)"
+        try:
+            rx = re.compile(pattern)
+        except re.error:
+            rx = re.compile(re.escape(pattern))
+        for f in scry_walk(root):
+            try:
+                text = scry_text(f)
+            except (ToolError, OSError):
+                continue
+            for i, ln in enumerate(text.splitlines(), 1):
+                if rx.search(ln):
+                    hits.append(f"{f}:{i}: {ln.strip()[:240]}")
+                    if len(hits) >= 200:
+                        return "\n".join(hits) + "\n(stopped at 200 matches)"
+        return "\n".join(hits) or "(no matches)"
+    raise ToolError(f"Unknown look-up '{verb}'. Use list, read, grep or find.")
+
+
+def scry(body):
+    parts, asked = [], []
+    for raw in body.splitlines():
+        line = raw.strip().lstrip("-*").strip().strip("`")
+        if not line:
+            continue
+        asked.append(line)
+        try:
+            result = scry_one(line)
+        except (ToolError, OSError) as e:
+            result = f"(couldn't: {e})"
+        parts.append(f"== {line} ==\n{result}")
+    text = "\n\n".join(parts)
+    if len(text) > SCRY_LIMIT:
+        text = text[:SCRY_LIMIT] + "\n\n(cut off here: ask for a smaller range)"
+    return asked, text
+
+
+def answer_scry(chat, header, body):
+    tag = short_id(chat["id"])
+    exe, root = find_claude(), repo_root()
+    if not load_config().get("cloud_scry", True):
+        asked, text = [], "SCRY DENIED: the user turned it off in Cloude's settings."
+    else:
+        asked, text = scry(body)
+    cloud_send(exe, root, chat["cloud_session"], f"[Cloude chat {tag}] SCRY RESULT\n\n{text}")
+    if asked:
+        chat["display"].append({"role": "assistant", "thoughts": "", "tools": [],
+                                "text": "🔮 The cloud looked at files on this PC:\n"
+                                        + "\n".join(f"- `{a}`" for a in asked)})
+
+
 def check_mailbox():
     """Deliver any cloud replies waiting on GitHub. Returns how many arrived."""
     root = repo_root()
@@ -992,6 +1114,15 @@ def check_mailbox():
                     continue
                 seen.add(key)
                 chat["cloud_seen"] = sorted(seen)
+                if "scry" in header.lower().split()[1:]:
+                    if chat.get("cloud_session"):
+                        try:
+                            answer_scry(chat, header, body)
+                        except Exception as e:
+                            print(f"scry failed: {e}")
+                    save_chat(chat)
+                    delivered += 1
+                    continue
                 entry = {"role": "assistant", "text": body, "thoughts": "", "tools": []}
                 if "ask" in header.lower().split()[1:]:
                     entry.update(ask=key)             # the cloud wants a yes/no first
@@ -1612,7 +1743,8 @@ class Handler(BaseHTTPRequestHandler):
                                   "auto_approve": bool(cfg.get("auto_approve")), "brain": cfg["brain"],
                                   "git_sync": bool(cfg.get("git_sync")), "claude_found": bool(find_claude()),
                                   "in_git": bool(repo_root()), "auto_update": bool(cfg.get("auto_update")),
-                                  "boot_id": BOOT_ID, "update_note": UPDATE_NOTE})
+                                  "boot_id": BOOT_ID, "update_note": UPDATE_NOTE,
+                                  "cloud_scry": bool(cfg.get("cloud_scry", True))})
         if path == "/api/chats":
             return self.send_json(list_chats())
         if path.startswith("/api/chats/"):
@@ -1643,7 +1775,7 @@ class Handler(BaseHTTPRequestHandler):
             for k in ("model", "effort"):
                 if body.get(k):
                     cfg[k] = body[k].strip()
-            for k in ("auto_approve", "git_sync", "auto_update"):
+            for k in ("auto_approve", "git_sync", "auto_update", "cloud_scry"):
                 if k in body:
                     cfg[k] = bool(body[k])
             if body.get("brain") in BRAINS:
