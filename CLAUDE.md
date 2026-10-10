@@ -4,7 +4,13 @@ This repo is **Cloude**, the user's local chat app, plus its long-term memory (`
 
 @memory.md
 
-When you learn something worth keeping about the user or their projects, update `memory.md`. Keep it short and tidy, never put secrets in it, and commit it along with your other changes so the other copies see it.
+**Each brain writes only its own notes file** (Rose's rule, Oct 10: brains editing the same memory.md clashed in git and paused updates):
+
+- a cloud session: `notes/cloud.md`
+- Claude Code on the PC (Cloude's 💻 brain, or run by hand): `notes/code.md`
+- Cloude's 🔑 API brain: `notes/api.md`
+
+**Never edit `memory.md`** or another brain's notes file. Cloude on the PC builds `memory.md` from all of `notes/*.md` (it's the one writer), so a direct edit gets overwritten (it's moved into notes/api.md, but don't rely on that). When you learn something worth keeping about the user or their projects, put it in your own file. Keep it short and tidy (update stale lines, delete what's done), never put secrets in it, and commit and push it with your other changes. If another brain's note is wrong, say so in your own file.
 
 ## Replying to Cloude
 
