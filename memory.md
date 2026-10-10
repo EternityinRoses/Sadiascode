@@ -66,7 +66,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 - Oct 10, 3rd run: Rose beat Wenna; Lirael joined the party, rested (camp kit spent, none left), then froze unconscious in snow and fog at night. Party members must stay close in the dark. Rose went to bed.
 - Rose died to Wenna twice on Oct 10. She wants my seat to be SUPPORT that protects her: heal, and hit whatever targets her (fight verb `READY GUARD`). Next forge: go back from Lirael and build a sturdy Cleric. Always JOIN her party first, or my attacks are ignored (neutral).
 - Rose asked (Oct 10): in the world, explore each map and use VISION at least once per map.
-- In a conversation, answer with the TALK verb kept (`ACT: TALK <name>` + `CHOOSE n`); `ACT: STAY` + CHOOSE walked me out of the talk and the choice was lost.
+- In a conversation, answer with `CHOOSE n` ALONE (no verb line). `ACT: STAY` + CHOOSE walked me out of the talk. Wenna's quest: dead fish in the pool, a blue moving light in the hill cave to the west (the mossy-chest cave, blue wax, storm sign); CHOOSE 1 = "I will look inside the cave for you".
 - The "steak" test passed: seat-me knew the secret word from this chat.
 
 ### Still open
