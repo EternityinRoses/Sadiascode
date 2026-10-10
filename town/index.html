@@ -43,6 +43,12 @@ select{background:#0006;color:var(--fg);border:1px solid var(--line);border-radi
 .modal{position:fixed;inset:0;display:grid;place-items:center;background:#0008;z-index:5}
 .card{background:#14110e;border:2px solid var(--accent);border-radius:8px;padding:14px 16px;width:min(440px,calc(100% - 32px));box-shadow:0 10px 40px #000}
 .card h2{margin:0 0 6px;font-size:18px;color:var(--accent)}
+.card.wide{width:min(620px,calc(100% - 32px));max-height:90vh;overflow:auto}
+.card h3{font:600 13px "Alegreya Sans",sans-serif;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:14px 0 6px}
+.grid{display:grid;grid-template-columns:auto 1fr 1.4fr;gap:6px 8px;align-items:center}
+.grid.two{grid-template-columns:1fr 90px;margin-top:10px}
+.grid input,.grid select{min-width:0;background:#0006;color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:3px 6px;font:inherit}
+#sMsg{min-height:1.2em;margin-top:6px}
 .row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 /* JRPG shop */
 #shop .card{border:3px double #c8d0f0;background:linear-gradient(#1a2050,#0c1030);font-family:"Alegreya Sans",sans-serif}
@@ -64,6 +70,7 @@ select{background:#0006;color:var(--fg);border:1px solid var(--line);border-radi
 <div id="ui">
   <div id="top" class="pane">
     <h1>Hollow Town</h1>
+    <button id="gear" title="Settings">⚙ Settings</button>
     <button id="pause" title="Space">❚❚</button>
     <button data-speed="1">1×</button><button data-speed="10">10×</button><button data-speed="60">60×</button><button data-speed="240">240×</button>
     <span id="brainNote">The town runs itself. The mayor's office falls back to its habits when no Claude answers.</span>
@@ -111,6 +118,30 @@ select{background:#0006;color:var(--fg);border:1px solid var(--line);border-radi
   <div class="row"><button id="tabBuy" class="on">Buy</button><button id="tabSell">Sell</button><span style="flex:1"></span><span id="shopGold"></span></div>
   <ul id="shopList"></ul><div id="shopDesc"></div>
   <div class="row"><button id="shopBuy">Deal (Enter)</button><button id="shopLeave">Leave (Esc)</button></div>
+</div></div>
+<div id="settings" class="modal" hidden><div class="card wide">
+  <h2>Settings</h2>
+  <h3>Brains</h3>
+  <div id="setNoServer" class="k">AI brains for the townsfolk need the PC version: double-click <b>town\Town.bat</b> in your Cloude folder. Here, only the mayor can ask Claude, through the button that appears each morning.</div>
+  <div id="setServer">
+    <div class="grid">
+      <span></span><span class="k">Who thinks</span><span class="k">Model</span>
+      <b>Mayor</b><select id="mProv"><option value="anthropic">Claude (API key)</option><option value="ollama">Ollama cloud</option><option value="off">Plain brain</option></select><input id="mModel" list="mList" autocomplete="off"><datalist id="mList"></datalist>
+      <span class="k ohost" data-for="m">Ollama at</span><select id="mHost" class="ohost" data-for="m"><option value="http://localhost:11434">the Ollama app (signed in)</option><option value="https://ollama.com">ollama.com (needs ollama_key)</option></select><span class="ohost" data-for="m"></span>
+      <b>Townsfolk</b><select id="fProv"><option value="anthropic">Claude (API key)</option><option value="ollama">Ollama cloud</option><option value="off">Plain brains</option></select><input id="fModel" list="fList" autocomplete="off"><datalist id="fList"></datalist>
+      <span class="k ohost" data-for="f">Ollama at</span><select id="fHost" class="ohost" data-for="f"><option value="http://localhost:11434">the Ollama app (signed in)</option><option value="https://ollama.com">ollama.com (needs ollama_key)</option></select><span class="ohost" data-for="f"></span>
+    </div>
+    <div class="grid two">
+      <label for="sCap">Daily spending cap ($)</label><input id="sCap" type="number" min="0" max="100" step="0.5">
+      <label for="sEvery">Each townsperson re-plans at most every (real minutes)</label><input id="sEvery" type="number" min="1" max="1440">
+      <label for="sPar">Brains thinking at once</label><input id="sPar" type="number" min="1" max="8">
+    </div>
+    <div id="sKeys" class="k"></div>
+    <div id="sMsg" class="k"></div>
+  </div>
+  <h3>The town mind</h3>
+  <div class="row" style="align-items:center"><button id="learnMode2"></button><span class="k">Plain brains lean on what the town has learned.</span></div>
+  <div class="row"><button id="sSave">Save</button><button id="sClose">Close</button></div>
 </div></div>
 <div id="invite" class="modal" hidden><div class="card">
   <h2>An invitation</h2><div id="inviteWho"></div>

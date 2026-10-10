@@ -165,6 +165,7 @@ const keys = {};
 let selected = null, speed = 1, paused = false;
 addEventListener('keydown', e => {
   if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  if (!$('settings').hidden) { if (e.key === 'Escape') $('settings').hidden = true; return; }
   if (!$('shop').hidden || !$('arrest').hidden) { if (e.key === 'Escape') { $('shop').hidden = true; } return; }
   const k = e.key.toLowerCase(); keys[k] = true; if ('wasd'.includes(k)) me.goal = null;
   if (k === ' ') { paused = !paused; drawSpeed(); e.preventDefault(); }
@@ -301,6 +302,45 @@ addEventListener('keydown', e => {
 // ---------------------------------------------------------------- arrest --
 S.onArrest = (g, q) => { if (q.id !== 'player') return; $('arrestWho').textContent = `${g.name} blocks your way: "You're under arrest."`; $('arrest').hidden = false; paused = true; drawSpeed(); };
 document.querySelectorAll('[data-arrest]').forEach(b => b.onclick = () => { $('arrest').hidden = true; paused = false; drawSpeed(); note(S.arrestAnswer(b.dataset.arrest, +$('arrestBribe').value || 4)); });
+
+// --------------------------------------------------------------- settings --
+const PROV_DEFAULT = { anthropic: { mayor: 'claude-sonnet-5-5', folk: 'claude-haiku-5-5' }, ollama: { mayor: 'gpt-oss:120b-cloud', folk: 'gpt-oss:20b-cloud' }, off: { mayor: '', folk: '' } };
+function showHosts() { for (const x of ['m', 'f']) document.querySelectorAll(`.ohost[data-for="${x}"]`).forEach(e => e.hidden = $(x + 'Prov').value !== 'ollama'); for (const x of ['m', 'f']) $(x + 'Model').disabled = $(x + 'Prov').value === 'off'; }
+async function fillModels(x) {
+  const prov = $(x + 'Prov').value; $(x + 'List').innerHTML = '';
+  if (prov === 'off') return;
+  try { const r = await fetch(`/settings/models?provider=${prov}&host=${encodeURIComponent($(x + 'Host').value)}`); const j = await r.json(); $(x + 'List').innerHTML = (j.models || []).map(m => `<option value="${m}">`).join(''); if (j.models?.length) $('sMsg').textContent = ''; else $('sMsg').textContent = prov === 'ollama' ? 'Couldn’t list Ollama models: is the Ollama app running and signed in? You can still type a model name.' : 'Couldn’t list Claude models (no key found?). You can still type a model name.'; }
+  catch (e) {}
+}
+async function openSettings() {
+  $('settings').hidden = false; $('sMsg').textContent = '';
+  $('setServer').hidden = !server; $('setNoServer').hidden = !!server;
+  $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning);
+  if (!server) return;
+  const st = await (await fetch('/settings')).json();
+  for (const [x, k] of [['m', 'mayor'], ['f', 'folk']]) { $(x + 'Prov').value = st[k].provider; $(x + 'Model').value = st[k].model || ''; $(x + 'Host').value = st[k].host || 'http://localhost:11434'; }
+  $('sCap').value = st.daily_dollar_cap; $('sEvery').value = st.folk_every_minutes; $('sPar').value = st.parallel;
+  $('sKeys').textContent = `Claude API key: ${st.keys.anthropic ? 'found (Cloude’s)' : 'not found'} · Ollama key: ${st.keys.ollama ? 'found' : 'none (fine if you use the Ollama app)'}. Keys stay in Cloude’s config.json; this page never sees them.`;
+  showHosts(); fillModels('m'); fillModels('f');
+}
+for (const [x, k] of [['m', 'mayor'], ['f', 'folk']]) {
+  $(x + 'Prov').onchange = () => { $(x + 'Model').value = PROV_DEFAULT[$(x + 'Prov').value][k]; showHosts(); fillModels(x); };
+  $(x + 'Host').onchange = () => fillModels(x);
+}
+$('gear').onclick = openSettings; $('sClose').onclick = () => $('settings').hidden = true;
+$('learnMode2').onclick = () => { S.learning = S.learning ? 0 : 1; $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning); drawLore(); };
+$('sSave').onclick = async () => {
+  if (!server) { $('settings').hidden = true; return; }
+  const brain = x => ({ provider: $(x + 'Prov').value, model: $(x + 'Model').value.trim(), host: $(x + 'Host').value });
+  const body = { mayor: brain('m'), folk: brain('f'), daily_dollar_cap: +$('sCap').value, folk_every_minutes: +$('sEvery').value, parallel: +$('sPar').value };
+  const r = await fetch('/settings', { method: 'POST', headers: { 'X-Town': '1' }, body: JSON.stringify(body) });
+  if (!r.ok) { $('sMsg').textContent = 'Couldn’t save.'; return; }
+  const j = await (await fetch('/brain/ping')).json(); server = j;
+  // townsfolk switched on or off: hand them to the new brain (or back to the plain one)
+  for (const p of S.living()) if (p.kind === 'human' && !p.town && p.id !== S.mayorId && (p.brain === 'script' || p.brain === 'folk-ai')) p.brain = j.folk !== 'off' ? 'folk-ai' : 'script';
+  $('brainNote').textContent = `Brains: mayor = ${j.mayor}; townsfolk = ${j.folk}.`;
+  $('sMsg').textContent = 'Saved. New brains take over from the next morning plan. (A new "at once" number needs a Town.bat restart.)';
+};
 
 // ------------------------------------------------------------ invitations --
 S.onInvite = inv => {

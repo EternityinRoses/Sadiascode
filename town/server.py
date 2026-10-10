@@ -15,7 +15,7 @@ Nothing heavy runs on this computer: every brain is a cloud model.
   - The town's learned mind (the lore) is kept in lore.json.
 Keys are read, never written or printed.
 """
-import json, os, re, threading, time, urllib.request, urllib.error
+import json, os, re, threading, time, urllib.request, urllib.error, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -138,6 +138,58 @@ def write_book(town, person, book):
 
 gate = threading.BoundedSemaphore(max(1, int(settings().get("parallel", 3))))
 
+# ------------------------------------------------------------- settings --
+# The page's settings menu reads and writes town_brains.json. Keys are never sent to the page:
+# it only learns whether one was found. Ollama hosts are limited to this computer or ollama.com,
+# so a changed setting can never send the Ollama key anywhere else.
+PROVIDERS = ("anthropic", "ollama", "off")
+
+def ok_host(h):
+    return bool(re.fullmatch(r"(http://(localhost|127\.0\.0\.1)(:\d+)?|https://ollama\.com)", h or ""))
+
+def clean_brain(b, old):
+    b = b if isinstance(b, dict) else {}
+    out = {"provider": b.get("provider") if b.get("provider") in PROVIDERS else old.get("provider", "off"),
+           "model": re.sub(r"[^\w.:/-]", "", str(b.get("model", old.get("model", ""))))[:80]}
+    if out["provider"] == "ollama":
+        out["host"] = b.get("host") if ok_host(b.get("host")) else old.get("host", "http://localhost:11434")
+        if not ok_host(out["host"]):
+            out["host"] = "http://localhost:11434"
+    return out
+
+def save_settings(new):
+    st = settings()
+    st["mayor"] = clean_brain(new.get("mayor"), st["mayor"])
+    st["folk"] = clean_brain(new.get("folk"), st["folk"])
+    for k, lo, hi in (("daily_dollar_cap", 0, 100), ("folk_every_minutes", 1, 1440), ("parallel", 1, 8)):
+        try:
+            st[k] = max(lo, min(hi, float(new.get(k, st[k]))))
+        except Exception:
+            pass
+    st["parallel"] = int(st["parallel"])
+    with open(SETTINGS + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(st, f, indent=2)
+    os.replace(SETTINGS + ".tmp", SETTINGS)
+    return st
+
+def list_models(provider, host):
+    try:
+        if provider == "anthropic":
+            key = anthropic_key()
+            if not key:
+                return []
+            req = urllib.request.Request("https://api.anthropic.com/v1/models?limit=100", headers={"x-api-key": key, "anthropic-version": "2023-06-01"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return [m["id"] for m in json.loads(r.read()).get("data", [])]
+        if provider == "ollama" and ok_host(host):
+            key = ollama_key()
+            req = urllib.request.Request(host.rstrip("/") + "/api/tags", headers={"Authorization": "Bearer " + key} if key else {})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return [m.get("name") or m.get("model") for m in json.loads(r.read()).get("models", [])]
+    except Exception as e:
+        print(f"[settings] couldn't list {provider} models: {type(e).__name__}: {str(e)[:120]}")
+    return []
+
 def think(req):
     st = settings()
     cfg = st["mayor"] if req.get("brain") == "mayor-ai" else st["folk"]
@@ -193,8 +245,19 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0))
         return self.rfile.read(n) if n else b""
 
+    def same_page(self):
+        # only our own page may change settings (a custom header forces a browser preflight we never allow)
+        o = self.headers.get("Origin", "")
+        return self.headers.get("X-Town") == "1" and (not o or o in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"))
+
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path == "/settings":
+            st = settings()
+            return self.send(200, json.dumps({**{k: st[k] for k in ("mayor", "folk", "daily_dollar_cap", "folk_every_minutes", "parallel")}, "keys": {"anthropic": bool(anthropic_key()), "ollama": bool(ollama_key())}}))
+        if path == "/settings/models":
+            q = dict(p.split("=", 1) for p in (self.path.split("?", 1) + [""])[1].split("&") if "=" in p)
+            return self.send(200, json.dumps({"models": list_models(q.get("provider"), urllib.parse.unquote(q.get("host", "")))}))
         if path == "/brain/ping":
             st = settings()
             lab = lambda c: "plain brains" if c.get("provider", "off") == "off" else f"{c.get('model')} ({c.get('provider')})"
@@ -214,6 +277,15 @@ class H(BaseHTTPRequestHandler):
             self.send(200, f.read(), TYPES.get(os.path.splitext(full)[1], "application/octet-stream"))
 
     def do_POST(self):
+        if self.path == "/settings":
+            if not self.same_page():
+                return self.send(403, "{}")
+            try:
+                st = save_settings(json.loads(self.body() or b"{}"))
+            except Exception:
+                return self.send(400, "{}")
+            print(f"[settings] mayor {st['mayor']} | folk {st['folk']} | cap ${st['daily_dollar_cap']} | every {st['folk_every_minutes']} min")
+            return self.send(200, json.dumps({"ok": True}))
         if self.path == "/brain":
             try:
                 req = json.loads(self.body() or b"{}")
