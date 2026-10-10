@@ -1039,10 +1039,13 @@ def scry_one(line):
                     if len(hits) >= 300:
                         break
             return "\n".join(hits) or "(nothing found)"
+        flags = 0
+        if pattern.startswith("-i "):                 # grep habit: -i means ignore case
+            flags, pattern = re.I, pattern[3:].strip().strip("\"'")
         try:
-            rx = re.compile(pattern)
+            rx = re.compile(pattern, flags)
         except re.error:
-            rx = re.compile(re.escape(pattern))
+            rx = re.compile(re.escape(pattern), flags)
         for f in scry_walk(root):
             try:
                 text = scry_text(f)
