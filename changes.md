@@ -30,3 +30,14 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **What:** every game turn shows the character's own notes (up to 30 lines). A `NOTE: ...` line in an answer adds one, `UNNOTE: <words>` drops notes holding those words; both are stripped before the answer goes to the game, and each change shows in the activity line.
 - **Undo:** `git revert` this commit; delete `seats\notebooks\` if you like.
 - **Status:** tested offline. Needs Cloude restarted.
+
+## 4. Old queued orders get cleared (wishlist #6)
+- **When / who:** 2026-10-10, Nimbus
+- **File:** Cloude's `app.py` only (no game files). It's in git, so `git revert` on this commit undoes it.
+- **What:**
+  - New `STALE_ORDER_S = 15 * 60` and `clear_orders(folder, older_than=0)`, just above `INVITES_SEEN = {}`. It deletes unread `act_*.txt` / `speak_*` files in a seat mailbox and writes what it dropped to `seats/activity.log`.
+  - `seat_runner` calls `clear_orders(folder, STALE_ORDER_S)` each pass (line after `prove_awake(folder)`), so any order the game hasn't read in 15 minutes is thrown away instead of firing when the game reopens.
+  - In the cloud mailbox `act`/`say` branch: a `### <id> act` message whose body is just `CLEAR` (or `CLEAR ORDERS`) deletes every unread order and writes nothing.
+- **Why:** a stray `GO the old road east to Harrowmere` + `RUN` from 5 AM was still sitting in `seats/` (the game only drains files while it runs). Both were swept in the first test.
+- **Undo:** remove the `clear_orders` line in `seat_runner`, the CLEAR block (starts `if folder is not None and re.fullmatch(r"\s*CLEAR`), and the `STALE_ORDER_S` / `clear_orders` definitions. Restart.
+- **Status:** compiled; stale sweep tested on the real mailbox. Needs **Restart** to go live.

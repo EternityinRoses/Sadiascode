@@ -1265,6 +1265,14 @@ def check_mailbox():
                         boxes = [f for f in seat_folders() if (f / "SEAT.json").is_file()]
                         folder = boxes[0] if boxes else None
                     kind = words[1].lower().replace("say", "speak")
+                    if folder is not None and re.fullmatch(r"\s*CLEAR(\s+ORDERS)?\s*", body, re.I):
+                        # wishlist #6: '### <id> act' with body CLEAR drops every unread order
+                        n = clear_orders(folder)
+                        chat["display"].append({"role": "assistant", "game": True, "thoughts": "", "tools": [],
+                                                "text": f"🎲 cleared {n} unread order(s) from {folder.name}"})
+                        save_chat(chat)
+                        delivered += 1
+                        continue
                     if folder is not None:
                         write_settled(folder, f"{kind}_cloud_{int(time.time() * 1000)}.txt", body)
                         seat_log(f"{folder.name}  cloud {kind} (unasked): {body[:80]!r}")
@@ -2001,6 +2009,30 @@ def answer_request(folder, req_file, rid):
             SEAT_INFLIGHT.discard(str(req_file))
 
 
+STALE_ORDER_S = 15 * 60     # an unread act_/speak_ file older than this is a stray, not an order
+
+
+def clear_orders(folder, older_than=0):
+    """Delete unread act_/speak_ files the game hasn't drained yet (wishlist #6).
+    older_than=0 clears them all (the cloud's CLEAR); otherwise only strays older than
+    that many seconds, so a TRAVEL left while the game was shut can't fire on reopen."""
+    gone = []
+    now = time.time()
+    for f in list(folder.glob("act_*.txt")) + list(folder.glob("speak_*.txt")) + list(folder.glob("speak_*.json")):
+        try:
+            if older_than and now - f.stat().st_mtime < older_than:
+                continue
+            body = f.read_text(encoding="utf-8", errors="replace").strip()
+            f.unlink()
+            gone.append(f"{f.name}: {body[:60]!r}")
+        except OSError:
+            pass
+    if gone:
+        seat_log(f"{folder.name}  cleared {len(gone)} unread order(s)"
+                 + (" (stale)" if older_than else "") + ": " + "; ".join(gone))
+    return len(gone)
+
+
 INVITES_SEEN = {}
 
 
@@ -2141,6 +2173,7 @@ def seat_runner():
             elif cfg.get("seats_on", True) and (api_key() or cfg.get("seat_brain") == "cloud"):
                 for folder in seat_folders():
                     prove_awake(folder)
+                    clear_orders(folder, STALE_ORDER_S)     # wishlist #6: drop strays
                     check_invite(folder)
                     forward_new_shot(folder)
                     for f in folder.iterdir():
