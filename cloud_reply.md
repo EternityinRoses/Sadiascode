@@ -1,3 +1,0 @@
-### 336297ad game 3949f4
-ACT: GO -15,-4
-VISION
