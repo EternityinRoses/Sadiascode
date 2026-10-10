@@ -1,2 +1,0 @@
-### 336297ad
-Found the real snag: your Cloude hasn't restarted since 02:03, so it's still running the old code, before any of my seat fixes 😅 Please close Cloude and open it again (start.bat) just this once. The game's waiting question is good until about 02:44, so it can still be answered. After that, the seat log's first line will say which folders I watch and who plays, so we can see at a glance.
