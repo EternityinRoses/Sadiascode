@@ -277,7 +277,7 @@ function Sim(opts = {}) {
     sim.mayorId = mayor.id;
     const guards = [['m', 'captain', 3], ['m', 'guard', 2], ['f', 'guard', 1], ['m', 'nightguard', 1], ['f', 'nightguard', 1], ['m', 'jailer', 1]]
       .map(([gd, job, lvl]) => add({ gender: gd, cls: 'warrior', level: lvl, job, weapon: job === 'captain' ? 'longsword' : pick(['club', 'shortsword', 'sap']), armor: job === 'captain' ? 'chain' : 'leather', coin: irnd(4, 12), focus: ['intimidate', 'spot', 'sense'], bias: { str: 1, con: 1 } }));
-    sim.captainId = guards[0].id;
+    sim.captainId = guards[0].id; guards[0].rank = 'captain'; guards[1].rank = 'sergeant';
     for (const g of guards) g.items.torch = 1;
     const civJobs = ['baker', 'bakehand', 'shopkeep', 'shophand', 'smith', 'apprentice', 'innkeep', 'server', 'farmer', 'farmhand', 'rancher', 'doctor', 'undertaker', 'cleric', 'teacher', 'clerk'];
     const genders = ['m', 'm', 'm', 'm', 'm', 'm', 'm', 'm', 'f', 'f', 'f', 'f', 'f', 'f', 'f', 'f'].sort(() => Math.random() - 0.5);
@@ -612,9 +612,20 @@ function Sim(opts = {}) {
       const pals = living().filter(q => q !== p && !q.gang && R(p, q).trust > 0.5 && R(q, p).like > 0.3 && q.traits.honesty < 0.6).length;
       if (pals >= 2 && p.traits.ambition > 0.55 && p.traits.honesty < 0.5 && !p.gang && !(p.cd?.found > sim.t)) { cool(p, 'found', 1440); add('found', p.traits.ambition * 3 + pals * 0.7 + desp - moral * 0.6 - (big ? gangMembers(big.id).length * 0.5 : 0) - wageOf(p) * 0.3); }
     }
+    // a coup: go for your own boss (by fists or by knife)
+    if (p.gang && sim.gangs[p.gang] && sim.gangs[p.gang].boss !== p.id && !(p.cd?.coup > sim.t)) {
+      const g = sim.gangs[p.gang], boss = sim.people[g.boss];
+      if (boss && boss.alive && conscious(boss) && boss.jailedUntil <= 0) {
+        const backing = gangMembers(g.id).filter(q => q !== p && q !== boss && R(q, p).like - R(q, boss).like * q.traits.loyalty > 0.2).length;
+        const v = p.traits.ambition * 4 - p.traits.loyalty * 4 + backing * 1.2 + (might(p) - might(boss)) * 0.4 - R(p, boss).like * 3 + p.traits.aggression * 2 - 4.5;
+        if (v > 0) add('coup', v, { target: boss });
+      }
+    }
     // politics: run for mayor before the election
-    if (!sim.election.candidates.includes(p.id) && p.id !== sim.mayorId && p.traits.ambition > 0.6 && (sim.day % 7 >= 3 || sim.day % 7 === 0) && p.coin >= 5)
-      add('stand', 1 + p.traits.ambition * 3 + popularity(p) * 0.2 - 3);
+    if (!sim.election.candidates.includes(p.id) && p.id !== sim.mayorId && (sim.day % 7 >= 3 || sim.day % 7 === 0) && p.coin >= 5 && !(p.cd?.stand > sim.t) && p.kind === 'human' && !p.town) {
+      const field = sim.election.candidates.length;
+      add('stand', p.traits.ambition * 3 + p.traits.greed * 1.5 + popularity(p) * 0.2 + (field === 0 ? 2 : 0) - field * 0.4 + (p.job === 'none' ? 1 : 0) - 2.5);
+    }
     if (sim.election.candidates.includes(p.id) && p.coin > 6) add('campaign', 2 + p.traits.ambition * 2);
     // revenge
     for (const [who, amt] of Object.entries(p.grudge || {})) {
@@ -772,6 +783,9 @@ function Sim(opts = {}) {
       case 'buy': { const item = Object.keys(GOODS).find(k => rest.includes(k) || rest.includes(GOODS[k].name.toLowerCase())); const shop = item && Object.keys(sim.business).find(b => (sim.business[b].stock[item] || 0) > 0 && shopOpen(b)); return shop && p.coin >= priceOf(shop, item) ? { kind: 'buy', shop, item, value: 0 } : null; }
       case 'hunt': { const sp = Object.keys(GAME).find(k => rest.includes(k)) || 'rabbit'; return { kind: 'hunt', species: sp, value: 0 }; }
       case 'fish': return { kind: 'fish', value: 0 };
+      case 'coup': { const g = p.gang && sim.gangs[p.gang], b = g && sim.people[g.boss]; return b && b !== p && b.alive && conscious(b) && b.jailedUntil <= 0 ? { kind: 'coup', target: b, value: 0 } : null; }
+      case 'stand': case 'run': return !sim.election.candidates.includes(p.id) && p.id !== sim.mayorId && p.coin >= 5 ? { kind: 'stand', value: 0 } : null;
+      case 'campaign': case 'canvass': return sim.election.candidates.includes(p.id) || p.id === sim.mayorId ? (who ? { kind: 'visit', target: who, value: 0, canvass: true } : { kind: 'campaign', value: 0 }) : null;
       case 'forage': return { kind: 'forage', value: 0 };
       case 'tavern': case 'drink': return { kind: kind === 'drink' && (p.water ?? 1) < 0.6 ? 'drink' : 'tavern', value: 0 };
       case 'sleep': case 'rest': return { kind: 'sleep', value: 0 };
@@ -949,6 +963,7 @@ function Sim(opts = {}) {
       case 'goto': return setTask(p, 'goto', { to: o.at.kind ? P(o.at.x, o.at.z) : o.at, until: sim.t + 120 });
       case 'hold': return setTask(p, 'talk', { with: o.with?.id || p.task?.with || null, until: sim.t + 20 });
       case 'assail': startFight(p, o.target, { mode: p.prefMode || (p.traits.aggression > 0.75 ? 'lethal' : 'nonlethal'), why: 'picked a fight' }); return setTask(p, 'idle', { until: sim.t + 5 });
+      case 'coup': { cool(p, 'coup', 1440 * 4); const g = sim.gangs[p.gang]; if (!g) return; g.coupBy = p.id; return setTask(p, 'coup', { target: o.target.id, until: sim.t + 180 }); }
       case 'caravan': return startCaravan(p);
       case 'boast': { cool(p, 'boast', 360); const q = o.target; const claim = Math.round(trueWorth(p) * 2 + 40); const ok = boast(p, q, claim); log('lie', `${p.name} lets ${q.name} know they're worth a good deal more than they look. ${ok ? q.name + ' believes it.' : q.name + " isn't fooled."}`, [p.id, q.id]); return setTask(p, 'idle', { until: sim.t + 10 }); }
       case 'rustle': { cool(p, 'rustle', 1440 * 2); const a = Object.values(sim.animals).filter(a => a.livestock && a.alive && a.species !== 'cow').sort(() => Math.random() - 0.5)[0]; if (!a) return; return setTask(p, 'rustle', { target: a.id, to: P(a.x, a.z), until: sim.t + 240 }); }
@@ -1002,6 +1017,22 @@ function Sim(opts = {}) {
       case 'tail': { const L = sim.people[tk.target]; if (!L || !L.alive) { p.task = null; return; } if (dist2(p, L) > 2.2) arrive(p, L, dt, 2.2); else p.yaw = Math.atan2(L.x - p.x, L.z - p.z); return; }
       case 'goto': { if (arrive(p, tk.to, dt)) p.task = null; return; }
       case 'talk': { const w = sim.people[tk.with]; if (w) p.yaw = Math.atan2(w.x - p.x, w.z - p.z); if (w && dist2(w, p) > 6) p.task = null; return; }
+      case 'coup': {
+        const boss = sim.people[tk.target], g = sim.gangs[p.gang];
+        if (!boss || !boss.alive || !g || g.boss !== boss.id) { if (g) g.coupBy = null; p.task = null; return; }
+        if (!arrive(p, boss, dt, 2)) return;
+        const mode = p.traits.aggression > 0.65 || R(p, boss).like < -0.4 ? 'lethal' : 'nonlethal';
+        log('gang', `${p.name} turns on ${boss.name} to take ${g.name}${mode === 'lethal' ? ', knife out' : ''}!`, [p.id, boss.id]);
+        const f = startFight(p, boss, { mode, why: 'coup', quiet: true });
+        if (f) { f.coup = { gang: g.id, by: p.id, boss: boss.id };
+          // every member near enough to see decides: stand by the boss, back the challenger, or stay out of it
+          for (const q of gangMembers(g.id)) { if (q === p || q === boss || !conscious(q) || q.jailedUntil > 0 || dist2(q, boss) > 20 || f.sides.has(q.id)) continue;
+            const forBoss = R(q, boss).like * 2 + q.traits.loyalty * 2 + (g.underboss === q.id ? 0.5 : 0), forP = R(q, p).like * 2 + q.traits.ambition - q.traits.loyalty + (might(p) > might(boss) ? 0.5 : 0);
+            const pickSide = forBoss > forP ? boss : p, how = Math.max(forBoss, forP);
+            if (how > 1 + q.traits.caution) { join(f, q, f.sides.get(pickSide.id), q.traits.aggression > 0.7 ? 'lethal' : 'nonlethal'); (q.coupSide ||= {})[g.id] = pickSide.id; log('gang', `${q.name} sides with ${pickSide.name}.`, [q.id, pickSide.id]); }
+            else remember(q, { text: `stayed out of ${p.name}'s fight with ${boss.name}` }); } }
+        p.task = null; return;
+      }
       case 'caravan': return doCaravan(p, dt);
       case 'rustle': { const a = sim.animals[tk.target]; if (!a || !a.alive) { p.task = null; return; } if (!arrive(p, a, dt, 1.5)) return; a.alive = false; a.state = 'dead'; p.items.meat = (p.items.meat || 0) + a.meat; const own = sim.people[a.owner]; deed('theft', p, own || null, P(a.x, a.z)); log('crime', `${p.name} slaughters one of the ranch's ${a.species === 'hen' ? 'hens' : 'sheep'} in the dark and carries off the meat.`, [p.id]); p.task = null; return; }
       case 'ambush': return doAmbush(p, dt);
@@ -1064,7 +1095,7 @@ function Sim(opts = {}) {
       }
       case 'stand': {
         if (!arrive(p, tk.to, dt)) return;
-        if (!sim.election.candidates.includes(p.id) && pay(p, 'town', 5) === 5) { sim.election.candidates.push(p.id); log('politics', `${fullName(p)} stands for mayor (paid the 5c fee).`, [p.id]); }
+        if (!sim.election.candidates.includes(p.id) && pay(p, 'town', 5) === 5) { sim.election.candidates.push(p.id); cool(p, 'stand', 1440 * 7); log('politics', `${fullName(p)} stands for mayor (paid the 5c fee).`, [p.id]); if (!thinks(p) && !p.platform) p.platform = plainPlatform(p); }
         p.task = null; return;
       }
       case 'seekwork': {
@@ -1329,7 +1360,15 @@ function Sim(opts = {}) {
       if (yes > 0) marry(p, q); else { bump(p, q, 'like', -0.1); R(p, q).court = 0; log('life', `${q.name} turns down ${p.name}'s proposal.`, [p.id, q.id]); }
     }
   }
+  // a plain brain's platform: what someone like them would want, in a few words
+  function plainPlatform(p) {
+    const lines = [];
+    if (p.traits.greed > 0.6) lines.push('lower taxes'); if (p.traits.honesty > 0.7) lines.push('honest books at the hall'); if (p.job === 'none' || p.coin < 5) lines.push('work for anyone who wants it');
+    if (p.traits.aggression > 0.6) lines.push('a hard line on thieves'); if (isGuard(p)) lines.push('more guards, better paid'); if (JOBS[p.job]?.owner) lines.push('fair trade for the shops');
+    return (lines.length ? lines.slice(0, 2) : ['a better Hollow Town']).join(' and ');
+  }
   function campaign(p, q) {
+    if (p.platform && q) { (q.heardPlatform ||= {})[p.id] = true; if (Math.random() < 0.08) log('politics', `${p.name} canvasses ${q.name}: "${p.platform}"`, [p.id, q.id]); }
     const bribe = p.coin > 8 && q.traits.greed > 0.6 && p.traits.honesty < 0.5 ? 2 : 0;
     if (bribe) { pay(p, q, bribe); (q.voteBribes ||= {})[p.id] = (q.voteBribes[p.id] || 0) + bribe; }
     const r = d(20) + p.skills.diplomacy; if (r >= 12) bump(q, p, 'like', 0.08); else bump(q, p, 'like', -0.02);
@@ -1438,10 +1477,75 @@ function Sim(opts = {}) {
   }
   sim.die = die;
   function succession(g) {
-    const heirs = gangMembers(g.id).sort((a, b) => might(b) + b.traits.ambition * 3 - might(a) - a.traits.ambition * 3);
-    if (heirs[0]) { g.boss = heirs[0].id; log('gang', `${fullName(heirs[0])} takes over ${g.name}.`, [heirs[0].id]); }
-    else { log('gang', `${g.name} is finished.`); delete sim.gangs[g.id]; }
+    const usurper = g.coupBy && sim.people[g.coupBy];
+    if (usurper && usurper.alive && usurper.gang === g.id) { g.boss = usurper.id; g.coupBy = null; g.underboss = null; log('gang', `${fullName(usurper)} takes ${g.name} by force.`, [usurper.id]); return; }
+    if (!gangMembers(g.id).length) { log('gang', `${g.name} is finished.`); delete sim.gangs[g.id]; return; }
+    gangVote(g, 'the boss is gone');
   }
+  // ======================================================= ranks by vote ==
+  // Guards choose their captain from among themselves; gang members choose their boss.
+  // The runner-up is second in command (sergeant / underboss) and stands in while the
+  // first is jailed. Each voter weighs liking, trust, strength, standing, bribes, their own
+  // ambition, and their own declared choice (an AI's "captain_vote" / "boss_vote").
+  function rankScore(v, c, office) {
+    let sc = R(v, c).like * 3 + R(v, c).trust + might(c) * 0.3 + c.level * 0.5 + Math.min(1.5, seen(v, c).worth / 80) + (v.voteBribes?.[c.id] || 0) * v.traits.greed * 0.4 + rnd(-0.5, 0.5);
+    if (v === c) sc += 1 + v.traits.ambition * 4;
+    if (v[office + 'Vote'] === c.id) sc += 6;
+    if (office === 'captain') { sc += Math.min(3, (c.stats.arrests || 0) * 0.3); if (sim.mayorPick === c.id) sc += 1.5; if (c.gang && v.gang === c.gang) sc += 3; }
+    if (office === 'boss') { sc += (c.stats.kills || 0) * 0.5 + (c.stats.wins || 0) * 0.15 + power(c) / 10; if (c.jailedUntil > 0) sc -= 2; }
+    return sc;
+  }
+  function tally(voters, cands, office) {
+    const t = Object.fromEntries(cands.map(c => [c.id, 0]));
+    for (const v of voters) { let best = null, bs = -1e9; for (const c of cands) { const sc = rankScore(v, c, office); if (sc > bs) { bs = sc; best = c; } } if (best) t[best.id]++; }
+    return cands.slice().sort((a, b) => t[b.id] - t[a.id] || might(b) - might(a)).map(c => [c, t[c.id]]);
+  }
+  function guardVote(why) {
+    const guards = living().filter(q => isGuard(q) && q.kind === 'human' && !q.town);
+    const cands = guards.filter(q => q.jailedUntil <= 0 && conscious(q));
+    if (!cands.length) return;
+    const res = tally(guards.filter(q => q.jailedUntil <= 0), cands, 'captain'), [win, second] = res;
+    const old = sim.people[sim.captainId];
+    if (old && old.alive && old !== win[0]) old.job = 'guard';
+    win[0].job = 'captain'; sim.captainId = win[0].id;
+    for (const q of guards) if (q.rank === 'sergeant' || q.rank === 'acting captain') q.rank = null;
+    win[0].rank = 'captain'; if (second) second[0].rank = 'sergeant';
+    sim.actingCaptainFor = null;
+    log('politics', `The guards choose their captain${why ? ' (' + why + ')' : ''}: ${res.map(([c, n]) => c.name + ' ' + n).join(', ')}. ${fullName(win[0])} ${old === win[0] ? 'stays captain' : 'is captain now'}${second ? ', ' + second[0].name + ' sergeant' : ''}.`, res.map(([c]) => c.id));
+    for (const v of guards) v.captainVote = null;
+  }
+  function gangVote(g, why) {
+    const members = gangMembers(g.id), cands = members.filter(q => q.jailedUntil <= 0 && conscious(q));
+    if (!cands.length) return;
+    const res = tally(members.filter(q => q.jailedUntil <= 0), cands, 'boss'), [win, second] = res;
+    const old = sim.people[g.boss];
+    g.boss = win[0].id; g.underboss = second ? second[0].id : null; g.acting = null; g.jailedBoss = null;
+    log('gang', `${g.name} choose their boss${why ? ' (' + why + ')' : ''}: ${res.map(([c, n]) => c.name + ' ' + n).join(', ')}. ${fullName(win[0])} ${old === win[0] ? 'keeps the crew' : 'leads now'}${second ? ', ' + second[0].name + ' underboss' : ''}.`, res.map(([c]) => c.id));
+    if (old && old.alive && old !== win[0]) { bump(old, win[0], 'like', -0.3); remember(old, { text: `my crew dropped me for ${win[0].name}` }); }
+    for (const v of members) v.bossVote = null;
+  }
+  sim.guardVote = guardVote; sim.gangVote = gangVote;
+  // stand-ins: a jailed captain or boss is replaced by their second until they're free again
+  function standIns() {
+    const cap = sim.people[sim.captainId];
+    if (cap && cap.alive && cap.jailedUntil > 0 && !sim.actingCaptainFor) {
+      const sgt = living().find(q => q.rank === 'sergeant' && isGuard(q) && q.jailedUntil <= 0) || living().filter(q => isGuard(q) && q.jailedUntil <= 0 && q !== cap).sort((a, b) => b.level - a.level)[0];
+      if (sgt) { sim.actingCaptainFor = cap.id; cap.job = 'guard'; sgt.job = 'captain'; sgt.rank = 'acting captain'; sim.captainId = sgt.id; log('politics', `With Captain ${cap.name} in a cell, ${sgt.name} takes charge of the guard.`, [sgt.id, cap.id]); }
+    }
+    const was = sim.people[sim.actingCaptainFor];
+    if (was && was.alive && was.jailedUntil <= 0) { const act = sim.people[sim.captainId]; if (act) { act.job = 'guard'; act.rank = 'sergeant'; } was.job = 'captain'; was.rank = 'captain'; sim.captainId = was.id; sim.actingCaptainFor = null; log('politics', `${was.name} is out and takes the guard back.`, [was.id]); }
+    else if (sim.actingCaptainFor && (!was || !was.alive || !isGuard(was) && was.job !== 'guard')) sim.actingCaptainFor = null;
+    if (!sim.captainId || !sim.people[sim.captainId]?.alive) guardVote('no captain');
+    for (const g of Object.values(sim.gangs)) {
+      const b = sim.people[g.boss];
+      if (!b || !b.alive || b.gang !== g.id) { succession(g); continue; }
+      if (b.jailedUntil > 0 && !g.jailedBoss) { const ub = sim.people[g.underboss]; const act = ub && ub.alive && ub.gang === g.id && ub.jailedUntil <= 0 ? ub : gangMembers(g.id).filter(q => q !== b && q.jailedUntil <= 0).sort((x, y) => might(y) - might(x))[0]; if (act) { g.jailedBoss = b.id; g.boss = act.id; g.acting = true; log('gang', `${b.name} is in a cell; ${act.name} runs ${g.name} for now.`, [act.id, b.id]); } }
+      const jb = sim.people[g.jailedBoss];
+      if (jb && jb.alive && jb.jailedUntil <= 0 && jb.gang === g.id) { const act = sim.people[g.boss]; g.boss = jb.id; g.underboss = act?.id || g.underboss; g.jailedBoss = null; g.acting = false; log('gang', `${jb.name} is out and takes ${g.name} back${act && act.traits.ambition > 0.7 ? ` (${act.name} doesn't like it)` : ''}.`, [jb.id]); if (act && act.traits.ambition > 0.7) bump(act, jb, 'like', -0.2); }
+      else if (g.jailedBoss && (!jb || !jb.alive || jb.gang !== g.id)) g.jailedBoss = null;
+    }
+  }
+  sim.standIns = standIns;
   // who needs carrying to the infirmary: the dying, and the badly hurt left lying (not those in a fight, a cell or already carried)
   function patients() {
     return living().filter(q => q.kind === 'human' && q.alive && !q.fight && q.jailedUntil <= 0 && !q.carriedBy && areaOf(q) !== 'healer' && (q.dying || (q.down && q.hp < q.maxhp * 0.5)))
@@ -1698,6 +1802,16 @@ function Sim(opts = {}) {
   }
   function endFight(f, winnerSide) {
     sim.fights = sim.fights.filter(x => x !== f);
+    if (f.coup) {   // who holds the gang after a coup
+      const g = sim.gangs[f.coup.gang], by = sim.people[f.coup.by], boss = sim.people[f.coup.boss];
+      if (g) {
+        const challengerWon = by && by.alive && f.sides.get(by.id) === winnerSide;
+        if (challengerWon && boss?.alive && g.boss === boss.id) { g.boss = by.id; g.underboss = null; log('gang', `${fullName(by)} beats ${boss.name} and takes ${g.name}.`, [by.id, boss.id]); if (boss.traits.loyalty < 0.5 || R(boss, by).like < -0.3) { boss.gang = null; log('gang', `${boss.name} walks away from the crew.`, [boss.id]); } }
+        else if (!challengerWon && by?.alive) { by.gang = null; log('gang', `${by.name}'s grab for ${g.name} fails; they're out of the crew.`, [by.id]); for (const q of gangMembers(g.id)) if (q.coupSide?.[g.id] === by.id) { bump(boss, q, 'like', -0.5); bump(boss, q, 'trust', -0.5); } }
+        g.coupBy = null;
+        for (const q of gangMembers(g.id)) if (q.coupSide) delete q.coupSide[g.id];
+      }
+    }
     const winners = f.order.map(body).filter(q => q && q.alive && f.sides.get(q.id) === winnerSide && conscious(q));
     const fought = new Set(f.order);
     const losers = f.order.map(body).filter(q => q && q.alive && f.sides.get(q.id) !== winnerSide);
@@ -1769,6 +1883,7 @@ function Sim(opts = {}) {
     if (pop < 30 && Math.random() < 0.6) newcomers(Math.min(5, 30 - pop));
     // elections every seventh day
     if (sim.day % 7 === 0) sim.election.due = true;
+    { const left = (7 - sim.day % 7) % 7; const n = [...new Set([...(sim.mayorId ? [sim.mayorId] : []), ...sim.election.candidates])].length; if (left <= 3) log('politics', left === 0 ? `Election day. ${n} on the ballot; the vote is at noon.` : `${left} day${left > 1 ? 's' : ''} to the election. ${n} on the ballot.`); }
     sim.history.push(snapshot());
     if (sim.onChronicle) {
       const hs = sim.history, a = hs[hs.length - 2] || hs[0], b = hs[hs.length - 1], day = sim.lore.acts;
@@ -1830,11 +1945,13 @@ function Sim(opts = {}) {
         let s = R(v, c).like * 3 + R(v, c).trust + Math.min(2, seen(v, c).worth / 60) * (1 - v.traits.honesty * 0.5) + (v.voteBribes?.[c.id] || 0) * v.traits.greed * 0.4 + (c.gang && v.gang === c.gang ? 3 : 0) + (v.spouse === c.id ? 5 : 0) + (v === c ? 10 : 0);
         if (c.id === sim.mayorId) s += (v.unpaidWages ? -1.5 : 0.5) - crimeLately * 0.02 + (sim.taxRate < 0.12 ? 0.5 : -0.5);
         if (v.gang) { const boss = sim.people[sim.gangs[v.gang]?.boss]; if (boss && boss.voteFor === c.id) s += 2 * v.traits.loyalty; }
+        if (v.voteFor === c.id) s += 6;
+        if (c.platform && v.heardPlatform?.[c.id]) s += 0.8;
         s += rnd(-0.5, 0.5);
         if (s > bs) { bs = s; best = c; }
       }
       tally[best.id]++;
-      v.voteBribes = null;
+      v.voteBribes = null; v.voteFor = null; v.heardPlatform = null;
     }
     const ranked = cands.slice().sort((a, b) => tally[b.id] - tally[a.id]);
     const winner = ranked[0], old = sim.people[sim.mayorId];
@@ -1864,7 +1981,7 @@ function Sim(opts = {}) {
     const out = [];
     if (typeof dec.tax_rate === 'number') { sim.taxRate = clamp(dec.tax_rate, 0, 0.4); out.push(`tax ${Math.round(sim.taxRate * 100)}%`); }
     if (dec.wages) for (const [k, v] of Object.entries(dec.wages)) if (k in sim.wages && typeof v === 'number') { sim.wages[k] = clamp(Math.round(v), 0, 30); out.push(`${k} wage ${sim.wages[k]}c`); }
-    if (dec.captain && sim.people[dec.captain]?.alive) { const c = sim.people[dec.captain]; if (sim.captainId && sim.people[sim.captainId]) sim.people[sim.captainId].job = 'guard'; c.job = 'captain'; sim.captainId = c.id; out.push(`${c.name} is captain`); }
+    if (dec.captain && sim.people[dec.captain]?.alive && isGuard(sim.people[dec.captain])) { sim.mayorPick = dec.captain; out.push(`backs ${sim.people[dec.captain].name} for captain (the guards vote)`); }
     if (dec.bounty) for (const [id, amt] of Object.entries(dec.bounty)) if (sim.people[id]?.alive && typeof amt === 'number') { sim.bounty[id] = clamp(Math.round(amt), 0, 50); out.push(`bounty ${amt}c on ${sim.people[id].name}`); }
     if (typeof dec.curfew === 'boolean') { sim.curfew = dec.curfew; out.push(dec.curfew ? 'curfew' : 'no curfew'); }
     if (typeof dec.rent === 'number') { sim.rent = clamp(Math.round(dec.rent), 0, 5); out.push(`rent ${sim.rent}c`); }
@@ -1920,11 +2037,14 @@ function Sim(opts = {}) {
       `Recently: ${p.memory.slice(-8).map(m => m.text || (m.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (${m.how}${m.lie ? '' : ''})` : m.grave ? `${m.name} buried in plot ${m.grave}` : '')).filter(Boolean).join('; ') || 'nothing notable'}.`,
       `Town: treasury ${sim.treasury}c, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${sim.rent}c and head tax ${sim.headTax}c a day, mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, gangs ${Object.values(sim.gangs).map(g => `${g.name} (boss ${sim.people[g.boss]?.name}, ${gangMembers(g.id).length})`).join(', ') || 'none'}. Election every 7th day (next: day ${Math.ceil(sim.day / 7) * 7}).`,
       `Right now you can see: ${inView(p) || 'nobody'}.`,
+      rankNews(p),
+      electionNews(p) + ` To stand, put "stand for mayor" in your agenda (you walk to the hall and pay). As a candidate you may set "platform": one line of what you promise. Anyone may set "vote_for": "<id>" (who you'll vote for; you can change your mind).`,
       sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
     ];
     if (kind === 'mayor') lines.push(
       `Wages now: ${JSON.stringify(sim.wages)}. Bounties: ${JSON.stringify(sim.bounty)}. Curfew: ${sim.curfew}. Bail: ${sim.bail}c. Crimes in the last day: ${sim.events.filter(e => sim.t - e.t < 1440).length}. People with open charges: ${living().filter(p => openRecord(p).length).map(p => `${p.name} (${p.id}) ${openRecord(p).length}`).join(', ') || 'none'}.`,
       `Guards: ${living().filter(isGuard).map(g => `${g.name} (${g.id}, ${JOBS[g.job].title}, lvl ${g.level}${g.gang ? ', in a gang' : ''})`).join('; ')}.`,
+      electionNews(p),
       `You may also add "agenda":["step", ...] (up to 5) to steer your own body today, written like: work, visit <person>, campaign, tavern, court <person>, extort <person>, boast <person>.`,
       `Reply with ONLY a JSON object; every key optional: {"tax_rate":0-0.4, "wages":{"guard":n,"captain":n,"mayor":n,"clerk":n,"laborer":n,"undertaker":n,"cleric":n,"doctor":n,"teacher":n,"jailer":n,"nightguard":n}, "rent":n, "head_tax":n, "captain":"id", "bounty":{"id":coins}, "curfew":true|false, "bail":n, "hire":["guard"|"nightguard"|"laborer"|"clerk"|"jailer"|"cleric"|"doctor"|"teacher"|"undertaker"], "fire":["id"], "pardon":["id"], "take_from_treasury":coins (into your own purse; if anyone in the hall sees, it is a crime, and the town may not be able to pay its wages), "policy":{"work":0-3,"crime":0-3,"violence":0-3,"romance":0-3,"politics":0-3,"gang":0-3,"tavern":0-3}, "statement":"one sentence to the town"}. "policy" weights your own personal choices today (1 = normal).`);
     else {
@@ -1980,6 +2100,21 @@ function Sim(opts = {}) {
     return out.sort((a, b) => dist2(a, p) - dist2(b, p)).slice(0, max).map(q => q.kind === 'animal' ? `a ${q.species}` : `${q.id === 'player' ? 'Rose of the City' : q.name} (${!conscious(q) ? 'on the ground' : q.fight ? 'fighting' : q.task?.kind || q.state}${q.items?.finery ? ', finely dressed' : ''}${q.items?.torch && night() ? ', carrying a torch' : ''}, ~${Math.round(dist2(q, p))}m)`).join(', ');
   }
   sim.inView = inView;
+  function electionNews(p) {
+    const next = Math.ceil((sim.day + (H() >= 12 && sim.day % 7 === 0 ? 1 : 0)) / 7) * 7, left = next - sim.day;
+    const cands = [...new Set([...(sim.mayorId ? [sim.mayorId] : []), ...sim.election.candidates])].map(id => sim.people[id]).filter(q => q && q.alive);
+    const list = cands.map(c => `${c.id === 'player' ? 'Rose of the City (the outsider)' : fullName(c)} (${c.id}${c.id === sim.mayorId ? ', the sitting mayor' : ''}${c.platform ? ': "' + c.platform + '"' : ''})`).join('; ');
+    const me = sim.election.candidates.includes(p.id) || p.id === sim.mayorId;
+    return `ELECTION for mayor ${left === 0 ? 'TODAY at noon' : `in ${left} day${left > 1 ? 's' : ''} (day ${next}, noon)`}. On the ballot: ${list || 'nobody yet'}. ${me ? 'You are on the ballot' + (p.platform ? ' (your platform: "' + p.platform + '")' : '') + '.' : 'Anyone may stand: 5c fee at the town hall.'} Everyone votes. The mayor sets taxes, wages, hiring, the guard captain and bounties, and draws the biggest wage.${p.voteFor ? ` You mean to vote for ${sim.people[p.voteFor]?.name}.` : ''}`;
+  }
+  sim.electionNews = electionNews;
+  function rankNews(p) {
+    const out = [];
+    if (isGuard(p)) { const cap = sim.people[sim.captainId], sgt = living().find(q => q.rank === 'sergeant'); const left = ((3 - sim.day % 7) + 7) % 7; out.push(`You are ${p.rank || 'a guard'}. Captain: ${cap ? cap.name + (p.rank === 'acting captain' ? ' (you, acting)' : '') : 'none'}${sgt ? ', sergeant ' + sgt.name : ''}${sim.mayorPick ? `; the mayor backs ${sim.people[sim.mayorPick]?.name}` : ''}. The guards vote for their captain ${left === 0 ? 'today at 6pm' : 'in ' + left + ' day(s)'}: say who with "captain_vote": "<id>" (guards: ${living().filter(isGuard).map(q => q.name + ' ' + q.id).join(', ')}).`); }
+    if (p.gang && sim.gangs[p.gang]) { const g = sim.gangs[p.gang], b = sim.people[g.boss], ub = sim.people[g.underboss]; const left = ((5 - sim.day % 7) + 7) % 7; out.push(`You run with ${g.name}. Boss: ${b?.name || 'none'}${g.acting ? ' (acting, the real boss is jailed)' : ''}${b === p ? ' (you)' : ''}${ub ? ', underboss ' + ub.name : ''}. The crew picks its boss ${left === 0 ? 'tonight' : 'in ' + left + ' day(s)'}: "boss_vote": "<id>" (members: ${gangMembers(g.id).map(q => q.name + ' ' + q.id).join(', ')}). A boss can also be taken by force ("coup" in your agenda); the others choose whether to stay loyal.`); }
+    return out.join(' ');
+  }
+  sim.rankNews = rankNews;
   sim.chatPrompt = (sp, to, heard, turn) => {
     const r = R(sp, to), about = sp.memory.filter(m => (m.text || '').includes(to.name) || m.actor === to.id || m.by === to.id).slice(-4).map(m => m.text || `${sim.people[m.actor]?.name} ${m.type}`).join('; ');
     const who = to.id === 'player' ? `Rose of the City, an outsider from the city (a human player; treat her like anyone else)` : `${fullName(to)}, ${JOBS[to.job].title.toLowerCase()}${to.gang ? ' (' + sim.gangs[to.gang]?.name + ')' : ''}`;
@@ -1987,6 +2122,8 @@ function Sim(opts = {}) {
       `You are ${fullName(sp)}, ${sp.age}, ${JOBS[sp.job].title.toLowerCase()} in Hollow Town, a small grim-fantasy village. ${sim.clock()}, day ${sim.day}, at ${AREAS[areaOf(sp)]?.name || 'the road'}.`,
       `Your one goal is to make as much money as you can. Purse ${sp.coin}c. ${sp.food < 0.3 ? 'You are hungry. ' : ''}${sp.hp < sp.maxhp / 2 ? 'You are hurt. ' : ''}The town ranks you ${rankOf(sp)}.${sp.policy ? ' Your plan today: ' + JSON.stringify(sp.policy) + '.' : ''}`,
       `You're talking with ${who}. You like them ${r.like.toFixed(1)} (-1..1), trust ${r.trust.toFixed(1)}, guess they're worth ~${Math.round(r.worth ?? 30)}c.${about ? ' What you know about them: ' + about + '.' : ''}`,
+      electionNews(sp),
+      rankNews(sp),
       `You can see: ${inView(sp) || 'nobody else'}${litAt(sp, sp) ? '' : ' (it is dark here)'}.`,
       heard ? `They just said to you: "${String(heard).slice(0, 300)}"` : `You start the conversation.`,
       `Speak like a villager: one or two short sentences, no narration. You may lie, flatter, haggle, threaten, gossip or ask for something if it serves you.`,
@@ -2085,6 +2222,11 @@ function Sim(opts = {}) {
     if (Array.isArray(dec.agenda)) { p.agenda = dec.agenda.slice(0, 5).map(x => ({ do: String(typeof x === 'object' ? x.do || x.step || '' : x).slice(0, 80) })).filter(x => x.do); if (p.agenda.length && p.task && !['jail', 'fight', 'flee', 'sleep'].includes(p.task.kind)) p.task = null; }
     if (dec.policy && typeof dec.policy === 'object') { p.policy = {}; for (const [k, v] of Object.entries(dec.policy)) if (typeof v === 'number') p.policy[k] = clamp(v, 0, 3); }
     if (dec.say) log('talk', `${p.name}: "${String(dec.say).slice(0, 200)}"`, [p.id]);
+    if (dec.platform && (sim.election.candidates.includes(p.id) || p.id === sim.mayorId)) { const pl = String(dec.platform).slice(0, 160); if (pl !== p.platform) { p.platform = pl; log('politics', `${p.name}'s platform: "${pl}"`, [p.id]); learnWords(pl); } }
+    if (dec.vote_for && sim.people[dec.vote_for]?.alive) p.voteFor = dec.vote_for;
+    if (dec.captain_vote && sim.people[dec.captain_vote]?.alive) p.captainVote = dec.captain_vote;
+    if (dec.boss_vote && sim.people[dec.boss_vote]?.alive) p.bossVote = dec.boss_vote;
+    if (dec.stand === true) (p.agenda ||= []).unshift({ do: 'stand for mayor' });
   };
   function morning() {
     for (const p of living()) {
@@ -2109,6 +2251,9 @@ function Sim(opts = {}) {
       payWages(h);
       if (h === 7) morning();
       if (h === 12 && sim.election.due) runElection();
+      standIns();
+      if (h === 18 && sim.day % 7 === 3) guardVote('the weekly vote');
+      if (h === 21 && sim.day % 7 === 5) for (const g of Object.values(sim.gangs)) gangVote(g, 'the weekly reckoning');
       for (const p of living()) if (p.task && (p.agenda?.length && !['jail', 'flee', 'talk', 'tail'].includes(p.task.kind) || !['jail', 'sleep', 'work', 'flee', 'follow', 'caravan', 'fish', 'tail', 'talk'].includes(p.task.kind)) && sim.t - p.task.t0 > 60) p.task = null;   // replan hourly
     }
     for (const p of living()) {
