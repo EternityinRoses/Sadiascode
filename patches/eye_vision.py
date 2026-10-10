@@ -8,7 +8,7 @@ every /api/ call but the picture is answered with a fake "no", so it can't touch
 the save, the session lease or any seat's mailbox. It makes no sound.
 
 Run it once (double-click, or `python patches/eye_vision.py`). It backs up
-void.js into .backups first, checks every place it edits, and changes nothing if
+void.js into Desktop\cloude\backups first, checks every place it edits, and changes nothing if
 any of them doesn't match. Running it twice is safe.
 """
 import shutil
@@ -20,6 +20,8 @@ GAME = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(r"D:\Sadias Canvas")
 VOID = GAME / "src" / "world" / "void.js"
 EYE = GAME / "eye.html"
 MARK = "EYE FROM AFAR"
+# Backups live in Cloude's own folder (Desktop\cloude\backups\sadias_canvas), never in the game folder.
+BACKUPS = Path(__file__).resolve().parent.parent / "backups" / "sadias_canvas"
 
 EYE_HTML = r'''<!DOCTYPE html>
 <html lang="en">
@@ -218,18 +220,18 @@ def main():
                          "Nothing was changed.")
         for anchor, repl in EDITS:
             text = text.replace(anchor, repl, 1)
-        backups = GAME / ".backups"
-        backups.mkdir(exist_ok=True)
+        BACKUPS.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
-        shutil.copy2(VOID, backups / f"void.js.{stamp}.before-eye")
+        shutil.copy2(VOID, BACKUPS / f"void.js.{stamp}.before-eye")
         out = text.replace("\n", "\r\n") if crlf else text
         VOID.write_bytes(out.encode("utf-8"))
-        print(f"void.js patched (backup: .backups/void.js.{stamp}.before-eye).")
+        print(f"void.js patched (backup: {BACKUPS / f'void.js.{stamp}.before-eye'}).")
     if EYE.is_file() and EYE.read_text(encoding="utf-8") == EYE_HTML:
         print("eye.html already in place.")
     else:
         if EYE.is_file():
-            shutil.copy2(EYE, GAME / ".backups" / f"eye.html.{time.strftime('%Y%m%d-%H%M%S')}")
+            BACKUPS.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(EYE, BACKUPS / f"eye.html.{time.strftime('%Y%m%d-%H%M%S')}")
         EYE.write_text(EYE_HTML, encoding="utf-8")
         print("eye.html written.")
     print("Done. Reload the game (F5 or restart LoH.exe) to use it.")
