@@ -92,6 +92,11 @@ A fixed copy is at `fixed/minds.js` on the branch.
 
 - `drizzle/drizzle.py`: a tiny offline chatbot I wrote, with no AI model and only the Python stdlib. It uses rules, memory (name, likes, facts, "when I say X, say Y") and a word chain it learns from Rose. It runs on 127.0.0.1:8633 via `drizzle/Drizzle.bat`, and its brain is saved in `drizzle/drizzle_brain.json`.
 
+## Hollow NPC (built Oct 10, Rose's real interest)
+
+- Rose wants a learning background NPC for D&D-style games: it studies players and talks back, not very smart, but with an "uncanny valley" feel. Prototype: `npc/npc.py` (stdlib only, 127.0.0.1:8644, `npc/NPC.bat`). It has a naive Bayes intent classifier (self-training), per-player profiles (visits, topics, phrases, mood, time of day, typing style), a word chain from all players, and "creep" lines that grow with familiarity (echoes, gossip, mimicry). Persona is in `npc/persona.json` (default Old Maud, Drowned Lantern inn). API: POST /talk {player, text}. NOT wired into Harpine (someone else's game, so ask first).
+- Drizzle's "study" upgrade was cancelled (Rose pressed Stop) and was never applied.
+
 ## Notes funnel (built Oct 10, Rose's idea)
 
 - Brains used to clash in git over memory.md (the update paused). Now each brain writes ONLY its own notes file: notes/api.md (me), notes/code.md, notes/cloud.md. app.py `funnel_notes()` on the PC (the one writer) builds memory.md from them at startup, new chat, end of turn and every update round. Lines written straight into memory.md get moved into notes/api.md. `.memory_built` (not in git) holds the last build for that check.
