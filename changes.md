@@ -41,3 +41,13 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **Why:** a stray `GO the old road east to Harrowmere` + `RUN` from 5 AM was still sitting in `seats/` (the game only drains files while it runs). Both were swept in the first test.
 - **Undo:** remove the `clear_orders` line in `seat_runner`, the CLEAR block (starts `if folder is not None and re.fullmatch(r"\s*CLEAR`), and the `STALE_ORDER_S` / `clear_orders` definitions. Restart.
 - **Status:** compiled; stale sweep tested on the real mailbox. Needs **Restart** to go live.
+
+## 5. Game log in the seat mailbox (wishlist #3)
+- **When / who:** 2026-10-10, Nimbus
+- **Files (game, not in git):**
+  - `D:\Sadias Canvas\src\world\void.js`, the console ring (`if (!window.__lohConsole)`, about line 800): the `const keep = ...` line became `const keep = window.__lohKeep = ...` and also counts lines in `window.__lohConsoleN`. A 2-line comment above it.
+  - Same file, `endFightOnMap()` (about line 9240), right after `const herWasIn = ...`: a `try { ... "fight over: " ... }` block that puts each fighter's name and hp/dead into the ring.
+  - `D:\Sadias Canvas\src\pilot.js`: `fileReport` added to the `import { ask, speak, ... } from "./minds.js"` list; new `const LOG_EVERY = 20, LOG_MAX = 20;` under `PUBLISH_EVERY`; in `listenTick`, after the publish block's `.then((ok) => { if (!ok) giveBack(); }).catch(giveBack);`, a block starting `/*,,. THE GAME LOG IN THE MAILBOX`.
+- **What:** every error, warning and fight result goes into `REPORTS.md` in the seat's mailbox folder (the game server's existing `/api/seat/report`, append-only). Only new lines, at most every 20 s, 20 lines a time, and repeats are folded ("(x5)").
+- **Undo:** remove those blocks and put the `keep` line back to `const keep = (line) => { ring.push(String(line).slice(0, 320)); if (ring.length > 40) ring.shift(); };` and drop `, fileReport` from the import. Or copy back the backups taken just before: `.backups/20261010-141233__D__Sadias Canvas__src__world__void.js` (also undoes later void.js edits, but keeps fix #1) and `.backups/20261010-141300__D__Sadias Canvas__src__pilot.js`.
+- **Status:** `node --check` passes on both. Needs the game reloaded, then look for `REPORTS.md` in `seats\`. Cloude's turns don't show REPORTS.md yet; the cloud was asked to add its new lines in `game_turn`.
