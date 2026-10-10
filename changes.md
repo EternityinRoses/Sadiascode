@@ -42,6 +42,11 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **Undo:** remove the `clear_orders` line in `seat_runner`, the CLEAR block (starts `if folder is not None and re.fullmatch(r"\s*CLEAR`), and the `STALE_ORDER_S` / `clear_orders` definitions. Restart.
 - **Status:** compiled; stale sweep tested on the real mailbox. Needs **Restart** to go live.
 
+## (Cloude) Context window setting
+- **When / who:** 2026-10-10, Nimbus. Rose asked for 500k.
+- **Files:** `app.py` (`/api/settings` accepts `compact_at`, 50,000 to 1,000,000; `/api/status` returns it), `static/index.html` (a "Context window" number field above Auto-run), `static/app.js` (fills and saves it).
+- **Undo:** `git revert` the commit "Settings: context window (compact_at) field", or just set the field back to 100000.
+
 ## 5. Game log in the seat mailbox (wishlist #3)
 - **When / who:** 2026-10-10, Nimbus
 - **Files (game, not in git):**
