@@ -11,6 +11,7 @@ A cozy little chat app for Claude that runs on your own computer with your own A
   - changed `app.py`: press **↻ Restart** (top right)
   - changed `system_prompt.md`: start a **new chat**
 - Shell commands (like installing a package) **always wait for you to press Allow**.
+- **Remembers things** in `memory.md`, which it reads at the start of every new chat and adds to by itself. It starts with notes from the Claude session that built it.
 - Before every edit it backs the old file up in `.backups/`, so nothing is lost.
 
 ## Start it

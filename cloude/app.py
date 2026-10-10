@@ -35,6 +35,7 @@ UPLOADS_DIR = APP_DIR / "uploads"
 BACKUPS_DIR = APP_DIR / ".backups"
 CONFIG_FILE = APP_DIR / "config.json"
 SYSTEM_FILE = APP_DIR / "system_prompt.md"
+MEMORY_FILE = APP_DIR / "memory.md"
 
 HOST = "127.0.0.1"          # only this computer can reach it
 PORT = int(os.environ.get("CLOUDE_PORT", "8640"))
@@ -270,6 +271,17 @@ def chat_path(chat_id):
     return CHATS_DIR / f"{chat_id}.json"
 
 
+def build_system():
+    """The personality plus the memory notes, as they stand when a chat starts."""
+    parts = []
+    if SYSTEM_FILE.exists():
+        parts.append(SYSTEM_FILE.read_text(encoding="utf-8"))
+    if MEMORY_FILE.exists():
+        parts.append("# Your memory (memory.md, as of the start of this chat)\n\n"
+                     + MEMORY_FILE.read_text(encoding="utf-8"))
+    return "\n\n".join(parts)
+
+
 def new_chat():
     # The system prompt and tool list are frozen per chat: the API rejects
     # replayed thinking blocks if either changes under an existing conversation.
@@ -278,7 +290,7 @@ def new_chat():
         "id": uuid.uuid4().hex,
         "title": "New chat",
         "created": time.time(),
-        "system": SYSTEM_FILE.read_text(encoding="utf-8") if SYSTEM_FILE.exists() else "",
+        "system": build_system(),
         "tools": TOOLS,
         "messages": [],     # exactly what is sent to the API, append-only
         "display": [],      # what the page shows
