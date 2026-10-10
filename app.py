@@ -2158,15 +2158,16 @@ def deliver_mail(from_id, to_id, text, reply):
                 cloud_send(find_claude(), repo_root(), chat["cloud_session"], f"[Cloude chat {tag}] {text}"
                            + ("" if reply else f"\n\n(Answer with a normal `### {tag}` block; Cloude passes it back.)"))
                 return
+            # A reply gets a turn too, so the chat picks it up and acts on it where Rose can
+            # watch, instead of it sitting unread until her next message. Its answer stays
+            # in that chat and is never sent back, so two chats can't loop.
+            shown_text = text
             if reply:
-                # shown now, and handed to the brain with the user's next message
-                chat["display"].append({"role": "assistant", "text": text, "thoughts": "", "tools": []})
-                chat.setdefault("inbox", []).append(text)
-                save_chat(chat)
-                return
+                text += "\n\n(This is a reply to your message. Act on it if it needs anything; your answer stays in this chat and is not sent back.)"
             got = {"text": "", "errors": []}
             emit = live_emit(to_id, got)
-            activity(f"chat {short_id(to_id)} is answering a message from chat {short_id(from_id)}")
+            activity(f"chat {short_id(to_id)} is {'reading a reply' if reply else 'answering a message'} "
+                     f"from chat {short_id(from_id)}")
 
             ACTIVE_TURNS += 1
             CHAT_TURNS += 1
@@ -2176,7 +2177,7 @@ def deliver_mail(from_id, to_id, text, reply):
                     # plan mode, unless auto-run is on (then it may act, like the API brain)
                     run_turn_code(chat, text, [], emit, read_only=not load_config().get("auto_approve"))
                 else:
-                    run_turn(chat, text, [], emit, mail=True)
+                    run_turn(chat, text, [], emit, display_text=shown_text, mail=True)
             finally:
                 ACTIVE_TURNS -= 1
                 CHAT_TURNS -= 1
