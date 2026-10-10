@@ -6,3 +6,4 @@ uploads/
 __pycache__/
 .cloude_system.txt
 .window/
+.cloud_mirror/

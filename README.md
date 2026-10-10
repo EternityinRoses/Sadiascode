@@ -22,7 +22,7 @@ Pick one in ⚙ settings. Switching opens a new chat on the new brain and hands 
 |---|---|---|
 | 🔑 **API key** | API credits (console.anthropic.com) | Streams here, with Cloude's own tools. Needs your API key. |
 | 💻 **Claude Code on this PC** | Claude Code's credit for scripted use (`claude -p`) | Runs the `claude` program on your PC and streams the answer here. Install Claude Code and run `claude auth login` once. With auto-run off it can edit files but not run commands. |
-| ☁️ **Cloud session** | Cloud-session credit, then your plan's usage | Hands the chat to a Claude Code cloud session. **Replies show up in the Claude app** (Cloude gives you the link); anything it pushes to GitHub comes back here. Needs `claude` signed in and Cloude inside a git clone. |
+| ☁️ **Cloud session** | Cloud-session credit, then your plan's usage | Hands the chat to a Claude Code cloud session. Press **🔄** to pull its replies in (Cloude teleports the session into a scratch copy, `.cloud_mirror/`, reads the replies and closes it), or read them in the Claude app. Needs `claude` signed in and Cloude inside a git clone. |
 
 Your normal subscription chat (the Claude app, or `claude` in a terminal) is a fourth pool, and it's used directly rather than through Cloude.
 

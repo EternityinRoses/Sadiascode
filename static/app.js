@@ -8,6 +8,12 @@ const sendBtn = $("sendBtn");
 const attachmentsEl = $("attachments");
 
 let chatId = null;
+let chatBrain = null;      // brain of the open chat (the 🔄 button is for cloud chats)
+
+function setChatBrain(b) {
+  chatBrain = b;
+  $("cloudRefreshBtn").hidden = b !== "cloud";
+}
 let busy = false;
 let pending = [];          // uploaded files waiting to be sent: {id, name, mime, kind, url}
 
@@ -256,6 +262,7 @@ function clearMessages() {
 
 function startNew() {
   chatId = null;
+  setChatBrain(null);
   clearMessages();
   refreshChats();
   $("sidebar").classList.remove("open");
@@ -265,6 +272,7 @@ function startNew() {
 async function openChat(id) {
   const chat = await (await fetch(`/api/chats/${id}`)).json();
   chatId = chat.id;
+  setChatBrain(chat.brain);
   clearMessages();
   for (const d of chat.display) {
     if (d.role === "user") userBubble(d.text, d.files);
@@ -317,7 +325,7 @@ async function send() {
 
 function handle(ev, view) {
   switch (ev.type) {
-    case "start": chatId = ev.chat_id; break;
+    case "start": chatId = ev.chat_id; setChatBrain(ev.brain); break;
     case "thinking": view.thinking(ev.text); break;
     case "text": view.text(ev.text); break;
     case "tool_start": view.toolStart(ev.name); break;
@@ -435,6 +443,23 @@ function applySkin(skin) {
 $("skinBtn").onclick = () => applySkin(document.documentElement.dataset.skin === "rose" ? "cloud" : "rose");
 applySkin(document.documentElement.dataset.skin || "cloud");
 
+$("cloudRefreshBtn").onclick = async () => {
+  if (busy || !chatId) return;
+  busy = true; sendBtn.disabled = true;
+  const btn = $("cloudRefreshBtn"); btn.disabled = true;
+  const v = assistantBubble();
+  v.notice("Teleporting the cloud session to check for replies… a terminal window may pop up for a moment.");
+  try {
+    const res = await post("/api/cloud_refresh", { chat_id: chatId });
+    if (res.error) v.notice(res.error, "error");
+    else if (res.text) v.text(res.text);
+    else v.notice("No new replies yet.");
+  } catch (e) {
+    v.notice("Refresh failed: " + e.message, "error");
+  }
+  v.done();
+  btn.disabled = false; busy = false; sendBtn.disabled = false;
+};
 $("restartBtn").onclick = async () => {
   if (busy) return;
   $("restartBtn").textContent = "…";
