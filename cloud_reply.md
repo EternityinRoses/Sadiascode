@@ -1,2 +1,0 @@
-### 336297ad game 92f299
-ACT: STAY
