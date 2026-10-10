@@ -1,3 +1,0 @@
-### 336297ad game 09b62b
-ACT: FOLLOW
-VISION
