@@ -413,11 +413,14 @@ $("settingsForm").onsubmit = async (e) => {
     $("keyInput").value = "";
     const switched = status.brain !== $("brainInput").value;
     await refreshStatus();
-    // A chat keeps the brain it started with, so a new brain means a new chat.
+    // A chat keeps the brain it started with, so a new brain means a new chat,
+    // and the conversation so far is handed over so nothing is forgotten.
     if (switched && chatId) {
-      startNew();
+      const old = chatId;
+      const fresh = await post("/api/new", { from_chat: old });
+      await openChat(fresh.id);
       const v = assistantBubble();
-      v.notice(`New chat on ${BRAIN_ICON[status.brain]} ${BRAIN_NAME[status.brain]}. Your older chats keep the brain they started with.`);
+      v.notice(`Continuing on ${BRAIN_ICON[status.brain]} ${BRAIN_NAME[status.brain]}. I'll pass our conversation so far along with your next message. The old chat stays as it was.`);
       v.done();
     }
   }

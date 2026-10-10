@@ -296,7 +296,34 @@ def build_system():
     return "\n\n".join(parts)
 
 
-def new_chat():
+def transcript(chat):
+    """The conversation as plain text (no thinking), for handing to another brain."""
+    lines = []
+    for d in chat.get("display", []):
+        who = "User" if d.get("role") == "user" else "Cloude"
+        files = ", ".join(f["name"] for f in d.get("files") or [])
+        text = (d.get("text") or "").strip()
+        if files:
+            text = f"[attached: {files}] {text}".strip()
+        if text:
+            lines.append(f"{who}: {text}")
+    return "\n\n".join(lines)
+
+
+def with_handoff(chat, user_text, limit):
+    """Put the conversation carried over from another brain in front of the
+    first message of this chat (once), trimmed to the most recent `limit` chars."""
+    carried = chat.pop("handoff", "")
+    if not carried:
+        return user_text
+    if len(carried) > limit:
+        carried = "(…earlier part cut…)\n\n" + carried[-limit:]
+    return ("We're continuing a conversation the user started with you on another of "
+            "Cloude's brains. Here it is for context:\n\n<earlier_conversation>\n"
+            f"{carried}\n</earlier_conversation>\n\nTheir new message:\n{user_text}")
+
+
+def new_chat(handoff=""):
     # The system prompt and tool list are frozen per chat: the API rejects
     # replayed thinking blocks if either changes under an existing conversation.
     # So when Cloude edits its own prompt or tools, it shows up in new chats.
@@ -313,6 +340,8 @@ def new_chat():
         "messages": [],     # exactly what is sent to the API, append-only
         "display": [],      # what the page shows
     }
+    if handoff:
+        chat["handoff"] = handoff   # conversation carried over from another brain
     save_chat(chat)
     return chat
 
@@ -414,8 +443,9 @@ def run_turn(chat, user_text, attachments, emit):
     content = []
     for att in attachments:
         content.extend(attachment_blocks(att))
-    if user_text:
-        content.append({"type": "text", "text": user_text})
+    model_text = with_handoff(chat, user_text, 120_000)
+    if model_text:
+        content.append({"type": "text", "text": model_text})
     if not content:
         return
     start_len = len(chat["messages"])
@@ -609,7 +639,7 @@ def run_turn_code(chat, user_text, attachments, emit):
         raise RuntimeError("I couldn't find the `claude` program. Install Claude Code, run "
                            "`claude auth login`, then try again, or switch my brain in settings.")
     cfg = load_config()
-    prompt = user_text
+    prompt = with_handoff(chat, user_text, 120_000)
     if attachments:
         prompt += "\n\nAttached files (open them with the Read tool):\n" + "\n".join(
             f"- uploads/{a['id']}  ({a['name']})" for a in attachments)
@@ -723,9 +753,15 @@ def run_turn_cloud(chat, user_text, attachments, emit):
         if attachments:
             emit({"type": "notice", "text": "Heads up: the cloud can't see attached files on this PC. "
                                             "Commit and push them if it needs them."})
+        message = with_handoff(chat, user_text, 60_000)
         if not chat.get("cloud_session"):
             emit({"type": "notice", "text": "Starting a cloud session… this can take a minute."})
-            done = subprocess.run([exe, "--cloud", user_text], cwd=root, stdin=subprocess.DEVNULL,
+            # The opening task goes on the command line, which is short and mangles
+            # some characters on Windows, so it's kept plain; the real message
+            # (with any carried-over chat) follows on stdin below.
+            opener = ("Hi! I'm Cloude, the user's local chat app. Their message follows in "
+                      "the next message, please wait for it and answer that.")
+            done = subprocess.run([exe, "--cloud", opener], cwd=root, stdin=subprocess.DEVNULL,
                                   capture_output=True, text=True, encoding="utf-8", errors="replace",
                                   timeout=300)
             out = (done.stdout or "") + (done.stderr or "")
@@ -733,16 +769,15 @@ def run_turn_cloud(chat, user_text, attachments, emit):
             if not m:
                 raise RuntimeError("The cloud session didn't start: " + (out.strip()[-600:] or f"exit code {done.returncode}"))
             chat["cloud_session"] = m.group(1)
-        else:
-            done = subprocess.run([exe, "-p", "--cloud", chat["cloud_session"], "--output-format", "json"],
-                                  cwd=root, input=user_text, capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace", timeout=120)
-            try:
-                res = json.loads(done.stdout)
-            except ValueError:
-                res = {"ok": False, "error": (done.stdout + done.stderr).strip()[-600:]}
-            if not res.get("ok"):
-                raise RuntimeError("Couldn't reach the cloud session: " + str(res.get("error")))
+        done = subprocess.run([exe, "-p", "--cloud", chat["cloud_session"], "--output-format", "json"],
+                              cwd=root, input=message, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=120)
+        try:
+            res = json.loads(done.stdout)
+        except ValueError:
+            res = {"ok": False, "error": (done.stdout + done.stderr).strip()[-600:]}
+        if not res.get("ok"):
+            raise RuntimeError("Couldn't reach the cloud session: " + str(res.get("error")))
         url = f"https://claude.ai/code/{chat['cloud_session']}"
         shown["text"] = (f"☁️ Sent to your cloud session! It's working on it now, on cloud credit.\n\n"
                          f"Watch it and read its replies here: [{chat['cloud_session']}]({url})\n\n"
@@ -900,7 +935,13 @@ class Handler(BaseHTTPRequestHandler):
                     slot["event"].set()
             return self.send_json({"ok": bool(slot)})
         if path == "/api/new":
-            chat = new_chat()
+            carried = ""
+            if body.get("from_chat"):
+                try:
+                    carried = transcript(load_chat(body["from_chat"]))
+                except (ValueError, OSError):
+                    pass
+            chat = new_chat(carried)
             return self.send_json({"id": chat["id"]})
         if path == "/api/delete":
             try:

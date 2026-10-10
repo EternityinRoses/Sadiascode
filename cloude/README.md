@@ -16,7 +16,7 @@ A cozy little chat app for Claude that runs on your own computer with your own A
 
 ## Three brains, three credit pools
 
-Pick one in ⚙ settings. New chats use it; old chats keep the brain they started with (the chat list shows 🔑 💻 ☁️).
+Pick one in ⚙ settings. Switching opens a new chat on the new brain and hands it the conversation so far, so it picks up where you left off. Old chats keep the brain they started with (the chat list shows 🔑 💻 ☁️).
 
 | Brain | Spends | How it works |
 |---|---|---|

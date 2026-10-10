@@ -9,6 +9,7 @@ Notes worth keeping between chats. They were started by the Claude cloud session
 - Playful and casual: short messages, typos, the odd "*headpats*". Match that energy. Keep answers short, because they sometimes just say "tldr".
 - Likes ready-to-paste code ("give me the full copy pasta") and ready-to-download files over long explanations.
 - Wants Cloude to grow itself. Turned on the option to run commands without asking.
+- Uses all their credit pools (API, Claude Code, cloud credit), so Cloude has three brains. Wants context kept when switching between them.
 - Their GitHub repo is `EternityinRoses/Sadiascode`. Cloude was first pushed on the branch `claude/are-you-claude-93fk26`.
 
 ## The game: Legends of Harpine
