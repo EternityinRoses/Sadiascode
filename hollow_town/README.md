@@ -1,7 +1,7 @@
-# Hollow Town: alarm, shelter, parties, talk
+# Hollow Town: alarm, shelter, parties, talk, deputies
 
-`sim.js` here is your latest `sim.js` with four additions. `sim-changes.diff` shows
-exactly what changed (16 lines changed, about 140 added). To use it, copy `sim.js`
+`sim.js` here is your latest `sim.js` with five additions. `sim-changes.diff` shows
+exactly what changed (21 lines changed, about 190 added). To use it, copy `sim.js`
 over the one in your town folder.
 
 Everything is a tool or an option. Nobody is told to use any of it.
@@ -58,3 +58,26 @@ Everything is a tool or an option. Nobody is told to use any of it.
   - "A bear, close by! Get behind a door!"
 
   Listeners aren't told to do anything about it.
+
+## 5. Deputies
+
+- **Who:** any guard can deputize anyone willing with
+  `deputize <name> [melee | ranged]`. Plain guards are offered it too.
+- **Who accepts:** their own nature decides (loyalty, aggression, caution, how
+  much they like the guard, and whether beasts are about). A "no" stands for
+  4 hours, and a plain guard waits 30 minutes between asks.
+- **The kit:** lent from the Guard station's loan rack, only where it beats
+  what the deputy already has.
+  - Melee: longsword or spear, plus a light shield with a one-handed weapon.
+  - Ranged: light crossbow or short bow, with 20 bolts or arrows.
+  - Armour: chain shirt or leather.
+- **The rack starts with:** 2 longswords, 4 spears, 3 light crossbows,
+  1 short bow, 60 bolts, 20 arrows, 2 chain shirts, 4 leather armours and
+  2 light shields. These numbers are set in `sim.rack`.
+- **The loan ends** after 8 hours, on `stand down` or `return the gear`, or if
+  the deputy is jailed. The kit goes back on the rack and they wear their own
+  again. A deputy who dies drops the town's kit where they fall.
+- **While deputized,** they count with the militia in the existing rules:
+  they run at the beast when the bell rings, and have more nerve in a fight.
+- **The AI is told** the rack's contents (guards) or their deputy status
+  (deputies).
