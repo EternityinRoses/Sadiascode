@@ -120,6 +120,48 @@ const WEAPONS = {
   longbow:    { name: 'Longbow', dmg: [1, 8], crit: [20, 3], range: 30, ammo: 'arrows', hands: 2, price: 7500, iron: 0, hours: 8 },
   lightxbow:  { name: 'Light crossbow', dmg: [1, 8], crit: [19, 2], range: 24, ammo: 'bolts', hands: 2, reload: 'move', price: 3500, iron: 2, hours: 6 },
   longsword1: { name: 'Longsword +1', dmg: [1, 8], crit: [19, 2], melee: true, enh: 1 },   // magic: +1 to hit and damage; found, never forged
+  // the rest of LoH's weapon catalogue (srd/data/weaponTable.js; Rose: "give those to the town"): dice, crit, range, hands, price
+  gauntlet: { name: 'Gauntlet', dmg: [1, 3], crit: [20, 2], melee: true, price: 200, iron: 1, hours: 1, loh: 'Gauntlet' },
+  punchingdagger: { name: 'Punching Dagger', dmg: [1, 4], crit: [20, 3], melee: true, price: 200, iron: 1, hours: 1, loh: 'Punching Dagger' },
+  spikedgauntlet: { name: 'Spiked Gauntlet', dmg: [1, 4], crit: [20, 2], melee: true, price: 500, iron: 1, hours: 1, loh: 'Spiked Gauntlet' },
+  morningstar: { name: 'Morningstar', dmg: [1, 8], crit: [20, 2], melee: true, price: 800, iron: 3, hours: 4, loh: 'Morningstar' },
+  shortspear: { name: 'Shortspear', dmg: [1, 6], crit: [20, 2], melee: true, price: 100, iron: 2, hours: 2, loh: 'Shortspear' },
+  longspear: { name: 'Longspear', dmg: [1, 8], crit: [20, 3], melee: true, hands: 2, price: 500, iron: 5, hours: 6, loh: 'Longspear' },
+  throwingaxe: { name: 'Throwing Axe', dmg: [1, 6], crit: [20, 2], melee: true, price: 800, iron: 1, hours: 1, loh: 'Throwing Axe' },
+  lighthammer: { name: 'Light Hammer', dmg: [1, 4], crit: [20, 2], melee: true, price: 100, iron: 1, hours: 1, loh: 'Light Hammer' },
+  kukri: { name: 'Kukri', dmg: [1, 4], crit: [18, 2], melee: true, price: 800, iron: 1, hours: 1, loh: 'Kukri' },
+  lightpick: { name: 'Light Pick', dmg: [1, 4], crit: [20, 4], melee: true, price: 400, iron: 2, hours: 2, loh: 'Light Pick' },
+  heavypick: { name: 'Heavy Pick', dmg: [1, 6], crit: [20, 4], melee: true, price: 800, iron: 3, hours: 4, loh: 'Heavy Pick' },
+  trident: { name: 'Trident', dmg: [1, 8], crit: [20, 2], melee: true, price: 1500, iron: 2, hours: 3, loh: 'Trident' },
+  falchion: { name: 'Falchion', dmg: [2, 4], crit: [18, 2], melee: true, hands: 2, price: 7500, iron: 4, hours: 5, loh: 'Falchion' },
+  glaive: { name: 'Glaive', dmg: [1, 10], crit: [20, 3], melee: true, hands: 2, price: 800, iron: 5, hours: 7, loh: 'Glaive' },
+  greatclub: { name: 'Greatclub', dmg: [1, 10], crit: [20, 2], melee: true, hands: 2, price: 500, iron: 0, hours: 5, loh: 'Greatclub' },
+  heavyflail: { name: 'Heavy Flail', dmg: [1, 10], crit: [19, 2], melee: true, hands: 2, price: 1500, iron: 5, hours: 7, loh: 'Heavy Flail' },
+  guisarme: { name: 'Guisarme', dmg: [2, 4], crit: [20, 3], melee: true, hands: 2, price: 900, iron: 6, hours: 8, loh: 'Guisarme' },
+  lance: { name: 'Lance', dmg: [1, 8], crit: [20, 3], melee: true, hands: 2, price: 1000, iron: 5, hours: 7, loh: 'Lance' },
+  ranseur: { name: 'Ranseur', dmg: [2, 4], crit: [20, 3], melee: true, hands: 2, price: 1000, iron: 6, hours: 8, loh: 'Ranseur' },
+  scythe: { name: 'Scythe', dmg: [2, 4], crit: [20, 4], melee: true, hands: 2, price: 1800, iron: 5, hours: 7, loh: 'Scythe' },
+  compositelongbow: { name: 'Composite Longbow', dmg: [1, 8], crit: [20, 3], range: 34, ammo: 'arrows', price: 10000, iron: 0, hours: 2, loh: 'Composite Longbow' },
+  compositeshortbow: { name: 'Composite Shortbow', dmg: [1, 6], crit: [20, 3], range: 21, ammo: 'arrows', price: 7500, iron: 0, hours: 1, loh: 'Composite Shortbow' },
+  kama: { name: 'Kama', dmg: [1, 6], crit: [20, 2], melee: true, exotic: true, price: 200, iron: 1, hours: 1, loh: 'Kama' },
+  nunchaku: { name: 'Nunchaku', dmg: [1, 6], crit: [20, 2], melee: true, exotic: true, price: 200, iron: 0, hours: 1, loh: 'Nunchaku' },
+  sai: { name: 'Sai', dmg: [1, 4], crit: [20, 2], melee: true, exotic: true, price: 100, iron: 1, hours: 1, loh: 'Sai' },
+  siangham: { name: 'Siangham', dmg: [1, 6], crit: [20, 2], melee: true, exotic: true, price: 300, iron: 1, hours: 1, loh: 'Siangham' },
+  bastardsword: { name: 'Bastard Sword', dmg: [1, 10], crit: [19, 2], melee: true, exotic: true, price: 3500, iron: 3, hours: 4, loh: 'Bastard Sword' },
+  dwarvenwaraxe: { name: 'Dwarven Waraxe', dmg: [1, 10], crit: [20, 3], melee: true, exotic: true, price: 3000, iron: 4, hours: 5, loh: 'Dwarven Waraxe' },
+  whip: { name: 'Whip', dmg: [1, 3], crit: [20, 2], melee: true, nonlethal: true, exotic: true, price: 100, iron: 0, hours: 1, loh: 'Whip' },
+  orcdoubleaxe: { name: 'Orc Double Axe', dmg: [1, 8], crit: [20, 3], melee: true, hands: 2, exotic: true, price: 6000, iron: 8, hours: 10, loh: 'Orc Double Axe' },
+  spikedchain: { name: 'Spiked Chain', dmg: [2, 4], crit: [20, 2], melee: true, hands: 2, exotic: true, price: 2500, iron: 5, hours: 7, loh: 'Spiked Chain' },
+  direflail: { name: 'Dire Flail', dmg: [1, 8], crit: [20, 2], melee: true, hands: 2, exotic: true, price: 9000, iron: 5, hours: 7, loh: 'Dire Flail' },
+  gnomehookedhammer: { name: 'Gnome Hooked Hammer', dmg: [1, 8], crit: [20, 3], melee: true, hands: 2, exotic: true, price: 2000, iron: 3, hours: 4, loh: 'Gnome Hooked Hammer' },
+  twobladedsword: { name: 'Two-Bladed Sword', dmg: [1, 8], crit: [19, 2], melee: true, hands: 2, exotic: true, price: 10000, iron: 5, hours: 7, loh: 'Two-Bladed Sword' },
+  dwarvenurgrosh: { name: 'Dwarven Urgrosh', dmg: [1, 8], crit: [20, 3], melee: true, hands: 2, exotic: true, price: 5000, iron: 6, hours: 8, loh: 'Dwarven Urgrosh' },
+  handcrossbow: { name: 'Hand Crossbow', dmg: [1, 4], crit: [19, 2], range: 9, ammo: 'bolts', reload: 'move', exotic: true, price: 10000, iron: 0, hours: 1, loh: 'Hand Crossbow' },
+  repeatingheavycrossbow: { name: 'Repeating Heavy Crossbow', dmg: [1, 10], crit: [19, 2], range: 37, ammo: 'bolts', reload: 'full', exotic: true, price: 40000, iron: 0, hours: 8, loh: 'Repeating Heavy Crossbow' },
+  repeatinglightcrossbow: { name: 'Repeating Light Crossbow', dmg: [1, 8], crit: [19, 2], range: 24, ammo: 'bolts', reload: 'move', exotic: true, price: 25000, iron: 0, hours: 4, loh: 'Repeating Light Crossbow' },
+  arrows: { name: 'Arrows', dmg: [1, 4], crit: [20, 2], melee: true, ammo: 'arrows', price: 100, iron: 2, hours: 2, loh: 'Arrows' },
+  bolts: { name: 'Bolts', dmg: [1, 4], crit: [20, 2], melee: true, ammo: 'bolts', price: 100, iron: 1, hours: 1, loh: 'Bolts' },
+  slingbullets: { name: 'Sling Bullets', dmg: [1, 3], crit: [20, 2], melee: true, ammo: 'bullets', price: 10, iron: 3, hours: 3, loh: 'Sling Bullets' },
   heavyxbow:  { name: 'Heavy crossbow', dmg: [1, 10], crit: [19, 2], range: 36, ammo: 'bolts', hands: 2, reload: 'full', price: 5000, iron: 3, hours: 8 },
 };
 // armour: AC, damage it soaks off every hit (dr), max Dex bonus, speed, check penalty (to Hide/Sneak)
@@ -133,6 +175,7 @@ const ARMOR = {
   scale:       { name: 'Scale mail', ac: 4, dr: 2, maxDex: 3, speed: 6, acp: 4, price: 5000, iron: 6, hours: 10 },
   chain:       { name: 'Chainmail', ac: 5, dr: 3, maxDex: 2, speed: 6, acp: 5, price: 15000, iron: 8, hours: 14 },
   breastplate: { name: 'Breastplate', ac: 5, dr: 3, maxDex: 3, speed: 6, acp: 4, price: 20000, iron: 7, hours: 14 },
+  splint:      { name: 'Splint mail', ac: 6, dr: 4, maxDex: 0, speed: 6, acp: 7, price: 20000, iron: 9, hours: 18 },
   banded:      { name: 'Banded mail', ac: 6, dr: 4, maxDex: 1, speed: 6, acp: 6, price: 25000, iron: 9, hours: 18 },
   halfplate:   { name: 'Half-plate', ac: 7, dr: 4, maxDex: 0, speed: 6, acp: 7, price: 60000, iron: 10, hours: 22 },
   elvenchain:  { name: 'Gilded elven chain', ac: 5, dr: 3, maxDex: 4, speed: 9, acp: 1, fancy: true },   // found, never forged
@@ -268,6 +311,112 @@ const FEATS = {
   'Improved Grapple':      { req: p => p.st.dex >= 13 && p.feats?.includes('Improved Unarmed Strike'), blurb: 'grab without a free swing at you, +4 on grapple checks' },
   'Diehard':               { req: p => p.st.con >= 13, blurb: 'below 0 hp you stay on your feet, stable, until -10' },
 };
+
+// ---- HERITAGE, TRAITS AND FLAWS, AND THE WHOLE FEAT POOL (Rose: "give those to the town"; "just the basic... like x weapon
+// does x amount of damage. This is a training ground nothing fancy") --------------------------------------------------------
+// Copied by a script from LoH's data files (srd/data/heritage.js, featPool.js, feats.js, traits.js); only plain numbers ride.
+// A townsperson has a mother and a father, each of a race and a line. The child is that race, or a half-blood of the two; takes
+// both lines' ability changes (heritage.js inheritedMods: the plain sum); sees in the dark as the blood allows (half for a
+// half-blood); walks at the lines' pace. What blood and race OFFER (a parent's bloodline, a parent's racial feat) costs a feat
+// slot at first level and is never free (Rose: "no free bloodline feats period", "no free racial feats either"). A pure human
+// gets a bonus feat; every flaw owes one more.
+const TOWN_RACES = {"Human":{"traits":[],"bonusFeat":true,"nightVision":0},"Elf":{"traits":["Observant","Light Step"],"bonusFeat":false,"nightVision":0},"Shade":{"traits":["Shadowmeld"],"bonusFeat":false,"nightVision":1},"Cambion":{"traits":[],"bonusFeat":false,"nightVision":1}};
+const TOWN_LINES = {"Neigi":{"race":"Human","mods":[0,0,0,0,0,0],"trait":"Rapier Affinity","bloodline":null,"move":0,"nightVision":0,"only":null},"Forbidden":{"race":"Human","mods":[0,0,0,0,0,0],"trait":"Unarmed Affinity","bloodline":null,"move":0,"nightVision":0,"only":null},"Eishu":{"race":"Human","mods":[0,0,0,0,0,0],"trait":"Polearm Affinity","bloodline":null,"move":0,"nightVision":0,"only":null},"Weish":{"race":"Human","mods":[0,0,0,0,0,0],"trait":"Greatsword Affinity","bloodline":null,"move":0,"nightVision":0,"only":null},"Forest Elf":{"race":"Elf","mods":[-1,1,0,0,1,0],"trait":"Woodland Affinity","bloodline":"Tracking","move":5,"nightVision":0,"only":null},"Lunaris":{"race":"Elf","mods":[0,0,-1,1,1,0],"trait":"Lunari Ritual","bloodline":null,"move":0,"nightVision":0,"only":null},"Exiled Elf":{"race":"Elf","mods":[0,1,0,1,0,-1],"trait":"Darkness","bloodline":null,"move":0,"nightVision":1,"only":null},"Wraith":{"race":"Shade","mods":[1,1,0,-1,0,0],"trait":"Black Cat","bloodline":"Shadow Strike","move":5,"nightVision":0,"only":null},"Lich":{"race":"Shade","mods":[-1,-1,0,1,1,1],"trait":"Devour Dead","bloodline":"Shadow Step","move":-3.5,"nightVision":0,"only":null},"Succubus":{"race":"Cambion","mods":[-1,0,0,-1,0,2],"trait":"Masochism","bloodline":"Dream Eater","move":0,"nightVision":0,"only":"female"},"Incubus":{"race":"Cambion","mods":[-1,0,0,-1,0,2],"trait":"Masochism","bloodline":"Dream Eater","move":0,"nightVision":0,"only":null},"Concubus":{"race":"Cambion","mods":[-1,0,0,-1,0,2],"trait":"Masochism","bloodline":"Dream Eater","move":0,"nightVision":0,"only":null},"Changeling":{"race":"Cambion","mods":[1,1,0,-1,0,0],"trait":"Polymorph","bloodline":"Aug. Disguise","move":0,"nightVision":0,"only":null}};
+const TOWN_BLOODLINES = ["Troll-kin","Ethnocentric","Nobility","Giant Grip","Tremorsense","Barbaric","Noble Rage","Night Owl"];
+const RIVEN = ["Riven Hands","Riven Jaw","Barbed Tail"];
+const TOWN_FEAT_POOL = [{"name":"Improved Natural Armor","req":{"con":13,"naturals":1},"text":"Your hide thickens: +1 natural armour. Taken again, it thickens again.","choose":null},{"name":"Improved Natural Attack","req":{"bab":4,"naturals":1},"text":"One of your natural weapons hits a size harder: its damage die steps up one category.","choose":"natural"},{"name":"Rending Claws","req":{"str":13,"bab":6,"feats":["Riven Hands"]},"text":"Land both claws in one turn and the second tears: +1d6, precision damage, never multiplied, once a round.","choose":null},{"name":"Snatch","req":{"bab":6,"feats":["Riven Jaw"]},"text":"A claw or a bite that lands may take hold at once; what you hold you may crush, or fling 1d6 x 10 feet for 1d6 a ten feet.","choose":null},{"name":"Power Attack","req":{"str":13},"text":"Trade attack accuracy for extra damage (two-handers gain double).","choose":null},{"name":"Cleave","req":{"str":13,"feats":["Power Attack"]},"text":"Drop a foe and get an immediate extra attack on an adjacent enemy.","choose":null},{"name":"Great Cleave","req":{"str":13,"bab":4,"feats":["Power Attack","Cleave"]},"text":"Cleave with no limit on the number of follow-up attacks.","choose":null},{"name":"Improved Bull Rush","req":{"str":13,"feats":["Power Attack"]},"text":"Bull rush without provoking an attack of opportunity, and gain +4 on the check.","choose":null},{"name":"Improved Overrun","req":{"str":13,"feats":["Power Attack"]},"text":"Overrun foes who cannot avoid you, with +4 on the check.","choose":null},{"name":"Improved Sunder","req":{"str":13,"feats":["Power Attack"]},"text":"Strike a weapon or object without provoking, and gain +4 on the attempt.","choose":null},{"name":"Combat Expertise","req":{"int":13},"text":"Trade attack accuracy for a dodge bonus to AC.","choose":null},{"name":"Improved Disarm","req":{"int":13,"feats":["Combat Expertise"]},"text":"Disarm without provoking, with +4 on the attempt.","choose":null},{"name":"Improved Feint","req":{"int":13,"feats":["Combat Expertise"]},"text":"Feint in combat as a move action instead of a standard action.","choose":null},{"name":"Improved Trip","req":{"int":13,"feats":["Combat Expertise"]},"text":"Trip without provoking, gain +4, and make a free attack on a foe you drop.","choose":null},{"name":"Whirlwind Attack","req":{"dex":13,"int":13,"bab":4,"feats":["Combat Expertise","Dodge","Mobility","Spring Attack"]},"text":"One melee attack against every foe within reach.","choose":null},{"name":"Dodge","req":{"dex":13},"text":"Pick one foe each round; you gain a +1 dodge bonus to AC against that foe's attacks.","choose":null},{"name":"Mobility","req":{"dex":13,"feats":["Dodge"]},"text":"+4 dodge bonus to AC against the attacks of opportunity your movement provokes.","choose":null},{"name":"Spring Attack","req":{"dex":13,"bab":4,"feats":["Dodge","Mobility"]},"text":"Split your move around a single melee attack; the foe you strike gets no attack of opportunity against that movement.","choose":null},{"name":"Combat Reflexes","req":{},"text":"Extra attacks of opportunity each round, one per point of Dexterity bonus.","choose":null},{"name":"Weapon Finesse","req":{"bab":1},"text":"Use DEX instead of STR to hit with light/finesse weapons.","choose":null},{"name":"Point Blank Shot","req":{},"text":"+1 to hit and damage with ranged weapons at close range.","choose":null},{"name":"Precise Shot","req":{"feats":["Point Blank Shot"]},"text":"Fire into melee without the -4 penalty.","choose":null},{"name":"Improved Precise Shot","req":{"dex":19,"bab":11,"feats":["Point Blank Shot","Precise Shot"]},"text":"Your ranged attacks ignore the cover bonus and the miss chance of anything short of total cover or total concealment.","choose":null},{"name":"Rapid Shot","req":{"dex":13,"feats":["Point Blank Shot"]},"text":"One extra ranged attack per round, all at -2.","choose":null},{"name":"Far Shot","req":{"feats":["Point Blank Shot"]},"text":"Increase the range increments of your ranged weapons.","choose":null},{"name":"Rapid Reload","req":{},"text":"Reload a light or hand crossbow as a free action, a heavy one as a move action. Reloading still provokes.","choose":null},{"name":"Shot on the Run","req":{"dex":13,"bab":4,"feats":["Dodge","Mobility","Point Blank Shot"]},"text":"Move, make a single ranged attack, and keep moving.","choose":null},{"name":"Manyshot","req":{"dex":17,"bab":6,"feats":["Point Blank Shot","Rapid Shot"]},"text":"As a standard action, loose two arrows at one target within 30 feet on a single attack roll, both at -4.","choose":null},{"name":"Weapon Focus","req":{"bab":1},"text":"+1 on attack rolls with one chosen weapon.","choose":"weapon"},{"name":"Improved Critical","req":{"bab":8,"feats":["Weapon Focus"]},"text":"The threat range of one chosen weapon is doubled.","choose":"weapon"},{"name":"Greater Weapon Focus","req":{"classLevel":{"Fighter":8},"feats":["Weapon Focus"]},"text":"+1 more on attack rolls with the chosen weapon, stacking with Weapon Focus.","choose":"weapon"},{"name":"Weapon Specialization","req":{"classLevel":{"Fighter":4},"feats":["Weapon Focus"]},"text":"+2 on damage rolls with the chosen weapon.","choose":"weapon"},{"name":"Greater Weapon Specialization","req":{"classLevel":{"Fighter":12},"feats":["Weapon Focus","Greater Weapon Focus","Weapon Specialization"]},"text":"+2 more on damage rolls with the chosen weapon, stacking with Weapon Specialization.","choose":"weapon"},{"name":"Two-Weapon Fighting","req":{"dex":15},"text":"The two-weapon penalties drop by 2 for your main hand and 6 for your off hand.","choose":null},{"name":"Improved Two-Weapon Fighting","req":{"dex":17,"bab":6,"feats":["Two-Weapon Fighting"]},"text":"Gain a second off-hand attack at a -5 penalty.","choose":null},{"name":"Greater Two-Weapon Fighting","req":{"dex":19,"bab":11,"feats":["Two-Weapon Fighting","Improved Two-Weapon Fighting"]},"text":"Gain a third off-hand attack, at a -10 penalty.","choose":null},{"name":"Improved Unarmed Strike","req":{},"text":"Your unarmed strikes deal lethal damage and never provoke attacks of opportunity.","choose":null},{"name":"Improved Grapple","req":{"dex":13,"feats":["Improved Unarmed Strike"]},"text":"Start a grapple without provoking, and gain +4 on grapple checks.","choose":null},{"name":"Deflect Arrows","req":{"dex":13,"feats":["Improved Unarmed Strike"]},"text":"Deflect one ranged attack aimed at you each round.","choose":null},{"name":"Snatch Arrows","req":{"dex":15,"feats":["Deflect Arrows","Improved Unarmed Strike"]},"text":"Catch the ranged weapons you could deflect with a free hand; a thrown weapon can be hurled straight back.","choose":null},{"name":"Stunning Fist","req":{"dex":13,"wis":13,"bab":8,"feats":["Improved Unarmed Strike"]},"text":"Force a struck foe to make a save or be stunned.","choose":null},{"name":"Ride-By Attack","req":{"feats":["Mounted Combat"]},"text":"Charge on a mount, attack, and keep riding past without provoking.","choose":null},{"name":"Spirited Charge","req":{"feats":["Mounted Combat","Ride-By Attack"]},"text":"Deal double (or triple with a lance) damage on a mounted charge.","choose":null},{"name":"Trample","req":{"feats":["Equestrian"]},"text":"Your mount follows up with one attack during charge + overrun attempts.","choose":null},{"name":"Improved Initiative","req":{},"text":"+4 to initiative rolls.","choose":null},{"name":"Simple Weapon Proficiency","req":{},"text":"Attack with every simple weapon without the -4 for a weapon you were never taught.","choose":null},{"name":"Martial Weapon Proficiency","req":{},"text":"Choose a martial weapon: you attack with it without the -4 for a weapon you were never taught. Taken again, another.","choose":"martial weapon"},{"name":"Exotic Weapon Proficiency","req":{"bab":1},"text":"Choose an exotic weapon: you attack with it without the -4 for a weapon you were never taught. Taken again, another.","choose":"exotic weapon"},{"name":"Armor Proficiency","req":{},"text":"Choose a kind of armor, light first, then medium, then heavy: in armor you are trained in, its check penalty falls only on Balance, Climb, Escape Artist, Hide, ","choose":"kind of armor"},{"name":"Toughness","req":{},"text":"+3 hit points.","choose":null},{"name":"Endurance","req":{},"text":"+4 on checks to resist fatigue, heat, cold, and forced marches; sleep in light or medium armor.","choose":null},{"name":"Diehard","req":{"feats":["Endurance"],"living":true},"text":"Remain conscious and acting while between -1 and -9 hit points.","choose":null},{"name":"Great Fortitude","req":{},"text":"+2 on all Fortitude saves.","choose":null},{"name":"Iron Will","req":{},"text":"+2 on all Will saves.","choose":null},{"name":"Lightning Reflexes","req":{},"text":"+2 on all Reflex saves.","choose":null},{"name":"Alertness","req":{},"text":"+2 on Listen and Spot checks.","choose":null},{"name":"Acrobatic","req":{},"text":"+2 on Jump and Tumble checks.","choose":null},{"name":"Agile","req":{},"text":"+2 on Balance and Escape Artist checks.","choose":null},{"name":"Animal Affinity","req":{},"text":"+2 on Handle Animal and Ride checks.","choose":null},{"name":"Athletic","req":{},"text":"+2 on Climb and Swim checks.","choose":null},{"name":"Deceitful","req":{},"text":"+2 on Disguise and Forgery checks.","choose":null},{"name":"Deft Hands","req":{},"text":"+2 on Sleight of Hand and Use Rope checks.","choose":null},{"name":"Diligent","req":{},"text":"+2 on Appraise and Decipher Script checks.","choose":null},{"name":"Investigator","req":{},"text":"+2 on Gather Information and Search checks.","choose":null},{"name":"Magical Aptitude","req":{},"text":"+2 on Spellcraft and Use Magic Device checks.","choose":null},{"name":"Negotiator","req":{},"text":"+2 on Diplomacy and Sense Motive checks.","choose":null},{"name":"Nimble Fingers","req":{},"text":"+2 on Disable Device and Open Lock checks.","choose":null},{"name":"Persuasive","req":{},"text":"+2 on Bluff and Intimidate checks.","choose":null},{"name":"Self-Sufficient","req":{},"text":"+2 on Heal and Survival checks.","choose":null},{"name":"Stealthy","req":{},"text":"+2 on Hide and Move Silently checks.","choose":null},{"name":"Skill Focus","req":{},"text":"+3 on one chosen skill.","choose":"skill"},{"name":"Combat Casting","req":{},"text":"+4 on Concentration checks to cast defensively or while grappling.","choose":null},{"name":"Spell Focus","req":{"caster":true},"text":"+1 to the save DC of one chosen school of your spells.","choose":"school"},{"name":"Spell Penetration","req":{"caster":true},"text":"+2 on caster level checks to overcome spell resistance.","choose":null},{"name":"Empower Spell","req":{"caster":true},"text":"All variable, numeric effects of an empowered spell are increased by one-half. Saving throws and opposed rolls are not affected, nor are spells without random v","choose":null},{"name":"Enlarge Spell","req":{"caster":true},"text":"You can alter a spell with a range of close, medium, or long to increase its range by 100%. An enlarged spell with a range of close now has a range of 50 ft. + ","choose":null},{"name":"Extend Spell","req":{"caster":true},"text":"An extended spell lasts twice as long as normal. A spell with a duration of concentration, instantaneous, or permanent is not affected by this feat. An extended","choose":null},{"name":"Heighten Spell","req":{"caster":true},"text":"A heightened spell has a higher spell level than normal (up to a maximum of 9th level). Unlike other metamagic feats, Heighten Spell actually increases the effe","choose":null},{"name":"Maximize Spell","req":{"caster":true},"text":"All variable, numeric effects of a spell modified by this feat are maximized. Saving throws and opposed rolls are not affected, nor are spells without random va","choose":null},{"name":"Quicken Spell","req":{"caster":true},"text":"Casting a quickened spell is a swift action. You can perform another action, even casting another spell, in the same round as you cast a quickened spell. You ma","choose":null},{"name":"Silent Spell","req":{"caster":true},"text":"A silent spell can be cast with no verbal components. Spells without verbal components are not affected. A silent spell uses up a spell slot one level higher th","choose":null},{"name":"Still Spell","req":{"caster":true},"text":"A stilled spell can be cast with no somatic components. Spells without somatic components are not affected. A stilled spell uses up a spell slot one level highe","choose":null},{"name":"Widen Spell","req":{"caster":true},"text":"You can alter a burst, emanation, line, or spread shaped spell to increase its area. Any numeric measurements of the spell's area increase by 100%. A widened sp","choose":null},{"name":"Eschew Materials","req":{"caster":true},"text":"You can cast any spell that has a material component costing 1 gp or less without needing that component. (The casting of the spell still provokes attacks of op","choose":null},{"name":"Greater Spell Focus","req":{"caster":true,"feats":["Spell Focus"]},"text":"Add +1 to the Difficulty Class for all saving throws against spells from the school of magic you select. This bonus stacks with the bonus from Spell Focus. Choo","choose":"school"},{"name":"Greater Spell Penetration","req":{"caster":true,"feats":["Spell Penetration"]},"text":"You get a +2 bonus on caster level checks (1d20 + caster level) made to overcome a creature's spell resistance. This bonus stacks with the one from Spell Penetr","choose":null},{"name":"Augment Summoning","req":{"caster":true,"feats":["Spell Focus (Conjuration)"]},"text":"Each creature you conjure with any summon spell gains a +4 enhancement bonus to Strength and Constitution for the duration of the spell that summoned it.","choose":null},{"name":"Berserker","req":{"con":13},"text":"You move slightly faster than normal when in darkness. If you're hit in melee by an enemy you cannot see your blows versus that enemy becomes stronger increment","choose":null},{"name":"Anti-Mage","req":{"bab":1,"feats":["Combat Reflexes"]},"text":"Every blow made against casting mages will cause their spell timers to reset and five frames to be added on the next cast. (10x cap)","choose":null},{"name":"Mage Seeker","req":{"wis":13},"text":"You suffer no penalties when impared by magic besides nearsighted.","choose":null},{"name":"Soulbond","req":{"feats":["Equestrian"]},"text":"Your charge attacks on your mount now deal x2/ x3 damage.","choose":null},{"name":"Improved C. Spell","req":{"caster":true},"text":"You can now use any spell from the same school as the target spell to counter with, so long as it is a level higher.","choose":null},{"name":"Disciplined","req":{"bab":2,"feats":["Dodge"]},"text":"When not wearing armor you recieve more invincibility while evading, perfect guarding, or parrying.","choose":null},{"name":"Multiattack","req":{"naturals":3},"text":"Your secondary natural attacks take only a -2 penalty instead of -5.","choose":null},{"name":"Improved Multiattack","req":{"naturals":3,"feats":["Multiattack"]},"text":"Your secondary natural attacks take no penalty at all.","choose":null},{"name":"Blind-Fight","req":{},"text":"Reroll your miss chance against foes you cannot see, and take no penalty when blinded in melee.","choose":null},{"name":"Quick Draw","req":{"bab":1},"text":"Draw a weapon as a free action instead of a move action.","choose":null},{"name":"Run","req":{},"text":"Run at five times your speed instead of four, and keep your Dexterity bonus to AC while running.","choose":null},{"name":"Two-Weapon Defense","req":{"dex":15,"feats":["Two-Weapon Fighting"]},"text":"While wielding two weapons, gain a +1 shield bonus to AC.","choose":null},{"name":"Outflank","req":{"bab":4},"text":"Flanking with an ally who also has this feat, your flanking bonus is +4 instead of +2, and a critical from either of you hands the other an attack of opportunit","choose":null},{"name":"Precise Strike","req":{"dex":13,"bab":1},"text":"Flanking with an ally who also has this feat, you deal +1d6 damage with a light or one-handed piercing weapon.","choose":null},{"name":"Shield Wall","req":{},"text":"Adjacent to a shield-bearing ally who also has this feat, your shield bonus improves by 1, by 2 if either of you carries a tower shield.","choose":null},{"name":"Swap Places","req":{},"text":"Trade places with an adjacent ally who also has this feat, as part of your move, without either of you provoking.","choose":null},{"name":"Escape Route","req":{},"text":"Move through squares a foe threatens without provoking, so long as an ally who also has this feat is adjacent to that foe.","choose":null},{"name":"Coordinated Maneuvers","req":{},"text":"Adjacent to an ally who also has this feat, gain +2 on combat maneuver checks and +2 to your CMD.","choose":null},{"name":"Paired Opportunists","req":{},"text":"Adjacent to an ally who also has this feat, gain +4 on attacks of opportunity against foes you both threaten, and when one of you takes one, so may the other.","choose":null},{"name":"Duck and Cover","req":{},"text":"Adjacent to an ally who also has this feat, you may take their Reflex save result instead of your own, but you fall prone if you do.","choose":null},{"name":"Shake It Off","req":{},"text":"+1 on all saving throws for each adjacent ally who also has this feat, to a maximum of +3.","choose":null},{"name":"Lookout","req":{},"text":"Adjacent to an ally who also has this feat, you act in the surprise round if either of you could have.","choose":null},{"name":"Stealth Synergy","req":{},"text":"When you and an ally who also has this feat both hide, you both use the better of the two results.","choose":null},{"name":"Tandem Trip","req":{},"text":"Tripping a foe an ally with this feat also threatens, roll the attempt twice and keep the better.","choose":null},{"name":"Fast Healer","req":{"con":13,"feats":["Diehard","Endurance"]},"text":"Regain extra hit points whenever you heal by resting or by magic: half your Constitution modifier, at least 1.","choose":null},{"name":"Critical Focus","req":{"bab":9},"text":"+4 on the roll to confirm a critical hit.","choose":null},{"name":"Tiring Critical","req":{"feats":["Critical Focus"],"bab":13},"text":"A critical leaves the foe fatigued; nothing more on the fatigued or exhausted.","choose":null},{"name":"Exhausting Critical","req":{"feats":["Critical Focus","Tiring Critical"],"bab":15},"text":"A critical leaves the foe exhausted; nothing more on the exhausted.","choose":null},{"name":"Parry","req":{"dex":13,"feats":["Combat Reflexes"]},"text":"Whenever you are targeted by anything that requires an attack roll that isn't a ranged touch or a ray, you can expend an attack of opportunity to try to parry t","choose":null},{"name":"Improved Parry","req":{"dex":13,"feats":["Combat Reflexes","Parry"]},"text":"Any size penalty your weapon/shield receives when parrying a larger weapon is lessened by 2.","choose":null},{"name":"Riposte","req":{"dex":13,"feats":["Combat Reflexes","Parry"]},"text":"Whenever you parry an attack, you may immediately expend another AoO to counterattack your opponent as a free action during their turn at the same attack bonus ","choose":null}];
+const TOWN_HERITAGE_TEXT = {"Observant":"You're more proficient in spot, search, and listen skills. You gain the ability to passively search for any secret in proximity.","Light Step":"Your footsteps are quieter and more precise even while running.","Shadowmeld":"In darkness or in shadow you move five feet faster and gain +2 on Hide and Move Silently. After a teleport your first hit carries a bonus sneak attack die, if the target ","Rapier Affinity":"Neigi are known for their proficiency with Rapiers; While wielding a rapier you gain +2 to damage, +2 to Armor Class, and +10 movement.","Unarmed Affinity":"While fighting unarmed you gain +2 to damage and +10 movement, where you could cover thirty feet you cover forty.","Polearm Affinity":"Nivea's unique Polearm Martial Art grants +2 to damage with Polearms, and one extra reaction each round to spend on an attack of opportunity or a parry.","Greatsword Affinity":"+4 Damage while wielding Greatswords, and +2 to Armor Class.","Woodland Affinity":"When in woodlands you gain +2 to damage, +2 to Hide and Move Silently, and +2 to Armor Class. In forest you also gain +2 to Survival.","Lunari Ritual":"The lunari descendant will get a boon based on the current phase of the moon.","Darkness":"You emit an isolated Aura of Darkness once per rest; This Darkness extinguishes all normal forms of light.","Black Cat":"While unobserved you gain movement speed, Hide, Move Silently, and damage. Your first hit against an enemy unaware of your existence is a critical.","Devour Dead":"Feeding upon corpses of the dead allows you to learn traits of opponents and temporarily grants +1 Rapid Healing.","Masochism":"You heal a fixed amount each time anyone takes damage from you. This stacks with Dream Eater.","Polymorph":"You have the ability to Disguise at will. Your disguise is never broken, but can be disbelieved.","Tracking":"During the surprise round of an encounter your strikes deal +2 damage per sneak attack die.","Shadow Strike":"You strike from the dark: in magical or natural darkness you gain a free sneak attack die, and you may sneak attack regardless of class path.","Shadow Step":"In shadow or any sort of darkness you count as hiding: you cannot be perceived without a perception check opposing yours.","Dream Eater":"Those under the influence of your charms, deceptions or illusions take more damage from you. You also heal from their pain.","Aug. Disguise":"Your disguise, and transformations are enhanced.","Riven Hands":"Your hands split into a pair of claws (1d4 each). Both rake in a full attack, and beside a wielded weapon they strike as secondary attacks.","Riven Jaw":"Your jaw splits fang-wide: a bite (1d6) joins your full attack as a secondary natural weapon.","Barbed Tail":"A barbed tail (1d4) lashes with your full attack, and it HOOKS: a hit may trip, the attempt never provokes, and a failed pull cannot be turned back on you.","Phase":"While in Darkness you gain the ability to teleport short distances.","Troll-kin":"Regeneration 1: you knit 1 hit point each round and recover from fatal injuries. You can only be killed by fire or acid. You are adverse to the sun; you take damage over ","Ethnocentric":"+1 attack and damage for every other party member of your race who also carries Ethnocentric. Kinship is personal: allies without the feat grant and gain nothing.","Nobility":"Your offspring, pets, followers, and spouses gain +4 Strength and Constitution for as long as they retain your favor.","Giant Grip":"You are able to wield weapons meant for larger races easily.","Tremorsense":"You are unable to see, but you are guided by feeling and sound.","Barbaric":"As your health depletes your damage and tolerance for pain increases.","Savant":"[Bloodline Class] A parent who carries this passes no feat down, but opens a path: the Savant, a d12 like a barbarian, every class's first gift at once, and no level beyo","Noble Rage":"Your raging becomes refined to an art. You're capable of casting spells, using skills, and communicating with others while enraged.","Night Owl":"At night: +2 to Open Lock, Listen, Spot, Search, Disable Device, Intimidate, Hide, Move Silently, Diplomacy and Bluff, +1 to your spell save DCs, +1 to saves, and +1 to d"};
+
+const RACE_MIX = { Human: 55, Elf: 15, Shade: 15, Cambion: 15 };   // the town's blood (numbers mine)
+const SAME_BLOOD = 0.7, BLOODLINE_ODDS = 1 / 3;                      // parents of one race; heritage.js's own odds of a bloodline
+const POLEARM = new Set(['shortspear', 'longspear', 'quarterstaff', 'spear', 'glaive', 'guisarme', 'halberd', 'ranseur']);
+// traits and flaws (srd/data/traits.js), as town numbers. Feral is left out of the town's dice: a body with no tongue can't
+// take part in a town that runs on talk.
+const TRAITS_T = { Restless: { init: 2, ac: -1 }, Ironhide: { save: { f: 1, r: -1 } }, Fleet: { save: { r: 1, f: -1 } }, Devout: { save: { w: 1, f: -1 } },
+  Moontouched: { moon: 1 }, Honeyed: { skills: { diplomacy: 2, bluff: 2, intimidate: -2 } } };
+const FLAWS_T = { Frail: { save: { f: -3 } }, Clumsy: { save: { r: -3 } }, Dim: { save: { w: -3 } }, Palsied: { matk: -3 }, Unsteady: { ratk: -3 }, Vulnerable: { ac: -2 },
+  Oblivious: { skills: { spot: -4, listen: -4 } }, Graceless: { skills: { hide: -4, sneak: -4, sleight: -4, openlock: -4, escape: -4 } }, Witless: {},
+  'Off-Putting': { skills: { bluff: -4, diplomacy: -4, intimidate: -4 } }, Distractible: {} };
+// the feats' plain numbers (featEffects.js's, onto the town's skills). The skill feats and Toughness the town already had keep
+// their old lines in applyFeat; the attack and damage riders are read in a fight (bloodTerms).
+const FEAT_FX = {
+  Agile: { skills: { escape: 2 } }, 'Deft Hands': { skills: { sleight: 2 } }, Investigator: { skills: { spot: 2 } }, 'Nimble Fingers': { skills: { openlock: 2 } },
+  Observant: { skills: { spot: 2, listen: 2 } }, 'Light Step': { skills: { sneak: 4 } }, Shadowmeld: { skills: { hide: 2, sneak: 2 }, speed: 5 },
+  'Black Cat': { skills: { hide: 2, sneak: 2 } }, 'Shadow Step': { skills: { hide: 2 } }, 'Improved Natural Armor': { ac: 1 },
+  'Rapier Affinity': { speed: 10 }, 'Unarmed Affinity': { speed: 10 },
+};
+// the feats that do something in town (the rest can be held; the town has no system for them yet: mounts, metamagic, ...)
+const TOWN_LIVE = new Set([...Object.keys(FEATS), ...Object.keys(FEAT_FX), 'Greater Weapon Focus', 'Greater Weapon Specialization', 'Improved Critical',
+  'Weapon Finesse', 'Far Shot', 'Fast Healer', 'Troll-kin', 'Ethnocentric', 'Nobility', 'Giant Grip', 'Barbaric', 'Night Owl', 'Tracking', 'Dream Eater',
+  'Shadow Strike', 'Masochism', 'Greatsword Affinity', 'Polearm Affinity', 'Woodland Affinity', 'Riven Hands', 'Riven Jaw', 'Barbed Tail',
+  'Multiattack', 'Improved Multiattack', 'Run', 'Lightning Reflexes', 'Iron Will', 'Self-Sufficient']);
+const pickW = obj => { let r = Math.random() * Object.values(obj).reduce((a, b) => a + b, 0); for (const [k, v] of Object.entries(obj)) if ((r -= v) < 0) return k; return Object.keys(obj)[0]; };
+const pickN = (xs, n) => xs.slice().sort(() => Math.random() - 0.5).slice(0, n);
+function lineFor(race, sex) {
+  const ls = Object.entries(TOWN_LINES).filter(([k, l]) => l.race === race && (!l.only || l.only === (sex === 'f' ? 'female' : 'male'))
+    && !(k === 'Incubus' && sex === 'f') && !(k === 'Succubus' && sex !== 'f') && k !== 'Concubus');
+  return pick(ls)[0];
+}
+function parentOf(race, sex) {
+  const line = lineFor(race, sex), L = TOWN_LINES[line];
+  const racial = [...(TOWN_RACES[race].traits || []), ...(L.trait ? [L.trait] : []), ...(race === 'Cambion' ? RIVEN : []), ...(race === 'Shade' ? ['Phase'] : [])];
+  const own = L.bloodline ? [].concat(L.bloodline) : [];
+  let blood = own.length ? pick(own) : Math.random() < BLOODLINE_ODDS ? pick(TOWN_BLOODLINES) : null;
+  if (blood === 'Troll-kin' && race === 'Shade') blood = null;   // heritage.js: shades can't carry troll blood
+  return { race, line, bloodline: blood, racialFeat: racial.length && Math.random() < 0.8 ? pick(racial) : null };
+}
+function rollHeritage() {
+  const mr = pickW(RACE_MIX), fr = Math.random() < SAME_BLOOD ? mr : pickW(RACE_MIX);
+  const mother = parentOf(mr, 'f'), father = parentOf(fr, 'm');
+  const nv = q => Math.max(TOWN_RACES[q.race].nightVision || 0, TOWN_LINES[q.line].nightVision || 0);
+  const mods = [0, 0, 0, 0, 0, 0]; for (const q of [mother, father]) TOWN_LINES[q.line].mods.forEach((m, i) => { mods[i] += m; });
+  return { mother, father, race: mr === fr ? mr : 'Half-blood', pair: mr === fr ? null : [mr, fr].sort().join('/'), mods,
+    nightVision: Math.min(1, (nv(mother) + nv(father)) / 2), speedFt: 30 + TOWN_LINES[mother.line].move + TOWN_LINES[father.line].move,
+    bonusFeat: mr === 'Human' && fr === 'Human', horns: mr === 'Cambion' || fr === 'Cambion',
+    offers: [...new Set([mother.bloodline, father.bloodline, mother.racialFeat, father.racialFeat].filter(Boolean))] };
+}
+function rollTraitsFlaws() {
+  const a = Math.random(), b = Math.random();
+  return { traits: pickN(Object.keys(TRAITS_T), a < 0.5 ? 0 : a < 0.8 ? 1 : 2), flaws: pickN(Object.keys(FLAWS_T), b < 0.6 ? 0 : b < 0.9 ? 1 : 2) };
+}
+const lineWord = (l, race) => l.toLowerCase().includes(race.toLowerCase()) ? l : l + ' ' + race.toLowerCase();
+const raceLabel = p => { const h = p.heritage; if (!h) return ''; if (h.race === 'Half-blood') return `half-blood ${h.pair.toLowerCase()} (${h.mother.line} and ${h.father.line})`;
+  return h.mother.line === h.father.line ? lineWord(h.mother.line, h.race) : `${h.race.toLowerCase()} (${h.mother.line} and ${h.father.line})`; };
+// the traits' and flaws' skill numbers, baked onto the skills (again whenever the skills are rebuilt at first level)
+function bakeHeritageSkills(p) {
+  for (const t of p.charTraits || []) for (const [k, v] of Object.entries(TRAITS_T[t]?.skills || {})) p.skills[k] = (p.skills[k] || 0) + v;
+  for (const f of p.flaws || []) for (const [k, v] of Object.entries(FLAWS_T[f]?.skills || {})) p.skills[k] = (p.skills[k] || 0) + v;
+}
+// the standing numbers: traits, flaws and feats summed (cached until a feat is added)
+function fxOf(p) {
+  const key = (p.feats || []).length; if (p._fx && p._fxKey === key) return p._fx;
+  const fx = { save: { f: 0, r: 0, w: 0 }, ac: 0, init: 0, matk: 0, ratk: 0, moon: 0, speed: 0 };
+  const addO = o => { if (!o) return; if (o.save) for (const k in o.save) fx.save[k] += o.save[k]; for (const k of ['ac', 'init', 'matk', 'ratk', 'moon', 'speed']) if (o[k]) fx[k] += o[k]; };
+  for (const t of p.charTraits || []) addO(TRAITS_T[t]); for (const f of p.flaws || []) addO(FLAWS_T[f]); for (const k of p.feats || []) addO(FEAT_FX[k]);
+  p._fx = fx; p._fxKey = key; return fx;
+}
+const speedMultOf = p => p.kind !== 'human' ? 1 : ((p.heritage?.speedFt || 30) + fxOf(p).speed) / 30;
+const affinityAc = p => (p.feats?.includes('Rapier Affinity') && p.weapon === 'rapier' ? 2 : 0) + (p.feats?.includes('Greatsword Affinity') && p.weapon === 'greatsword' ? 2 : 0)
+  + (p.feats?.includes('Woodland Affinity') && ['wood', 'orchard'].includes(p.area) ? 2 : 0);
+// a weapon feat aimed at the weapon carried when it was taken (Weapon Focus (Longsword)); one taken before aims existed fits any
+const aimedFeat = (p, k) => !!p.feats?.includes(k) && (!p.featAims?.[k] || p.featAims[k] === p.weapon);
+const naturalsOf = p => (p.heritage?.horns ? 1 : 0) + (p.feats?.includes('Riven Hands') ? 2 : 0) + (p.feats?.includes('Riven Jaw') ? 1 : 0) + (p.feats?.includes('Barbed Tail') ? 1 : 0);
+// the pool's prerequisites, the plain ones (featPool.js req): base attack, abilities, feats, class levels, casting, dark sight, natural weapons
+const CASTERS = ['wizard', 'sorcerer', 'cleric', 'druid', 'bard', 'paladin', 'ranger'];
+function simpleReq(r, p) {
+  if (!r) return true;
+  if (r.bab && babOf(p) < r.bab) return false;
+  for (const k of ['str', 'dex', 'con', 'int', 'wis', 'cha']) if (r[k] && (p.st[k] || 10) < r[k]) return false;
+  if (r.feats && !r.feats.every(n => p.feats?.includes(n))) return false;
+  if (r.classLevel && !Object.entries(r.classLevel).every(([c, n]) => clvl(p, c.toLowerCase()) >= n)) return false;
+  if (r.caster && !CASTERS.some(c => clvl(p, c) > 0)) return false;
+  if (r.nightVision && !(p.heritage?.nightVision > 0)) return false;
+  if (r.naturals && naturalsOf(p) < r.naturals) return false;
+  return true;
+}
+for (const row of TOWN_FEAT_POOL) if (!FEATS[row.name]) FEATS[row.name] = { req: p => simpleReq(row.req, p), blurb: row.text, choose: row.choose };
+// what the blood offers: only if a parent carried it, and only at first level (heritage.js BLOODLINE_AT_FIRST_LEVEL_ONLY)
+for (const n of Object.keys(TOWN_HERITAGE_TEXT)) if (!FEATS[n]) FEATS[n] = { req: p => !!p.heritage?.offers?.includes(n) && (p.level || 1) <= 1, blurb: TOWN_HERITAGE_TEXT[n], heritage: true };
 function rollStats(bias = {}) {
   const s = {};
   for (const k of ['str', 'dex', 'con', 'int', 'wis', 'cha']) { const r = [d(6), d(6), d(6), d(6)].sort((a, b) => a - b).slice(1).reduce((a, b) => a + b, 0); s[k] = clamp(r + (bias[k] || 0), 3, 18); }
@@ -283,6 +432,8 @@ function skillsFor(cls, st, lvl, focus = []) {
 let NEXT_ID = 1;
 function makePerson(sim, o) {
   const st = rollStats(o.bias);
+  const her = o.id !== 'player' && o.brain !== 'human' && o.heritage !== false ? rollHeritage() : null;
+  if (her) her.mods.forEach((m, i) => { const k = ['str', 'dex', 'con', 'int', 'wis', 'cha'][i]; st[k] = clamp(st[k] + m, 3, 20); });
   const cls = CLASSES[o.cls || 'commoner'], lvl = o.level || 1;
   const hp = Math.max(2, cls.hd + mod(st.con) + (lvl - 1) * Math.max(1, Math.floor(cls.hd / 2) + 1 + mod(st.con)));
   const gender = o.gender || pick(['m', 'f']);
@@ -301,6 +452,7 @@ function makePerson(sim, o) {
     tags: o.tags || [], stats: { earned: 0, stolen: 0, kills: 0, arrests: 0 },
   };
   if (o.items) Object.assign(p.items, o.items);
+  if (her) { const tf = rollTraitsFlaws(); p.heritage = her; p.charTraits = tf.traits; p.flaws = tf.flaws; bakeHeritageSkills(p); }
   return p;
 }
 function rollOrientation() {
@@ -318,7 +470,8 @@ function attracted(a, b) {
   return same ? 0 : 1;
 }
 const shieldOf = p => { const sh = SHIELDS[p.shield || 'none'] || SHIELDS.none; return WEAPONS[p.weapon]?.hands === 2 && !sh.buckler ? SHIELDS.none : sh; };
-const acOf = p => 10 + (p.feats?.includes('Dodge') ? 1 : 0) + ((!p.armor || p.armor === 'none') && clvl(p, 'monk') ? Math.max(0, mod(p.st.wis)) + (clvl(p, 'monk') >= 5 ? 1 : 0) : 0) - (p.rage && p.rage === p.fight ? 2 : 0) + (ARMOR[p.armor] || ARMOR.none).ac + shieldOf(p).ac + Math.min(mod(p.st.dex), (ARMOR[p.armor] || ARMOR.none).maxDex) + (p.defending ? 4 : 0) - (p.charged ? 2 : 0) - (flatNow(p) ? Math.max(0, mod(p.st.dex)) : 0) - (stunnedIn(p) ? 2 : 0) + shieldSpellAc(p);
+const acOfBase = p => 10 + (p.feats?.includes('Dodge') ? 1 : 0) + ((!p.armor || p.armor === 'none') && clvl(p, 'monk') ? Math.max(0, mod(p.st.wis)) + (clvl(p, 'monk') >= 5 ? 1 : 0) : 0) - (p.rage && p.rage === p.fight ? 2 : 0) + (ARMOR[p.armor] || ARMOR.none).ac + shieldOf(p).ac + Math.min(mod(p.st.dex), (ARMOR[p.armor] || ARMOR.none).maxDex) + (p.defending ? 4 : 0) - (p.charged ? 2 : 0) - (flatNow(p) ? Math.max(0, mod(p.st.dex)) : 0) - (stunnedIn(p) ? 2 : 0) + shieldSpellAc(p);
+const acOf = p => acOfBase(p) + (p.kind === 'human' ? fxOf(p).ac + affinityAc(p) : 0);   // + traits, flaws, feats and the affinities
 const classesOf = p => p.classes || { [p.cls]: p.level || 1 };
 const clvl = (p, k) => (p.kind !== 'human' ? 0 : p.classes ? p.classes[k] || 0 : p.cls === k ? p.level || 1 : 0);
 // class conditions (Rose): uncanny dodge, stunned, flat-footed, the shield spell
@@ -632,7 +785,7 @@ function Sim(opts = {}) {
     const dd = dist2(a, pos);
     if (dd < 2.5) return true;
     const t = pos.kind ? pos : null, lit = litAt(pos, t);
-    const range = sightOf(a) * (lit ? 1 : 0.35) * (t?.items?.torch > 0 && night() ? 1.5 : 1);
+    const range = sightOf(a) * (lit ? 1 : Math.max(0.35, a.heritage?.nightVision || 0))   // dark sight: the blood's * (t?.items?.torch > 0 && night() ? 1.5 : 1);
     if (dd > range || facing(a, pos) < -0.34) return false;
     if (t && (!lit && SNEAKY.has(t.state) || t.hiding > sim.t)) {      // Spot vs Hide, remembered for half an hour
       const k = a.id + '>' + t.id, c = spotCache[k];
@@ -1862,7 +2015,7 @@ function Sim(opts = {}) {
 
   // =========================================================== doing tasks ==
   const target = t => t && (sim.people[t] || sim.animals[t]);
-  function arrive(p, to, dt, speed = 2.2) { return stepToward(p, to, speed * (p.task?.run ? 2.2 : 1), dt); }
+  function arrive(p, to, dt, speed = 2.2) { return stepToward(p, to, speed * speedMultOf(p) * (p.task?.run ? (hasFeat(p, 'Run') ? 2.75 : 2.2) : 1), dt); }   // the lines' pace; Run is x5 not x4
   function doTask(p, dt) {
     const tk = p.task; if (!tk) return choose(p);
     p.stateT += dt;
@@ -1992,7 +2145,7 @@ function Sim(opts = {}) {
         if (!tk.abed) { if (!settleBed(p, tk)) return; tk.abed = true; tk.until = sim.t + (tk.hours || 9) * 60; }   // the hours count from the pillow, not the walk home
         p.state = 'sleep'; p.rest = Math.min(1, p.rest + dt / 420);
         if (!(p.lastSleepT >= sim.t - 120)) p.sleptMin = 0; p.lastSleepT = sim.t; p.sleptMin = (p.sleptMin || 0) + dt;
-        if (p.sleptMin >= 480) { p.sleptMin = 0; restDaily(p); if (!p.dying && p.hp < p.maxhp) p.hp = Math.min(p.maxhp, p.hp + Math.max(1, p.level || 1)); remember(p, { text: `I slept the night through: my strength${p.slotMax?.cures || p.slotMax?.missiles ? ' and my spells' : ''} came back.` }); }
+        if (p.sleptMin >= 480) { p.sleptMin = 0; restDaily(p); if (!p.dying && p.hp < p.maxhp) p.hp = Math.min(p.maxhp, p.hp + Math.max(1, p.level || 1) + (hasFeat(p, 'Fast Healer') ? Math.max(1, Math.floor(mod(p.st.con) / 2)) : 0)); remember(p, { text: `I slept the night through: my strength${p.slotMax?.cures || p.slotMax?.missiles ? ' and my spells' : ''} came back.` }); }
         if (tk.hours && sim.t >= tk.until) { p.task = null; return; }
         if (p.home != null && p.coin > 60) { HOUSES[p.home].stash += p.coin - 50; p.coin = 50; }   // money goes in the stash at home
         if (!tk.hours && p.rest >= 1 && h >= 5 && h < 21 && (!(p.sleptMin > 0) || h >= 9 || (JOBS[p.job] && inShift(p.job, h)))) { if (p.home != null && p.coin < 80) { const n = Math.min(HOUSES[p.home].stash, 80 - p.coin); HOUSES[p.home].stash -= n; p.coin += n; } p.task = null; }   // a day's spending money from the stash
@@ -2916,6 +3069,7 @@ function Sim(opts = {}) {
     b += mod(q.st[{ f: 'con', r: 'dex', w: 'wis' }[k]]);
     if (k === 'f' && hasFeat(q, 'Great Fortitude')) b += 2; if (k === 'w' && hasFeat(q, 'Iron Will')) b += 2; if (k === 'r' && hasFeat(q, 'Lightning Reflexes')) b += 2;
     if (k === 'f' && q.familiar === 'rat') b += 2; if (k === 'r' && q.familiar === 'weasel') b += 2;
+    b += fxOf(q).save[k] + (hasFeat(q, 'Night Owl') && night() ? 1 : 0);   // traits and flaws; Night Owl after dark
     return b;
   }
   const saveVs = (q, k, dc) => { const r = d(20); return { ok: r === 20 || (r !== 1 && r + saveMod(q, k) >= dc), r: r + saveMod(q, k) }; };
@@ -3239,6 +3393,10 @@ function Sim(opts = {}) {
   const normFeat = w0 => { const w = String(w0 || '').toLowerCase().trim(); if (!w) return null; const ks = Object.keys(FEATS); return ks.find(k => k.toLowerCase() === w) || ks.find(k => w.includes(k.toLowerCase())) || ks.find(k => k.toLowerCase().includes(w)) || null; };
   function applyFeat(p, k) {
     if (k === 'Toughness') { p.maxhp += 3; p.hp += 3; }
+    for (const [x, v] of Object.entries(FEAT_FX[k]?.skills || {})) p.skills[x] = (p.skills[x] || 0) + v;
+    if (['Weapon Focus', 'Greater Weapon Focus', 'Weapon Specialization', 'Greater Weapon Specialization', 'Improved Critical'].includes(k) && p.weapon && p.weapon !== 'fists') (p.featAims ||= {})[k] = p.weapon;
+    if (k === 'Skill Focus') { const best = Object.entries(p.skills).sort((a, b) => b[1] - a[1])[0]?.[0]; if (best) { (p.featAims ||= {})[k] = best; p.skills[best] += 3; } }
+    if (k === 'Troll-kin') p.regen = 1;   // regeneration 1; fire stops it (the fight's own rule for regenerators)
     const sk = { 'Alertness': ['spot', 'listen'], 'Persuasive': ['bluff', 'intimidate'], 'Negotiator': ['diplomacy', 'sense'], 'Stealthy': ['hide', 'sneak'], 'Self-Sufficient': ['heal'] }[k];
     if (sk) for (const x of sk) p.skills[x] = (p.skills[x] || 0) + 2;
   }
@@ -3259,6 +3417,8 @@ function Sim(opts = {}) {
   }
   function pickFeat(p, cls) {
     const ok = k => FEATS[k] && !p.feats.includes(k) && FEATS[k].req(p);
+    { const offer = (p.heritage?.offers || []).filter(ok); if (offer.length && Math.random() < 0.6) return pick(offer); }   // the blood's offer, at first level
+    if (Math.random() < 0.35) { const all = Object.keys(FEATS).filter(ok), w = all.map(k => TOWN_LIVE.has(k) ? 3 : 1); let r = Math.random() * w.reduce((a, b) => a + b, 0); for (let i = 0; i < all.length; i++) if ((r -= w[i]) < 0) return all[i]; }   // anything in the pool
     { const FL = sim.lore?.featLearn?.[cls]; if (FL && Math.random() < 0.75) { const tot = Object.values(FL).reduce((t, e) => t + e.n, 0); let best = null, bv = -1; for (const k of Object.keys(FEATS).filter(ok)) { const e = FL[k], n = e?.n || 0, v = (n ? e.s / n : 0.5) + 0.3 * Math.sqrt(Math.log(tot + 2) / (n + 1)) + Math.random() * 0.05; if (v > bv) { bv = v; best = k; } } if (best) return best; } }   // feats the town learned paid off
     const taught = sim.lore?.featPicks?.[cls];
     if (taught && Math.random() < 0.5) { const best = Object.entries(taught).filter(([k]) => ok(k)).sort((a, b) => b[1] - a[1])[0]; if (best) return best[0]; }
@@ -3350,9 +3510,10 @@ function Sim(opts = {}) {
     p.cls = cls; p.classes = { [cls]: 1 }; p.level = 1; p.levelReady = false;
     const hp = Math.max(2, PC[cls].hd + mod(p.st.con)), lost = Math.max(0, (p.maxhp || hp) - (p.hp ?? hp)); p.maxhp = hp; p.hp = Math.max(1, hp - lost);
     p.skills = skillsFor(cls, p.st, 1, [...new Set([...(p.focus || []), ...PC[cls].skills])]);
+    bakeHeritageSkills(p);
     p.feats = [];
     const want = (Array.isArray(featWant) ? featWant : featWant ? [featWant] : []).map(normFeat).filter(Boolean);
-    let slots = 1 + (cls === 'fighter' ? 1 : 0); const got = [];
+    let slots = 1 + (cls === 'fighter' ? 1 : 0) + (p.heritage?.bonusFeat ? 1 : 0) + (p.flaws?.length || 0); const got = [];   // a pure human's bonus feat; a feat for every flaw
     while (slots-- > 0) { const k = want.find(x => !p.feats.includes(x) && FEATS[x].req(p)) || pickFeat(p, cls); if (!k) break; const i = want.indexOf(k); if (i >= 0) want.splice(i, 1); p.feats.push(k); applyFeat(p, k); got.push(k); (p.featPicks ||= []).push({ cls, k }); }
     (p.picks = (p.picks || []).filter(x => !x.first)).push({ key: classKey(p), cls, lvl: 1, first: true, ai: !!chosen });
     if (chosen) { const t = ((sim.lore.classPicks ||= {})[jobGroup(p)] ||= {}); t[cls] = (t[cls] || 0) + 1; }
@@ -3373,7 +3534,7 @@ function Sim(opts = {}) {
     if (thinks(p)) { p.firstPick = true; p.firstPickAt = sim.t; }   // a provisional pick until the AI chooses its own
   }
   function firstClassPrompt(p) {
-    return `FIRST LEVEL: choose the class you are (a D&D player class; you are a ${p.cls} until you choose). Add "first_class":"<class>" to your reply, and "feat":"<name>" for your first feat${p.cls === 'fighter' ? ' (a fighter gets two)' : ''}. Classes: ${Object.entries(PC).map(([k, c]) => k + ' (d' + c.hd + ' hp; ' + c.blurb + ')').join('; ')}. Feats: ${Object.entries(FEATS).filter(([, ft]) => ft.req(p)).map(([k, ft]) => k + ' (' + ft.blurb + ')').join('; ')}.`;
+    return `FIRST LEVEL: choose the class you are (a D&D player class; you are a ${p.cls} until you choose). Add "first_class":"<class>" to your reply, and "feats":["<name>", ...] for your feat slots: one${p.cls === 'fighter' ? ' (a fighter gets two)' : ''}${p.heritage?.bonusFeat ? ', one more for pure human blood' : ''}${p.flaws?.length ? ', one more for each flaw' : ''}.${(p.heritage?.offers || []).length ? ' Your blood offers (first level only, each costs a slot): ' + p.heritage.offers.map(n => n + ' (' + (FEATS[n]?.blurb || '') + ')').join('; ') + '.' : ''} Classes: ${Object.entries(PC).map(([k, c]) => k + ' (d' + c.hd + ' hp; ' + c.blurb + ')').join('; ')}. Feats you qualify for: ${Object.entries(FEATS).filter(([k, ft]) => !ft.heritage && ft.req(p)).map(([k]) => k).join(', ')}.`;
   }
   // the clergy's gift (Rose): two healing draughts for everyone in town, once
   function clergyGift(p) { if (p.kind !== 'human' || p.town || p.clergyGift) return; p.clergyGift = true; p.items.cure = (p.items.cure || 0) + 2; }
@@ -3566,7 +3727,7 @@ function Sim(opts = {}) {
   const careTaker = where => living().find(q => q.job === (where === 'chapel' ? 'cleric' : 'doctor') && free(q) && areaOf(q) === where && q.task?.kind === 'work');
   function inCare(where) { sim.care ||= {}; return (sim.care[where] = (sim.care[where] || []).filter(e => e.until > sim.t && sim.people[e.id]?.alive)); }
   sim.careTaker = careTaker; sim.inCare = inCare;
-  const fortSave = p => d(20) + mod(p.st.con) + (p.feats?.includes('Great Fortitude') ? 2 : 0) + Object.entries(classesOf(p)).reduce((t, [k, n]) => t + (k === 'warrior' || PC[k]?.fort ? 2 + Math.floor(n / 2) : Math.floor(n / 3)), 0);
+  const fortSave = p => d(20) + (p.kind === 'human' ? fxOf(p).save.f : 0) + mod(p.st.con) + (p.feats?.includes('Great Fortitude') ? 2 : 0) + Object.entries(classesOf(p)).reduce((t, [k, n]) => t + (k === 'warrior' || PC[k]?.fort ? 2 + Math.floor(n / 2) : Math.floor(n / 3)), 0);
   function expose(p, key, why) {
     if (clvl(p, 'paladin') >= 3) return;   // divine health
     if (!p || !p.alive || p.kind !== 'human' || p.sick || !DISEASES[key]) return false;
@@ -3722,7 +3883,7 @@ function Sim(opts = {}) {
     for (const k of Object.keys(classesOf(p))) for (const r of [NPC_PROF[k], globalThis.SRD?.CLASS_WEAPONS?.[k[0].toUpperCase() + k.slice(1)]]) if (r) { if (r.simple) out.simple = true; if (r.martial) out.martial = true; for (const n of r.named || []) out.named.add(n); }
     return out;
   }
-  const fistArmed = p => p.kind !== 'human' || hasFeat(p, 'Improved Unarmed Strike') || clvl(p, 'monk') > 0;
+  const fistArmed = p => p.kind !== 'human' || hasFeat(p, 'Improved Unarmed Strike') || clvl(p, 'monk') > 0 || hasFeat(p, 'Riven Hands');   // claws are weapons
   // who threatens the ground around them (SRD): a melee weapon, a natural weapon, or an "armed" fist
   const threatens = p => !p.heldBy && !p.holding && (p.kind === 'animal' ? true : p.weapon === 'fists' ? fistArmed(p) : !!WEAPONS[p.weapon]?.melee);
   sim.threatens = threatens;
@@ -3734,6 +3895,43 @@ function Sim(opts = {}) {
   }
   const sgn = n => n ? (n > 0 ? '+' : '') + n : '';
   const nz = ts => { const k = ts.filter(([n]) => n); return k.length ? k : [[0, 'base attack']]; };
+  // the riders blood, feats, traits and flaws put on a swing (plain numbers; Rose: "nothing fancy")
+  const GRIP_UP = { '1d2': '1d3', '1d3': '1d4', '1d4': '1d6', '1d6': '1d8', '1d8': '2d6', '1d10': '2d8', '1d12': '3d6', '2d4': '2d6', '2d6': '3d6', '2d8': '3d8' };
+  function bloodTerms(f, a, t, ranged) {
+    const atk = [], dmg = [], add = (arr, n, why) => { if (n) arr.push([n, why]); }, fx = fxOf(a);
+    add(atk, ranged ? fx.ratk : fx.matk, ranged ? 'Unsteady' : 'Palsied');
+    if (fx.moon) add(atk, night() ? 1 : -1, 'Moontouched');
+    if (aimedFeat(a, 'Greater Weapon Focus')) add(atk, 1, 'Greater Weapon Focus');
+    if (aimedFeat(a, 'Greater Weapon Specialization')) add(dmg, 2, 'Greater Weapon Specialization');
+    if (hasFeat(a, 'Rapier Affinity') && a.weapon === 'rapier') add(dmg, 2, 'Rapier Affinity');
+    if (hasFeat(a, 'Greatsword Affinity') && a.weapon === 'greatsword') add(dmg, 4, 'Greatsword Affinity');
+    if (hasFeat(a, 'Unarmed Affinity') && a.weapon === 'fists') add(dmg, 2, 'Unarmed Affinity');
+    if (hasFeat(a, 'Polearm Affinity') && POLEARM.has(a.weapon)) add(dmg, 2, 'Polearm Affinity');
+    if (hasFeat(a, 'Woodland Affinity') && ['wood', 'orchard'].includes(areaOf(a))) add(dmg, 2, 'Woodland Affinity');
+    if (hasFeat(a, 'Night Owl') && night()) add(dmg, 1, 'Night Owl');
+    if (hasFeat(a, 'Barbaric')) { const n = Math.min(5, Math.floor((a.maxhp - Math.max(0, a.hp)) / a.maxhp * 5)) + (a.hp < 0 && hasFeat(a, 'Diehard') ? 2 : 0); add(atk, n, 'Barbaric'); add(dmg, n, 'Barbaric'); }
+    if (hasFeat(a, 'Ethnocentric') && a.heritage) { const n = living().filter(q => q !== a && q.kind === 'human' && q.heritage?.race === a.heritage.race && hasFeat(q, 'Ethnocentric') && conscious(q) && dist2(q, a) < 9).length; add(atk, n, 'Ethnocentric'); add(dmg, n, 'Ethnocentric'); }
+    if (living().some(q => q !== a && q.kind === 'human' && hasFeat(q, 'Nobility') && conscious(q) && dist2(q, a) < 9 && (q.spouse === a.id || a.spouse === q.id || (q.party && q.party === a.party)))) { add(atk, 2, 'Nobility'); add(dmg, 2, 'Nobility'); }
+    if (hasFeat(a, 'Giant Grip') && !ranged && a.weapon !== 'fists') add(atk, -2, 'Giant Grip');
+    if (hasFeat(a, 'Black Cat') && flatNow(t)) add(dmg, 1, 'Black Cat');
+    if (hasFeat(a, 'Weapon Finesse') && !ranged && (LIGHT.has(a.weapon) || a.weapon === 'rapier')) add(atk, Math.max(0, mod(a.st.dex) - mod(a.st.str)), 'Weapon Finesse');
+    if (hasFeat(a, 'Tracking') && f.round === 1 && clvl(a, 'rogue')) add(dmg, 2 * Math.ceil(clvl(a, 'rogue') / 2), 'Tracking');
+    if (hasFeat(a, 'Shadow Strike') && night() && !litAt(P(a.x, a.z), a) && (flatNow(t) || (!ranged && flanked(f, a, t)))) add(dmg, roll(1, 6), 'Shadow Strike');
+    return { atk, dmg };
+  }
+  // pain drunk: Masochism and Dream Eater each heal 1 for every blow that lands (Rose: "+1 each")
+  function drinkPain(a) { if (a.kind !== 'human') return; const n = (hasFeat(a, 'Masochism') ? 1 : 0) + (hasFeat(a, 'Dream Eater') ? 1 : 0); if (n && a.hp < a.maxhp) a.hp = Math.min(a.maxhp, a.hp + n); }
+  // Riven Jaw and Barbed Tail: a bite (1d6) and a tail (1d4) beside bare hands, secondary (-5; -2 with Multiattack, none with Improved)
+  function naturalExtras(f, a, t) {
+    if (a.kind !== 'human' || a.weapon !== 'fists' || !t.alive || !conscious(t) || dist2(a, t) > 2.1) return;
+    const pen = hasFeat(a, 'Improved Multiattack') ? 0 : hasFeat(a, 'Multiattack') ? -2 : -5;
+    for (const [k, nm, die] of [['Riven Jaw', 'bite', 6], ['Barbed Tail', 'tail', 4]]) {
+      if (!hasFeat(a, k) || !t.alive) continue;
+      const ac = t.kind === 'animal' ? t.ac : acOf(t), r = d(20), tot = r + babOf(a) + mod(a.st.str) + pen;
+      if (r !== 20 && (r === 1 || tot < ac)) { logF(f, `${a.name}'s ${nm} misses ${t.name} (${tot} vs AC ${ac}).`); continue; }
+      const dmg = Math.max(1, d(die) + Math.floor(mod(a.st.str) / 2)); hurt(t, dmg, false, a); drinkPain(a); logF(f, `${a.name}'s ${nm} hits ${t.name} for ${dmg} (${tot} vs AC ${ac}). ${status(t)}`);
+    }
+  }
   function srdAttack(f, a, t, o = {}) {
     const S = globalThis.SRD, human = a.kind === 'human', mode = o.mode || f.mode.get(a.id) || 'lethal';
     const strM = human ? mod(a.st.str) : 0, dexM = human ? mod(a.st.dex) : 0;
@@ -3753,23 +3951,26 @@ function Sim(opts = {}) {
       } else if (o.bash) {   // a bow or crossbow swung as a club: a light improvised weapon (-4)
         move = { name: (WEAPONS[a.weapon]?.name || 'it').toLowerCase(), type: 'attack', improvised: true, toHit: bab + strM - 4, toHitTerms: nz([[bab, 'base attack'], [strM, 'Strength'], [-4, 'improvised']]), dmg: `1d4${sgn(strM)}`, critMult: 2, threat: 20, dmgType: 'bludgeoning', rangeFt: 5, light: true };
       } else {
-        const name = LOH_WEAPON[a.weapon] || 'Unarmed', k = S.kindOf(name) || S.kindOf('Unarmed');
+        const name = LOH_WEAPON[a.weapon] || WEAPONS[a.weapon]?.loh || 'Unarmed', k = S.kindOf(name) || S.kindOf('Unarmed');
         const monk = name === 'Unarmed' && clvl(a, 'monk') > 0, ranged = k.use === 'projectile', thrown = k.use === 'thrown', enh = WEAPONS[a.weapon]?.enh || 0;
-        const cp = S.critParts(k.crit) || { threat: 20, mult: 2 };
+        const cp = { ...(S.critParts(k.crit) || { threat: 20, mult: 2 }) }; if (aimedFeat(a, 'Improved Critical')) cp.threat = 21 - 2 * (21 - cp.threat);   // SRD threat doubling
         const prof = S.proficientWith(profOf(a), name) ? 0 : S.NONPROFICIENT;
         const two = S.gripOf(k, { offhandBusy: !!(a.shield && a.shield !== 'none') || !!(a.items?.torch > 0 && night()) }) === 2;
         const sb = ranged ? (/sling/i.test(name) ? strM : /bow$/i.test(name) && !/cross/i.test(name) ? Math.min(0, strM) : 0) : thrown ? strM : Math.floor(strM * (two && strM > 0 ? 1.5 : 1));
-        const dice = monk ? String(S.monkFistAt(clvl(a, 'monk'))).match(/\d+d\d+/)?.[0] || '1d6' : (k.dmg || '1d3');
+        let dice = monk ? String(S.monkFistAt(clvl(a, 'monk'))).match(/\d+d\d+/)?.[0] || '1d6' : (k.dmg || '1d3');
+        if (name === 'Unarmed' && !monk && hasFeat(a, 'Riven Hands')) dice = '1d4';   // claws
+        if (!ranged && !thrown && name !== 'Unarmed' && hasFeat(a, 'Giant Grip')) dice = GRIP_UP[dice] || dice;   // a size up
         move = { name: (WEAPONS[a.weapon]?.name || name).toLowerCase(), weapon: name, type: 'attack', toHit: bab + (ranged || thrown ? dexM : strM) + prof + enh, toHitTerms: nz([[bab, 'base attack'], [ranged || thrown ? dexM : strM, ranged || thrown ? 'Dexterity' : 'Strength'], [prof, 'not proficient'], [enh, 'magic']]),
           dmg: `${dice}${sgn(sb + enh)}`, critMult: cp.mult, threat: cp.threat, dmgType: k.types[0] || 'bludgeoning',
           light: k.effort === 'light' || k.effort === 'unarmed', unarmed: k.effort === 'unarmed', fx: ranged ? (k.ammo || 'shot') : undefined, thrown, ranged,
-          rangeIncFt: k.inc || 0, rangeFt: ranged || thrown ? (k.inc || 10) * (thrown ? 5 : 10) : 5 };
+          rangeIncFt: (k.inc || 0) * (hasFeat(a, 'Far Shot') ? (thrown ? 2 : 1.5) : 1), rangeFt: ranged || thrown ? (k.inc || 10) * (thrown ? 5 : 10) * (hasFeat(a, 'Far Shot') ? 1.5 : 1) : 5 };
         if (ranged && k.ammo === 'bullets' && !(a.items.bullets > 0) && a.items.stones > 0) move = { ...move, ...S.stoneShotOf(move) };
       }
       // the town's own terms, each by name: hunger (Rose), the classes' features
       const hun = a.food < 0.1 ? 2 : a.food < 0.3 ? 1 : 0; term(-hun, 'hunger'); term(-hun, 'hunger', true);
-      if (hasFeat(a, 'Weapon Focus') && !o.stone && !o.bash) term(1, 'Weapon Focus');
-      if (hasFeat(a, 'Weapon Specialization') && !o.stone && !o.bash) term(2, 'Weapon Specialization', true);
+      if (aimedFeat(a, 'Weapon Focus') && !o.stone && !o.bash) term(1, 'Weapon Focus');
+      if (aimedFeat(a, 'Weapon Specialization') && !o.stone && !o.bash) term(2, 'Weapon Specialization', true);
+      if (!o.stone && !o.bash) { const bt = bloodTerms(f, a, t, S.isRanged(move)); for (const [n, w] of bt.atk) term(n, w); for (const [n, w] of bt.dmg) term(n, w, true); }
       if (a.rage === f.id) { term(2, 'rage'); term(2, 'rage', true); }
       const insp = inspire(f, a); term(insp, 'inspire courage'); term(insp, 'inspire courage', true);
       if (S.isRanged(move) && clvl(a, 'ranger') >= 2) term(1, 'ranger');
@@ -4171,7 +4372,7 @@ function Sim(opts = {}) {
     if (p.fightStyle?.blows && p.brain !== 'human') mode = p.fightStyle.blows;
     if (f.sides.has(p.id)) return;
     f.sides.set(p.id, side); f.mode.set(p.id, mode);
-    p.init = d(20) + mod(p.kind === 'human' ? p.st.dex : 2) + (p.kind === 'animal' ? 2 : 0) + (p.feats?.includes('Improved Initiative') ? 4 : 0);
+    p.init = d(20) + mod(p.kind === 'human' ? p.st.dex : 2) + (p.kind === 'animal' ? 2 : 0) + (p.feats?.includes('Improved Initiative') ? 4 : 0) + (p.kind === 'human' ? fxOf(p).init : 0);
     if (p.kind === 'human' && p.ragesLeft > 0 && clvl(p, 'barbarian') && p.rage !== f.id) { p.ragesLeft--; p.rage = f.id; f.log.push(`${p.name} flies into a rage!`); log('fight', `${p.name} flies into a rage!`, [p.id]); }
     p.fight = f.id; p.task = null; p.state = 'fight'; p.flatfooted = f.round === 1;
     f.order.push(p.id); f.order.sort((x, y) => (body(y).init || 0) - (body(x).init || 0));
@@ -4185,10 +4386,16 @@ function Sim(opts = {}) {
   const flanked = (f, a, t) => f.order.some(id => { const q = body(id); return q && q !== a && q.alive && conscious(q) && f.sides.get(q.id) === f.sides.get(a.id) && dist2(q, t) <= 2.1; });
   const inspire = (f, a) => musicOn(f, a) ? 1 : 0;   // a performance now (Rose: SRD bard)
   const inspireOld = (f, a) => f.order.some(id => { const q = body(id); return q && q.kind === 'human' && q.alive && conscious(q) && clvl(q, 'bard') && f.sides.get(q.id) === f.sides.get(a.id); }) ? 1 : 0;
-  const weaponOf = a => a.weapon === 'fists' && clvl(a, 'monk') ? { ...WEAPONS.fists, name: 'Unarmed strike', dmg: clvl(a, 'monk') >= 4 ? [1, 8] : [1, 6], weak: false, monk: true } : WEAPONS[a.weapon];
+  const weaponOf = a => {
+    if (a.weapon === 'fists' && clvl(a, 'monk')) return { ...WEAPONS.fists, name: 'Unarmed strike', dmg: clvl(a, 'monk') >= 4 ? [1, 8] : [1, 6], weak: false, monk: true };
+    if (a.weapon === 'fists' && hasFeat(a, 'Riven Hands')) return { ...WEAPONS.fists, name: 'Claws', dmg: [1, 4], nonlethal: false, weak: false };
+    const w = WEAPONS[a.weapon], ic = aimedFeat(a, 'Improved Critical'), gg = hasFeat(a, 'Giant Grip') && w?.melee && a.weapon !== 'fists', fs = hasFeat(a, 'Far Shot') && w?.range;
+    return ic || gg || fs ? { ...w, crit: ic ? [21 - 2 * (21 - w.crit[0]), w.crit[1]] : w.crit, dmg: gg ? (w.dmg[1] >= 12 ? [w.dmg[0] + 1, w.dmg[1]] : [w.dmg[0], w.dmg[1] + 2]) : w.dmg, range: fs ? w.range * 1.5 : w.range } : w;
+  };
   // one swing, then: a troll's second claw, or a Cleave into the next foe
   function attack(f, a, t, o = {}) {
     attack1(f, a, t, o);
+    if (!o.aoo && !o.extra && !o.cleave) naturalExtras(f, a, t);
     if (a.kind === 'animal' && a.multi && !o.extra) for (let i = 0; i < a.multi; i++) if (t.alive && conscious(t) && f.sides.has(t.id)) attack1(f, a, t, { ...o, extra: true });
     if (a.kind === 'human' && !o.cleave && hasFeat(a, 'Cleave') && !WEAPONS[a.weapon]?.range && !conscious(t) && a.cleaveAt !== f.id + ':' + f.round) { const t2 = foesOf(f, a).find(q => dist2(q, a) <= 2.1); if (t2) { a.cleaveAt = f.id + ':' + f.round; logF(f, `${a.name} cleaves on into ${t2.name}!`); attack1(f, a, t2, { ...o, cleave: true }); } }
   }
@@ -4212,7 +4419,7 @@ function Sim(opts = {}) {
       }
       const r = srdAttack(f, a, t, o);
       if (!r.hit) return logF(f, r.line);
-      hurt(t, r.dmg, r.nonlethal, a);
+      hurt(t, r.dmg, r.nonlethal, a); drinkPain(a);
       if (a.kind === 'animal' && t.kind === 'human' && t.alive && Math.random() < 0.3) expose(t, ({ bear: 'redache', boar: 'redache', direwolf: 'chills', ogre: 'demon' })[a.species] || 'filth', 'a ' + String(a.name).toLowerCase() + ' bite');
       logF(f, `${r.line}${r.nonlethal ? ' (nonlethal)' : ''} ${status(t)}`);
       if (wolfish(a) && t.alive && conscious(t) && !t.prone && !o.aoo) tripAt(f, a, t, { free: true });   // the SRD wolf: a bite that hits may trip, free
@@ -4226,13 +4433,14 @@ function Sim(opts = {}) {
     if (a.kind === 'human') {
       const close = ranged && dist2(a, t) < 9;
       const hun = a.food < 0.1 ? 2 : a.food < 0.3 ? 1 : 0; if (hun) { bonus -= hun; extraDmg -= hun; }   // the hungry are weaker (Rose)
-      if (hasFeat(a, 'Weapon Focus')) bonus += 1;
+      if (aimedFeat(a, 'Weapon Focus')) bonus += 1;
+      { const bt = bloodTerms(f, a, t, ranged); for (const [n] of bt.atk) bonus += n; for (const [n] of bt.dmg) extraDmg += n; }
       if (a.rage === f.id) { bonus += 2; extraDmg += 2; }
       const insp = inspire(f, a); bonus += insp; extraDmg += insp;
       if (close && hasFeat(a, 'Point Blank Shot')) { bonus += 1; extraDmg += 1; }
       if (ranged && clvl(a, 'ranger') >= 2) bonus += 1;
       if (!ranged && mode === 'lethal' && hasFeat(a, 'Power Attack')) { bonus -= 2; extraDmg += w.hands === 2 ? 4 : 2; }
-      if (hasFeat(a, 'Weapon Specialization')) extraDmg += 2;
+      if (aimedFeat(a, 'Weapon Specialization')) extraDmg += 2;
       if (t.kind === 'animal' && t.monster && clvl(a, 'ranger')) extraDmg += 2;
       if (clvl(a, 'paladin') && !(a.smote ||= {})[f.id] && (t.monster || mode === 'lethal')) { a.smote[f.id] = 1; bonus += Math.max(0, mod(a.st.cha)); extraDmg += clvl(a, 'paladin'); notes.push('smite'); }
       const rg = clvl(a, 'rogue'); if (rg && (flatNow(t) || !ranged && flanked(f, a, t))) { extraDmg += roll(Math.ceil(rg / 2), 6); notes.push('sneak attack'); }
@@ -4252,7 +4460,7 @@ function Sim(opts = {}) {
     const dr = t.kind === 'animal' ? (t.dr || 0) : (ARMOR[t.armor] || ARMOR.none).dr * (w.weak ? 2 : 1);
     const soaked = Math.min(dmg, dr); dmg -= soaked;
     if (dmg <= 0) return logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()}, but the ${(ARMOR[t.armor] || ARMOR.none).name.toLowerCase()} takes it all (${total} vs AC ${ac}).`);
-    hurt(t, dmg, wantNL, a);
+    hurt(t, dmg, wantNL, a); drinkPain(a);
     if (a.kind === 'animal' && t.kind === 'human' && t.alive && Math.random() < 0.3) expose(t, ({ bear: 'redache', boar: 'redache', direwolf: 'chills', ogre: 'demon' })[a.species] || 'filth', 'a ' + String(a.name).toLowerCase() + ' bite');
     logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()} for ${dmg}${soaked ? ` (${soaked} soaked by armour)` : ''}${wantNL ? ' nonlethal' : ''}${crit ? ' (critical!)' : ''}${notes.length ? ' (' + notes.join(', ') + ')' : ''} (${total} vs AC ${ac}). ${status(t)}`);
   }
@@ -5210,6 +5418,7 @@ function Sim(opts = {}) {
     `Here is what careers you can do: ${careers()}`,
     `Fighting (D&D 3.5 SRD rules, the same as in Legends of Harpine): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, coup de grace on the helpless, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false, "shout": true|false (call for the guard)}.`,
     personaOf(p),
+    p.heritage ? `Your blood: ${raceLabel(p)}. Your mother was ${p.heritage.mother.line}${p.heritage.mother.bloodline ? ', of the ' + p.heritage.mother.bloodline + ' bloodline' : ''}; your father ${p.heritage.father.line}${p.heritage.father.bloodline ? ', of the ' + p.heritage.father.bloodline + ' bloodline' : ''}.${p.heritage.nightVision ? ` You see in the dark${p.heritage.nightVision < 1 ? ', half as well as full blood' : ''}.` : ''}${p.charTraits?.length ? ' Traits: ' + p.charTraits.join(', ') + '.' : ''}${p.flaws?.length ? ' Flaws: ' + p.flaws.join(', ') + '.' : ''}` : '',
     sim.lore?.wisdom?.length ? `What Hollow Town remembers from earlier generations (old stories, not your life; learn from them): ${sim.lore.wisdom.join(' ')}` : '',
     sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
     `You are one person, living one life. Each message you get is a moment of it: a PLAN moment (decide what to do) or a TALK moment (someone is in front of you). Each says what is available right now and how to reply.`,
@@ -5394,7 +5603,7 @@ function Sim(opts = {}) {
     if (kind !== 'mayor' && p.id === sim.captainId && dec.orders) { const d = orderGuards(p, dec.orders); if (d.length) log('law', `Captain ${p.name} orders the guard: ${d.join('; ')}.`, [p.id]); }
     if (dec.crew_orders && isBoss(p)) crewOrders(p, dec.crew_orders);
     if (dec.rent_out != null) { const n = clamp(Math.round(parseMoney(typeof dec.rent_out === 'object' ? Object.values(dec.rent_out)[0] : dec.rent_out, 20)), 10, 50); for (const i of housesOf(p)) { HOUSES[i].ask = n; HOUSES[i].askSet = true; } if (housesOf(p).length) log('trade', `${p.name} asks ${money(n)} a night for a bed.`, [p.id]); }
-    if (dec.first_class && p.firstPick) { const c = String(dec.first_class).toLowerCase().replace(/[^a-z]/g, ''); if (PC[c]) { setFirstClass(p, c, dec.feat, true); p.firstPick = false; } }
+    if (dec.first_class && p.firstPick) { const c = String(dec.first_class).toLowerCase().replace(/[^a-z]/g, ''); if (PC[c]) { setFirstClass(p, c, dec.feats || dec.feat, true); p.firstPick = false; } }
     if (dec.level_class && p.levelReady) levelUp(p, String(dec.level_class).toLowerCase().replace(/[^a-z]/g, ''), dec.feat, true);
     p.awaiting = null;
     if (Array.isArray(dec.agenda)) { p.agenda = dec.agenda.slice(0, 5).map(x => ({ do: String(typeof x === 'object' ? x.do || x.step || '' : x).slice(0, 80) })).filter(x => x.do); if (p.agenda.length && p.task && !['jail', 'fight', 'flee', 'sleep'].includes(p.task.kind)) p.task = null; }
@@ -5451,6 +5660,7 @@ function Sim(opts = {}) {
     if (Math.floor(sim.t / 5) !== Math.floor((sim.t - dtMin) / 5)) nightWatch();
     checkWards();
     checkTraps();
+    if (Math.floor(sim.t / 10) !== Math.floor((sim.t - dtMin) / 10)) for (const q of living()) if (q.kind === 'human' && q.regen && !q.fight && q.hp < q.maxhp && q.hp > -10) q.hp = Math.min(q.maxhp, q.hp + q.regen);
     if (Math.floor(sim.t / 5) !== Math.floor((sim.t - dtMin) / 5)) checkDeputies();
     while (later.length) later.shift()();
     settleTalk();

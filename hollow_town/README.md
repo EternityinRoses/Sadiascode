@@ -176,3 +176,36 @@ Device DC and market price.
 The town no longer starts with the office empty. At 07:00 on day 1, someone
 picked at random from the jobless adults is named mayor until the first
 election, which still comes on day 2.
+
+## 11. Blood, traits, flaws, feats and the full armoury (from LoH's data, kept basic)
+
+Copied as plain tables from `heritage.js`, `traits.js`, `featPool.js`/`feats.js`,
+`weaponTable.js` and `armourTable.js`. No LoH engine is pulled in: everything is
+a flat number ("x weapon does x damage").
+
+- **Blood.** Each townsperson (not the player) is born of a mother and a father,
+  each a race (Human 55%, Elf/Shade/Cambion 15% each; 70% of couples share a race)
+  and a line. The child is that race or a half-blood, takes both lines' ability
+  changes, sees in the dark as the blood allows (half for a half-blood), and walks
+  at the lines' pace.
+- **Offers, not freebies.** A parent's bloodline or racial feat is *offered* at
+  first level and costs a feat slot. A pure human gets a bonus feat.
+- **Traits and flaws** (Restless, Ironhide, Fleet, Devout, Moontouched, Honeyed;
+  Frail, Clumsy, Dim, Palsied, Unsteady, Vulnerable, Oblivious, Graceless, Witless,
+  Off-Putting, Distractible) as plain modifiers. Each flaw owes one extra feat
+  slot. Feral is left out because the town runs on talk.
+- **Feats.** The whole pool (118 feats) can be picked if its plain prerequisites
+  are met (BAB, abilities, feats, class levels, casting, dark sight, natural
+  weapons). Weapon feats aim at the weapon carried when taken. Feats with a
+  town effect: skill bonuses, Improved Natural Armor, Greater Weapon
+  Focus/Specialization, Improved Critical, Weapon Finesse, Far Shot, Run,
+  Fast Healer, the affinities, Troll-kin (regen 1), Ethnocentric, Nobility,
+  Giant Grip, Barbaric, Night Owl, Tracking, Shadow Strike, Masochism / Dream
+  Eater (+1 hp per hit), Riven Hands (claws), Riven Jaw / Barbed Tail (extra
+  natural attacks). The others can be held but do nothing yet (mounts,
+  metamagic, ...).
+- **Weapons and armour.** The other 41 LoH weapons (thrown-only ones like dart and
+  net are left out) and Splint mail are added to the shop and forge tables.
+- **AI.** The prompt tells each AI their blood, parents, dark sight, traits and
+  flaws. At first level it lists what their blood offers (with text), plus the
+  names of the other feats they qualify for. They answer `"feats": [...]`.
