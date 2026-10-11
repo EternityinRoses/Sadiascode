@@ -196,3 +196,8 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - LoH fight dossiers: every fight turn recorded in LoH's format (20 numbers from battle/learn.js, 7 acts from profile.js, mv) as 'loh_turn' rows with reward and outcome; sim.dossiers via LoH's noteTurn.
 - town/fightnet.js (20-8-7), town/train_fight.mjs (in TrainBrain.bat) writes fightnet.json and dossiers/<name>.learn.json (LoH chars/ format); server GET /fightnet; Settings > Fight brains > Trained fight net; Mind > Generations shows it.
 - Smoke: .backups/smoke_loh2.mjs.
+
+## 2026-10-11 06:12 Hollow Town: deaths fix + memories that matter
+- Why more deaths: the new 'body in the line' soft cover gave beasts +4 AC against every crossbow and bow shot past a friend, on top of the -4 for shooting into a melee. Bear fights ran ~25% longer, with ~70% more townsfolk dead (1000 staged fights). LoH's cover is walls and props only, so body cover is gone. Hurt NPCs also only drink a draught when nothing threatens them (drinking provokes). With both fixed, staged bear, wolf, boar, ogre and dire-wolf fights are as good as or better than before the LoH change.
+- Diagnostics: .backups/diag_fight.mjs (party vs beast, many fights, any sim.js), .backups/diag_deaths.mjs (a generation's deaths by cause).
+- Memories: a death is remembered by those who saw it, and the whole town hears 'News: X died: killed by a bear at 3 Wick Lane while asleep' by morning. Warnings someone is told or overhears (beasts, danger, hide, barricade, tonight...) are kept as 'big' memories. The memory cap drops small things first. Prompts show 'What matters that you know' (up to 10 big) and recent events without gossip, plus only the 2 latest overheard lines (now cut at 200 chars).

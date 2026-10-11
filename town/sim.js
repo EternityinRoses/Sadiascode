@@ -356,7 +356,8 @@ function Sim(opts = {}) {
   sim.R = R;
   const bump = (a, b, k, v) => { const r = R(a, b); r[k] = k === 'like' ? clamp(r[k] + v, -1, 1) : clamp(r[k] + v); };
   const later = []; const setTimeout0 = f => later.push(f);
-  const remember = (a, fact) => { a.memory.push({ t: sim.t, day: sim.day, ...fact }); if (a.memory.length > 60) a.memory.shift(); };
+  const WARNS = /\b(beast|bear|wolf|wolves|troll|ogre|boar|danger|careful|warn|run|hide|barricade|lock|bar the|palisade|22:00|tonight|night)\b/i;
+  const remember = (a, fact) => { if (!a.memory) return; if (fact.text && !fact.big && (fact.told || fact.heard) && WARNS.test(fact.text)) fact.big = true; a.memory.push({ t: sim.t, day: sim.day, ...fact }); if (a.memory.length > 60) { const i = a.memory.findIndex(m => !m.big); a.memory.splice(i >= 0 && a.memory.filter(m => m.big).length < 40 ? i : 0, 1); } };
 
   // ---- money: carried coin; households keep a stash at home
   const purse = p => p.coin;
@@ -2632,6 +2633,13 @@ function Sim(opts = {}) {
     if (!p.alive) return;
     try { p.deathInfo = scoreInfo(p, killer); } catch (e) {}
     try { (sim.genLog ||= []).push({ t: 'death', day: sim.day, hr: Math.floor(H()), who: p.id === sim.mayorId ? 'the mayor' : p.job === 'none' ? 'a jobless one' : 'a ' + (JOBS[p.job]?.title || 'townsperson').toLowerCase(), killer: killer ? (sim.animals[killer.id] ? (killer.name || 'a beast') : 'a person') : null, how: how || '', where: AREAS[areaOf(p)]?.name || 'the road', doing: p.lastChoice?.kind || p.state || '' }); } catch (e) {}
+    try {
+      const where = AREAS[areaOf(p)]?.name || 'the road', doing = p.state === 'sleep' || p.lastChoice?.kind === 'sleep' ? 'asleep' : p.lastChoice?.kind ? 'doing ' + p.lastChoice.kind : '', beast = killer && sim.animals[killer.id];
+      const by = beast ? 'a ' + String(killer.name).toLowerCase() : killer ? (killer.id === 'player' ? 'Rose' : killer.name) : null;
+      const what = by ? `killed by ${by}` : how ? String(how) : 'dead';
+      for (const q of living()) if (q !== p && q.kind === 'human' && q.alive && (dist2(q, p) < 12 && sees(q, p))) remember(q, { text: `I saw ${p.name} ${what} at ${where}${doing ? ' (' + doing + ')' : ''}, day ${sim.day} ${Math.floor(H())}:00.`, big: true, death: p.id });
+      (sim.deathNews ||= []).push({ id: p.id, text: `${fullName(p)} died: ${beast ? what : killer ? 'killed by someone' : what}, at ${where}${doing ? ' while ' + doing : ''}, day ${sim.day} around ${Math.floor(H())}:00.` });
+    } catch (e) {}
     if (p.lastChoice && sim.lore) { if (p.lastChoice.x && sim.studentMode !== 'habit') nudge(p.lastChoice.x, p.lastChoice.kind, -1, 0.05); lesson(p.lastChoice.key, p.lastChoice.kind, -40, false); dataRow({ type: 'death', day: sim.day, sit: p.lastChoice.key, choice: p.lastChoice.kind, how: how || '', role: roleOf(p), x: (p.lastChoice.x || p.lastChoice.rx) ? Array.from(p.lastChoice.x || p.lastChoice.rx, r2) : undefined }); p.lastChoice = null; }   // the worst outcome there is
     p.deathWorth = worth(p);
     p.alive = false; p.deadAt = sim.t; p.state = 'dead'; p.task = null; p.dying = false; sim.rec.deaths++;
@@ -3031,7 +3039,6 @@ function Sim(opts = {}) {
     const A = areaOf(a), B = areaOf(t);
     if (A !== B && (AREAS[A]?.indoor || AREAS[B]?.indoor)) { const door = DOORS.find(dr => ((dr.a === A && dr.b === B) || (dr.a === B && dr.b === A)) && segT(dr.at, a, t).d < 1.2); return door ? { ac: 4, prop: { name: 'doorway' } } : { ac: 0, total: true, prop: { name: 'wall' } }; }
     if (sim.palisade?.hp > 0 && ((A === 'wood' && B === 'fields') || (A === 'fields' && B === 'wood'))) return { ac: 4, prop: { name: 'palisade' } };
-    for (const q of [...living(), ...Object.values(sim.animals)]) { if (q === a || q === t || !q.alive || q.buried || !conscious(q)) continue; const s = segT(q, a, t); if (s.u > 0.15 && s.u < 0.85 && s.d < 0.45) return { ac: 4, soft: true }; }
     return null;
   }
   sim.coverOf = coverOf;
@@ -3196,7 +3203,7 @@ function Sim(opts = {}) {
     if (p.kind !== 'human') return false;
     const thr = threatened(f, p).length;
     if (isDisabled(p)) { const dr = find('drink'), b = find('back'); if (dr) act(f, p, dr); else if (b && thr) act(f, p, b); else act(f, p, { id: 'end' }); return true; }
-    if (find('drink') && hpFrac < 0.35 && thr < 2) { act(f, p, find('drink')); return true; }
+    if (find('drink') && hpFrac < 0.35 && !thr) { act(f, p, find('drink')); return true; }
     const st = acts.find(a => a.id === 'stabilize'); if (st && !thr && (p.skills.heal >= 2 || (tr.loyalty || 0) > 0.55)) { act(f, p, st); return true; }
     const pk = find('pickup'); if (pk && p.weapon === 'fists') { act(f, p, pk); if (conscious(p) && p.turnLeft?.standard) npcTurn(f, p); return true; }
     return false;
@@ -3681,6 +3688,8 @@ function Sim(opts = {}) {
   // ============================================================ the town ==
   // salaries, rent, taxes, the cart, newcomers and leavers, elections
   function dailyTick() {
+    // word of the day's deaths reaches everyone by morning
+    for (const n of (sim.deathNews || []).splice(0)) for (const q of living()) if (q.kind === 'human' && q.alive && !q.memory.some(m => m.death === n.id)) remember(q, { text: 'News: ' + n.text, big: true, death: n.id });
     diseaseDay();
     sim.day++;
     // taxes on sales, collected by the town
@@ -3937,7 +3946,8 @@ function Sim(opts = {}) {
       short ? '' : `Prices: ${['bread', 'meal', 'turnip', 'meat', 'eggs', 'ale'].map(k => `${k} ${money(priceOf(GOODS[k].shop || 'store', k))}`).join(', ')}; at the smithy: ${Object.entries(sim.business.smithy.stock).filter(([k, n]) => n > 0 && GOODS[k] && k !== 'iron').map(([k]) => `${k} ${money(priceOf('smithy', k))}`).join(', ') || 'nothing'}.`,
       short ? '' : `Town: mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${money(sim.rent)} a day. Businesses: ${Object.values(sim.business).map(b => `${b.id} ${b.owner ? 'run by ' + sim.people[b.owner]?.name : 'unclaimed (lease at the hall, ' + money(LEASE[b.id] || 20) + ' a day)'}`).join(', ')}.${Object.keys(sim.bounty).some(id => id !== 'beasts' && sim.people[id]?.alive) ? ' Bounty board (bring them to the Guard station, knocked out and carried, for the coin): ' + Object.entries(sim.bounty).filter(([id]) => id !== 'beasts' && sim.people[id]?.alive).map(([id, c]) => `${sim.people[id].id === 'player' ? 'Rose of the City' : sim.people[id].name} (${id}) ${money(c)}${sim.bountyWhy?.[id] ? ' for ' + sim.bountyWhy[id] : ''}`).join(', ') + '.' : ''}`,
       electionNews(p), rankNews(p),
-      `What has happened to you lately: ${p.memory.slice(-(short ? 5 : 8)).map(m => m.text || (m.ev ? memText(m) : m.grave ? `${m.name} buried in plot ${m.grave}` : '')).filter(Boolean).join('; ') || 'nothing notable'}.`,
+      (() => { const say = m => m.text || (m.ev ? memText(m) : m.grave ? `${m.name} buried in plot ${m.grave}` : ''), big = p.memory.filter(m => m.big).slice(-(short ? 5 : 10)), small = p.memory.filter(m => !m.big && !m.heard).slice(-(short ? 4 : 7)), heard = p.memory.filter(m => m.heard && !m.big).slice(-(short ? 1 : 2));
+        return (big.length ? `What matters that you know (deaths, warnings): ${big.map(m => say(m).replace(/\.$/, '')).filter(Boolean).join('; ')}.\n` : '') + `What has happened to you lately: ${small.map(say).filter(Boolean).join('; ') || 'nothing notable'}.` + (heard.length ? ` Overheard: ${heard.map(say).join('; ')}.` : ''); })(),
     ].filter(Boolean).join('\n');
   }
   sim.facts = facts;
@@ -4061,10 +4071,10 @@ function Sim(opts = {}) {
     hearWords(sp, text);
     dataRow({ type: 'talk', day: sim.day, role: roleOf(sp), toRole: roleOf(to), sit: situation(sp), words: wordsNow(sp), heard: sp.lastHeard?.[to.id] ? slotify(sp.lastHeard[to.id], to, sp) : null, said: slotify(text, sp, to), src: 'ai' }); (sp.saidTo ||= {})[to.id] = sim.t;
     if (typeof dec.feeling === 'number') { const r = R(sp, to); r.like = clamp(r.like + (clamp(dec.feeling, -1, 1) - r.like) * 0.15, -1, 1); }
-    remember(to, { text: `${sp.name} told me: "${text}"` });
+    remember(to, { text: `${sp.name} told me: "${text}"`, told: true });
     if (dec.note) remember(sp, { text: String(dec.note).slice(0, 160) });
     const picked = Array.isArray(dec.hearers) ? dec.hearers.map(String) : null;
-    for (const w of living()) if (w !== sp && w !== to && w.kind === 'human' && !dec.whisper && (!picked || picked.includes(w.id)) && inEarshot(w, sp)) remember(w, { text: picked ? `${sp.name} told ${to.name} and me: "${text.slice(0, 120)}"` : `I overheard ${sp.name} tell ${to.name}: "${text.slice(0, 120)}"` });
+    for (const w of living()) if (w !== sp && w !== to && w.kind === 'human' && !dec.whisper && (!picked || picked.includes(w.id)) && inEarshot(w, sp)) remember(w, { text: picked ? `${sp.name} told ${to.name} and me: "${text.slice(0, 200)}"` : `I overheard ${sp.name} tell ${to.name}: "${text.slice(0, 200)}"`, told: !!picked, heard: !picked });
     if (!dec.whisper && /\bguard!/i.test(text)) hueAndCry(sp);
     return text;
   };
