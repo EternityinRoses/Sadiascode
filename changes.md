@@ -220,3 +220,6 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 
 ## 2026-10-11 06:50 Hollow Town: the fail state
 - Rose: if more than 4 townsfolk die on one day (midnight to midnight), the town FAILS at once and the generation ends (sim.failed, sim.deathsByDay). At 4 dead everyone is warned (a big memory) that one more before midnight fails the town. Every prompt shows today's deaths against the limit; every AI's identity states it is up to all of them together. The generation summary, end notice and Mind W/L/F strip show it.
+
+## 2026-10-11 06:57 Hollow Town: the fail state counts the last 24 hours
+- A beast night runs past midnight, so 4 dead before midnight and 1 after never failed the town. The fail state is now more than 4 townsfolk dead within any 24 hours (sim.deathTimes, sim.deaths24); prompts show deaths in the last 24 hours.

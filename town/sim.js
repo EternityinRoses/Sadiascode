@@ -1485,6 +1485,8 @@ function Sim(opts = {}) {
   // THE FAIL (Rose): more than 4 of the townsfolk dead on one day (midnight to midnight) and the town has failed, at once
   sim.MAX_DEATHS = 4;
   const deathsOn = d => (sim.deathsByDay || {})[d] || 0;
+  const deaths24 = () => (sim.deathTimes || []).filter(t => sim.t - t < 1440).length;   // the townsfolk dead in the last 24 hours
+  sim.deaths24 = deaths24;
   sim.deathsOn = deathsOn;
   sim.genWon = () => !sim.failed && sim.day >= winDay() && H() >= 12 && everyone().some(p => p.kind === 'human' && !p.town && p.id !== 'player' && p.alive);
   sim.genOver = () => !!sim.failed || sim.townDead() || sim.day > winDay() || (sim.day >= winDay() && H() >= 12);
@@ -2855,9 +2857,10 @@ function Sim(opts = {}) {
     if (p.lastChoice && sim.lore) { if (p.lastChoice.x && sim.studentMode !== 'habit') nudge(p.lastChoice.x, p.lastChoice.kind, -1, 0.05); lesson(p.lastChoice.key, p.lastChoice.kind, -40, false); dataRow({ type: 'death', day: sim.day, sit: p.lastChoice.key, choice: p.lastChoice.kind, how: how || '', role: roleOf(p), x: (p.lastChoice.x || p.lastChoice.rx) ? Array.from(p.lastChoice.x || p.lastChoice.rx, r2) : undefined }); p.lastChoice = null; }   // the worst outcome there is
     p.deathWorth = worth(p);
     if (p.kind === 'human' && !p.town && p.id !== 'player') {
-      const n = ((sim.deathsByDay ||= {})[sim.day] = (sim.deathsByDay[sim.day] || 0) + 1);
-      if (n > sim.MAX_DEATHS && !sim.failed) { sim.failed = { day: sim.day, n, hr: Math.floor(H()) }; log('death', `${n} of Hollow Town's people have died today, day ${sim.day}: more than ${sim.MAX_DEATHS} in one day. THE TOWN HAS FAILED.`, [p.id]); }
-      else if (n === sim.MAX_DEATHS && !sim.failed) { log('death', `${n} dead today: one more death before midnight and Hollow Town fails.`, [p.id]); for (const q of living()) if (q !== p && q.kind === 'human' && q.alive && !q.town) remember(q, { text: `${n} of us have died today (day ${sim.day}). One more before midnight and the whole town fails.`, big: true }); }
+      (sim.deathsByDay ||= {})[sim.day] = (sim.deathsByDay[sim.day] || 0) + 1;
+      (sim.deathTimes ||= []).push(sim.t); const n = deaths24();
+      if (n > sim.MAX_DEATHS && !sim.failed) { sim.failed = { day: sim.day, n, hr: Math.floor(H()) }; log('death', `${n} of Hollow Town's people have died in the last 24 hours (day ${sim.day}): more than ${sim.MAX_DEATHS} in a day. THE TOWN HAS FAILED.`, [p.id]); }
+      else if (n === sim.MAX_DEATHS && !sim.failed) { log('death', `${n} dead in the last 24 hours: one more and Hollow Town fails.`, [p.id]); for (const q of living()) if (q !== p && q.kind === 'human' && q.alive && !q.town) remember(q, { text: `${n} of us have died in the last 24 hours (day ${sim.day}). One more death within a day of the first and the whole town fails.`, big: true }); }
     }
     p.alive = false; p.deadAt = sim.t; p.state = 'dead'; p.task = null; p.dying = false; sim.rec.deaths++;
     for (const hs of HOUSES) if (hs.owner === p.id) { const sp = p.spouse && sim.people[p.spouse]; hs.owner = sp && sp.alive ? sp.id : null; }
@@ -4173,7 +4176,7 @@ function Sim(opts = {}) {
       short ? '' : `Prices: ${['bread', 'meal', 'turnip', 'meat', 'eggs', 'ale'].map(k => `${k} ${money(priceOf(GOODS[k].shop || 'store', k))}`).join(', ')}; at the smithy: ${Object.entries(sim.business.smithy.stock).filter(([k, n]) => n > 0 && GOODS[k] && k !== 'iron').map(([k]) => `${k} ${money(priceOf('smithy', k))}`).join(', ') || 'nothing'}.`,
       short ? '' : `Town: mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${money(sim.rent)} a day. Businesses: ${Object.values(sim.business).map(b => `${b.id} ${b.owner ? 'run by ' + sim.people[b.owner]?.name : 'unclaimed (lease at the hall, ' + money(LEASE[b.id] || 20) + ' a day)'}`).join(', ')}.${Object.keys(sim.bounty).some(id => id !== 'beasts' && sim.people[id]?.alive) ? ' Bounty board (bring them to the Guard station, knocked out and carried, for the coin): ' + Object.entries(sim.bounty).filter(([id]) => id !== 'beasts' && sim.people[id]?.alive).map(([id, c]) => `${sim.people[id].id === 'player' ? 'Rose of the City' : sim.people[id].name} (${id}) ${money(c)}${sim.bountyWhy?.[id] ? ' for ' + sim.bountyWhy[id] : ''}`).join(', ') + '.' : ''}`,
       discountNews(p),
-      `Deaths in town today: ${deathsOn(sim.day)} (more than ${sim.MAX_DEATHS} in one day and the whole town fails).`,
+      `Deaths in town in the last 24 hours: ${deaths24()} (more than ${sim.MAX_DEATHS} within 24 hours and the whole town fails).`,
       electionNews(p), rankNews(p),
       (() => { const say = m => m.text || (m.ev ? memText(m) : m.grave ? `${m.name} buried in plot ${m.grave}` : ''), big = p.memory.filter(m => m.big).slice(-(short ? 5 : 10)), small = p.memory.filter(m => !m.big && !m.heard).slice(-(short ? 4 : 7)), heard = p.memory.filter(m => m.heard && !m.big).slice(-(short ? 1 : 2));
         return (big.length ? `What matters that you know (deaths, warnings): ${big.map(m => say(m).replace(/\.$/, '')).filter(Boolean).join('; ')}.\n` : '') + `What has happened to you lately: ${small.map(say).filter(Boolean).join('; ') || 'nothing notable'}.` + (heard.length ? ` Overheard: ${heard.map(say).join('; ')}.` : ''); })(),
@@ -4187,7 +4190,7 @@ function Sim(opts = {}) {
   // Each AI-played person is its own instance: a fixed identity (the same every time, so it can be
   // cached), and then a running thread of turns that only that person ever sees.
   sim.identityFor = p => [
-    `The win condition for all of Hollow Town: the community wins if anyone in it is still alive at noon (12:00) on day ${winDay()}. The fail state: if more than ${sim.MAX_DEATHS} of the townsfolk die on any one day (midnight to midnight), the whole town fails at once. It is up to all of you, together, to make sure that doesn't happen. Beasts come every night at 22:00, and on the last night a troll and two bears. If everyone dies, everyone loses, however rich they were.`,
+    `The win condition for all of Hollow Town: the community wins if anyone in it is still alive at noon (12:00) on day ${winDay()}. The fail state: if more than ${sim.MAX_DEATHS} of the townsfolk die within any 24 hours, the whole town fails at once. It is up to all of you, together, to make sure that doesn't happen. Beasts come every night at 22:00, and on the last night a troll and two bears. If everyone dies, everyone loses, however rich they were.`,
     p.brain === 'mayor-ai' ? `You are an AI in a lifesim. You operate within a civilization as a living autonomous being with agency. Winning, for you, means holding power (and staying alive: death is permanent).` : INTRO + ` You start with nothing.`,
     `Here is what commands you have access to: ${COMMANDS.join('; ')}.`,
     'Money is D&D coin: copper (cp), silver (sp), gold (gp) and platinum (pp); 10 cp = 1 sp, 10 sp = 1 gp, 10 gp = 1 pp. Prices are the book prices: bread 2 cp, a mug of ale 4 cp, a hired hand earns 1-3 sp a day, a dagger is 2 gp, a longsword 15 gp, chainmail 150 gp. Any amount you put in a command can name its coin ("5 sp", "2 gp"); a bare number in a JSON reply is copper pieces.',
