@@ -222,10 +222,10 @@ const BREW = { healkit: { hours: 2, dc: 15 }, alchfire: { hours: 2, dc: 20 }, cu
 const BREW_KEEP = { healkit: 3, alchfire: 4, cure: 2, bullstr: 1, catsgrace: 1, curemod: 2 };   // what an alchemist keeps on the shelf
 // skills by the SRD: points a level (class base + Int; four times that at first level) and each class's own skills, on the town's list
 const SKILL_BASE = { barbarian: 4, bard: 6, cleric: 2, druid: 4, fighter: 2, monk: 4, paladin: 2, ranger: 6, rogue: 8, sorcerer: 2, wizard: 2 };
-const CLASS_SKILLS = { barbarian: ['intimidate', 'listen'], bard: ['bluff', 'diplomacy', 'escape', 'hide', 'listen', 'sneak', 'sense', 'sleight'], cleric: ['diplomacy', 'heal'], druid: ['diplomacy', 'heal', 'listen', 'spot'],
-  fighter: ['intimidate'], monk: ['diplomacy', 'escape', 'hide', 'listen', 'sneak', 'sense', 'spot'], paladin: ['diplomacy', 'heal', 'sense'], ranger: ['heal', 'hide', 'listen', 'sneak', 'spot'],
-  rogue: ['bluff', 'diplomacy', 'sense', 'intimidate', 'hide', 'sneak', 'sleight', 'spot', 'listen', 'openlock', 'escape'], sorcerer: ['bluff'], wizard: [] };
-const SKILL_WORDS = { sensemotive: 'sense', movesilently: 'sneak', moveSilently: 'sneak', openlock: 'openlock', sleightofhand: 'sleight', escapeartist: 'escape', search: 'spot' };
+const CLASS_SKILLS = { barbarian: ['craft', 'intimidate', 'listen'], bard: ['craft', 'bluff', 'diplomacy', 'escape', 'hide', 'listen', 'sneak', 'sense', 'sleight'], cleric: ['craft', 'diplomacy', 'heal'], druid: ['craft', 'diplomacy', 'heal', 'listen', 'spot'],
+  fighter: ['craft', 'intimidate'], monk: ['craft', 'diplomacy', 'escape', 'hide', 'listen', 'sneak', 'sense', 'spot'], paladin: ['craft', 'diplomacy', 'heal', 'sense'], ranger: ['craft', 'heal', 'hide', 'listen', 'sneak', 'spot'],
+  rogue: ['craft', 'bluff', 'diplomacy', 'sense', 'intimidate', 'hide', 'sneak', 'sleight', 'spot', 'listen', 'openlock', 'escape'], sorcerer: ['craft', 'bluff'], wizard: ['craft'] };
+const SKILL_WORDS = { crafting: 'craft', smithing: 'craft', blacksmithing: 'craft', weaponsmithing: 'craft', armorsmithing: 'craft', armoursmithing: 'craft', alchemy: 'craft', sensemotive: 'sense', movesilently: 'sneak', moveSilently: 'sneak', openlock: 'openlock', sleightofhand: 'sleight', escapeartist: 'escape', search: 'spot' };
 // aimed shots (Rose: "archers can aim at things"): the penalty to hit and what a hit does
 const AIM = { eyes: { pen: 8 }, throat: { pen: 6 }, arms: { pen: 4 }, legs: { pen: 4 }, feet: { pen: 6 } };
 
@@ -271,11 +271,12 @@ const LEASE = { bakery: 20, store: 30, smithy: 20, tavern: 30, farm: 10, ranch: 
 const OWNER_JOB = { bakery: 'baker', store: 'shopkeep', smithy: 'smith', tavern: 'innkeep', farm: 'farmer', ranch: 'rancher', apothecary: 'alchemist' };
 // livestock: what each gives a day, how fast the herd grows, how many the pasture holds
 const STOCK = { hen: { hp: 1, ac: 12, give: ['eggs', 1], breed: 0.3, cap: 14, meat: 1 }, cow: { hp: 12, ac: 9, give: ['milk', 2], breed: 0.06, cap: 5, meat: 8 }, sheep: { hp: 6, ac: 10, give: null, breed: 0.12, cap: 8, meat: 4 } };
-const MARROW = { sells: { grain: 3, turnip: 1, barley: 3, meat: 20, iron: 8 }, buys: { ale: 6, cure: 6000, rope: 120, bread: 3 } };
+const MARROW = { sells: { grain: 3, turnip: 1, barley: 3, meat: 20, iron: 8, fish: 3, wood: 1, eggs: 2, milk: 2, apple: 1, rope: 100, ale: 5, bread: 2, torch: 1, plank: 2 },
+  buys: { ale: 6, cure: 6000, rope: 120, bread: 3, meat: 18, fish: 3, wood: 1, plank: 2, grain: 3, turnip: 1, barley: 3, eggs: 2, milk: 2, apple: 1, berries: 1, iron: 6, bearpelt: 120, wolfpelt: 40, trollhide: 250, ogretooth: 150, healkit: 500, alchfire: 2000, bullstr: 30000, catsgrace: 30000, curemod: 30000 } };
 // crops take days to grow; tending makes the yield
 const CROPS = { turnip: { days: 3, yield: 26 }, grain: { days: 5, yield: 16 }, barley: { days: 4, yield: 8 } };
 // game in the Wildwood: some run, the boar fights back
-const GAME = { rabbit: { hp: 2, ac: 15, bite: [1, 2], meat: 1, cap: 16, start: 9, breed: 0.35, flees: true }, pheasant: { hp: 1, ac: 16, bite: [1, 1], meat: 1, cap: 10, start: 6, breed: 0.25, flees: true }, deer: { hp: 9, ac: 13, bite: [1, 4], meat: 4, cap: 9, start: 5, breed: 0.12, flees: true }, boar: { hp: 14, ac: 12, bite: [1, 8], meat: 6, cap: 4, start: 2, breed: 0.08, flees: false } };
+const GAME = { rabbit: { hp: 2, ac: 15, bite: [1, 2], meat: 1, cap: 16, start: 9, breed: 0.35, flees: true }, pheasant: { hp: 1, ac: 16, bite: [1, 1], meat: 1, cap: 10, start: 6, breed: 0.25, flees: true }, deer: { hp: 9, ac: 13, bite: [1, 4], meat: 8, cap: 9, start: 5, breed: 0.12, flees: true }, boar: { hp: 14, ac: 12, bite: [1, 8], meat: 10, cap: 4, start: 2, breed: 0.08, flees: false } };
 const SHOP_OF = { bakery: 'bakery', store: 'store', smithy: 'smithy', tavern: 'tavern', healer: 'healer', apothecary: 'apothecary' };
 const inShift = (job, h) => { const j = JOBS[job]; if (!j || j.from == null) return false; return j.from <= j.to ? h >= j.from && h < j.to : h >= j.from || h < j.to; };
 
@@ -310,7 +311,7 @@ const PC = {
   wizard:    { hd: 4, bab: l => Math.floor(l / 2), fort: false, skills: ['spot'], blurb: 'a familiar; spells, 2 + level a day: magic missile, sleep (4 HD of foes nod off), color spray, shield (+4 AC, stops missiles); scorching ray (4d6 fire) from wizard 3' },
 };
 const XP_AT = [0, 0, 1000, 3000, 6000, 10000], MAX_LEVEL = 5;   // the SRD's table (Rose)
-const SKILL_ABIL = { bluff: 'cha', diplomacy: 'cha', sense: 'wis', intimidate: 'cha', hide: 'dex', sneak: 'dex', sleight: 'dex', spot: 'wis', listen: 'wis', heal: 'wis', openlock: 'dex', escape: 'dex' };
+const SKILL_ABIL = { craft: 'int', bluff: 'cha', diplomacy: 'cha', sense: 'wis', intimidate: 'cha', hide: 'dex', sneak: 'dex', sleight: 'dex', spot: 'wis', listen: 'wis', heal: 'wis', openlock: 'dex', escape: 'dex' };
 const FEATS = {
   'Power Attack':          { req: p => p.st.str >= 13, blurb: 'melee, lethal: -2 to hit, +2 damage (+4 two-handed)' },
   'Cleave':                { req: p => p.feats?.includes('Power Attack'), blurb: 'drop a foe and swing at another beside you' },
@@ -357,7 +358,7 @@ const POLEARM = new Set(['shortspear', 'longspear', 'quarterstaff', 'spear', 'gl
 const TRAITS_T = { Restless: { init: 2, ac: -1 }, Ironhide: { save: { f: 1, r: -1 } }, Fleet: { save: { r: 1, f: -1 } }, Devout: { save: { w: 1, f: -1 } },
   Moontouched: { moon: 1 }, Honeyed: { skills: { diplomacy: 2, bluff: 2, intimidate: -2 } } };
 const FLAWS_T = { Frail: { save: { f: -3 } }, Clumsy: { save: { r: -3 } }, Dim: { save: { w: -3 } }, Palsied: { matk: -3 }, Unsteady: { ratk: -3 }, Vulnerable: { ac: -2 },
-  Oblivious: { skills: { spot: -4, listen: -4 } }, Graceless: { skills: { hide: -4, sneak: -4, sleight: -4, openlock: -4, escape: -4 } }, Witless: {},
+  Oblivious: { skills: { spot: -4, listen: -4 } }, Graceless: { skills: { hide: -4, sneak: -4, sleight: -4, openlock: -4, escape: -4 } }, Witless: { skills: { craft: -4 } },
   'Off-Putting': { skills: { bluff: -4, diplomacy: -4, intimidate: -4 } }, Distractible: {} };
 // the feats' plain numbers (featEffects.js's, onto the town's skills). The skill feats and Toughness the town already had keep
 // their old lines in applyFeat; the attack and damage riders are read in a fight (bloodTerms).
@@ -445,9 +446,9 @@ function rollStats(bias = {}) {
   return s;
 }
 function skillsFor(cls, st, lvl, focus = []) {
-  const base = k => ({ bluff: 'cha', diplomacy: 'cha', sense: 'wis', intimidate: 'cha', hide: 'dex', sneak: 'dex', sleight: 'dex', spot: 'wis', listen: 'wis', heal: 'wis', openlock: 'dex', escape: 'dex' })[k];
+  const base = k => ({ craft: 'int', bluff: 'cha', diplomacy: 'cha', sense: 'wis', intimidate: 'cha', hide: 'dex', sneak: 'dex', sleight: 'dex', spot: 'wis', listen: 'wis', heal: 'wis', openlock: 'dex', escape: 'dex' })[k];
   const sk = {};
-  for (const k of ['bluff', 'diplomacy', 'sense', 'intimidate', 'hide', 'sneak', 'sleight', 'spot', 'listen', 'heal', 'openlock', 'escape'])
+  for (const k of ['bluff', 'diplomacy', 'sense', 'intimidate', 'hide', 'sneak', 'sleight', 'spot', 'listen', 'heal', 'openlock', 'escape', 'craft'])
     sk[k] = mod(st[base(k)]) + (focus.includes(k) ? lvl + 3 : 0);
   return sk;
 }
@@ -580,6 +581,7 @@ function Sim(opts = {}) {
     const guards = [['m', 'captain', 3], ['m', 'guard', 2], ['f', 'guard', 1], ['m', 'nightguard', 1], ['f', 'nightguard', 1], ['m', 'jailer', 1]]
       .map(([gd, job, lvl]) => add({ gender: gd, cls: 'warrior', level: lvl, job, weapon: job === 'captain' ? 'longsword' : pick(['club', 'shortsword', 'sap']), armor: job === 'captain' ? 'chain' : 'leather', coin: irnd(40, 120), focus: ['intimidate', 'spot', 'sense'], bias: { str: 1, con: 1 } }));
     sim.captainId = guards[0].id; guards[0].rank = 'captain'; guards[1].rank = 'sergeant';
+    for (const q of everyone()) { const r = { smith: 4, alchemist: 4, journeyman: 3, apprentice: 1 }[q.job]; if (r) { (q.ranks ||= {}).craft = r; q.skills.craft = (q.skills.craft ?? mod(q.st.int)) + r; } }   // their trade
     for (const q of everyone()) if ((q.job === 'smith' || q.job === 'journeyman' || q.job === 'apprentice') && q.traits.aggression < 0.2 && q.traits.honesty > 0.8) { q.noWeapons = true; }
     for (const g of guards) { g.items.torch = 1; g.shield = g.job === 'captain' ? 'heavyshield' : 'lightshield'; }
     guards[0].armor = 'chainshirt'; for (const g of guards.slice(3)) { g.weapon = 'lightxbow'; g.items.bolts = 20; g.shield = 'none'; }
@@ -671,10 +673,10 @@ function Sim(opts = {}) {
   sim.spawnStock = spawnStock;
   // beasts that come out of the wild (SRD stats, a little cut down): attack bonus, damage dice + bonus, hide armour (dr)
   const BEASTS = {
-    wolf:     { name: 'Wolf', hp: 13, ac: 14, atk: 3, bite: [1, 6], dmgBonus: 1, speed: 15, meat: 2, pelt: 'wolfpelt', from: 21, pack: [2, 4], label: 'a wolf pack' },
-    boar:     { name: 'Wild boar', hp: 25, ac: 16, atk: 4, bite: [1, 8], dmgBonus: 3, speed: 12, meat: 6, attackName: 'tusks', from: 21, pack: [1, 2], label: 'wild boar', dr: 1 },
-    bear:     { name: 'Bear', hp: 30, ac: 13, atk: 6, bite: [1, 8], dmgBonus: 4, speed: 12, meat: 10, pelt: 'bearpelt', attackName: 'claws', from: 21, pack: [1, 1], label: 'a bear', dr: 1 },
-    direwolf: { name: 'Dire wolf', hp: 38, ac: 14, atk: 7, bite: [1, 8], dmgBonus: 6, speed: 15, meat: 6, pelt: 'wolfpelt', from: 28, pack: [1, 3], label: 'dire wolves', dr: 1 },
+    wolf:     { name: 'Wolf', hp: 13, ac: 14, atk: 3, bite: [1, 6], dmgBonus: 1, speed: 15, meat: 3, pelt: 'wolfpelt', from: 21, pack: [2, 4], label: 'a wolf pack' },
+    boar:     { name: 'Wild boar', hp: 25, ac: 16, atk: 4, bite: [1, 8], dmgBonus: 3, speed: 12, meat: 10, attackName: 'tusks', from: 21, pack: [1, 2], label: 'wild boar', dr: 1 },
+    bear:     { name: 'Bear', hp: 30, ac: 13, atk: 6, bite: [1, 8], dmgBonus: 4, speed: 12, meat: 25, pelt: 'bearpelt', attackName: 'claws', from: 21, pack: [1, 1], label: 'a bear', dr: 1 },
+    direwolf: { name: 'Dire wolf', hp: 38, ac: 14, atk: 7, bite: [1, 8], dmgBonus: 6, speed: 15, meat: 8, pelt: 'wolfpelt', from: 28, pack: [1, 3], label: 'dire wolves', dr: 1 },
     ogre:     { name: 'Ogre', hp: 29, ac: 16, atk: 8, bite: [2, 8], dmgBonus: 7, speed: 9, meat: 0, pelt: 'ogretooth', attackName: 'greatclub', from: 35, pack: [1, 2], label: 'wild ogres', dr: 2 },
     troll:    { name: 'Troll', hp: 63, ac: 16, atk: 9, bite: [1, 6], dmgBonus: 6, speed: 9, meat: 0, pelt: 'trollhide', attackName: 'claws', from: 999, pack: [1, 1], label: 'a troll', regen: 5, multi: 1 },   // two claws a turn; heals 5 a round unless burned
   };
@@ -1170,10 +1172,9 @@ function Sim(opts = {}) {
     if (leadsParty(p) && !sim.formations[p.party] && followersOf(p).length >= 2) add('doas', 0.3 + p.traits.ambition * 0.5, { verb: 'formation', extra: { text: pick(FORMATION_NAMES) } });
     { // the work week (Rose): the hall, the workshops, the bank, the smith's caravan
       if (canTrain(p) && !p.fight && !(p.task?.kind === 'train') && !(JOBS[p.job]?.from != null && inShift(p.job, h) && !CORPS[p.job])) add('doas', 1 + p.traits.loyalty * 1.5 + p.traits.ambition, { verb: 'train', at: SPOTS.yard });
-      if (h >= 7 && h < 17 && p.job === 'none' && !p.fight) for (const bid of ['smithy', 'apothecary']) if (sim.business[bid]?.job && shopWorkers(bid).length && shopWorkers(bid).length < 8) add('doas', 0.6 + p.traits.loyalty + p.traits.ambition * 0.5, { verb: 'helpwork', extra: { text: bid }, at: SPOTS[bid] });
+      if (h >= 7 && h < 17 && p.job === 'none' && !p.fight) for (const bid of ['smithy', 'apothecary']) if (sim.business[bid]?.job && shopWorkers(bid).length && shopWorkers(bid).length < 8) add('doas', 0.6 + p.traits.loyalty + p.traits.ambition * 0.5 + (p.ranks?.craft || 0) * 0.3, { verb: 'helpwork', extra: { text: bid }, at: SPOTS[bid] });
       if (h >= 9 && h < 17 && p.coin > 400 && !p.fight) add('doas', 0.3 + p.traits.caution + p.traits.greed * 0.5, { verb: 'deposit', extra: { text: String(Math.floor(p.coin - 150)) }, at: SPOTS.bank });
       if (h >= 9 && h < 17 && p.coin < 20 && (sim.banks.hollow[p.id] || 0) >= 20) add('doas', 2, { verb: 'withdraw', extra: { text: String(Math.floor(Math.min(200, sim.banks.hollow[p.id]))) }, at: SPOTS.bank });
-      if (JOBS[p.job]?.owner === 'smithy' && h >= 6 && h < 10 && !sim.caravans[p.id] && Object.entries(sim.business.smithy.stock).filter(([k, n]) => gearOf(k) && (gearOf(k).magic ? n : n - 7) > 0).length >= 2) add('caravan', 0.3 + p.traits.greed * 1.5 + p.traits.ambition);
       if (sim.debt > 0 && p.coin > 300 && p.traits.loyalty > 0.6 && p.traits.greed < 0.5 && !(p.cd?.paydebt > sim.t)) { add('doas', 0.5 + p.traits.loyalty, { verb: 'paydebt', extra: { text: String(Math.floor((p.coin - 200) / 2)) } }); }
     }
     if (!(p.listens && !sim.captainFell && sim.people[sim.captainId]?.alive && !(p.barked && sim.t - p.barked.t < 60))) for (const c of helpChoices(p)) add('assail', 2 + c.stake * 4 * (0.5 + p.traits.loyalty) - p.traits.caution * 4 + (p.weapon !== 'fists' ? 1 : -1) + (isGuard(p) ? 2 : 0), { target: c.foe, help: c.x });
@@ -1205,7 +1206,7 @@ function Sim(opts = {}) {
     // caravans: buy where it's cheap, sell where it's dear (Marrowford's grain for Hollow's ale and tools)
     if (h >= 5 && h < 13 && !p.party && p.town !== 'marrow' && p.coin >= 80) {
       const localGrain = priceOf('farm', 'grain'), margin = Math.max(localGrain - MARROW.sells.grain, priceOf('store', 'meat') - MARROW.sells.meat);
-      const own = JOBS[p.job]?.owner, exportable = own === 'tavern' ? (sim.business.tavern.stock.ale || 0) * 1.5 : own === 'smithy' ? 12 : 0;
+      const own = JOBS[p.job]?.owner, exportable = own === 'tavern' ? (sim.business.tavern.stock.ale || 0) * 1.5 : own === 'smithy' ? Object.entries(sim.business.smithy.stock).reduce((t, [k, n]) => t + (gearOf(k) ? (gearOf(k).magic ? n * 6 : Math.max(0, n - 7)) : 0), 0) : 0;   // what's worth the road
       const qty = Math.min(20, Math.floor(p.coin / 4));
       const v = margin / 10 * qty * 0.5 + exportable * 0.5 - 6 - roadDanger(p) * 3 * p.traits.caution - (inShift(p.job, h) ? wageOf(p) : 0);
       if (v > 0) add('caravan', v);
@@ -2111,7 +2112,7 @@ function Sim(opts = {}) {
         if (dist2(p, boss) > 2.5) { arrive(p, boss, dt); return; }
         const own = JOBS[boss.job]?.owner, hand = { bakery: 'bakehand', store: 'shophand', smithy: smithHand(), tavern: 'server', farm: 'farmhand', ranch: 'ranchhand' }[own];
         const room = hand && living().filter(q => q.job === hand).length < 2 && boss.coin >= JOBS[hand].wage * 2;
-        if (room && R(boss, p).like > -0.2 && d(20) + p.skills.diplomacy + R(boss, p).like * 8 >= 10) { p.job = hand; log('life', `${boss.name} takes ${p.name} on as ${JOBS[hand].title.toLowerCase()}.`, [p.id, boss.id]); }
+        if (room && R(boss, p).like > -0.2 && d(20) + p.skills.diplomacy + R(boss, p).like * 8 + (own === 'smithy' ? (p.ranks?.craft || 0) * 2 : 0) >= 10) { p.job = hand; log('life', `${boss.name} takes ${p.name} on as ${JOBS[hand].title.toLowerCase()}.`, [p.id, boss.id]); }
         else log('life', `${boss.name} has no work for ${p.name}.`, [p.id, boss.id]);
         p.task = null; return;
       }
@@ -2373,7 +2374,7 @@ function Sim(opts = {}) {
   // worker (up to 8) against the item's DC. Fail by 4 or less and the hour is lost; by 5 or more and half the materials are
   // ruined and paid for again. Each worker adds a share of the work, so eight hands finish a day's piece by 18:00.
   const CRAFT_SHOPS = { smithy: new Set(['smith', 'journeyman', 'apprentice']), apothecary: new Set(['alchemist']) };
-  const craftBonus = q => (({ smith: 4, alchemist: 4, journeyman: 3, apprentice: 1 })[q.job] || 0) + mod(q.st.int) + Math.max(0, (q.level || 1) - 1);
+  const craftBonus = q => (q.skills?.craft ?? 0) - mod(q.st.int) - (q.food < 0.1 ? 2 : q.food < 0.3 ? 1 : 0);   // ranks, plus what feats add, less what flaws (and hunger) take
   const SIMPLE_W = new Set(['dagger', 'club', 'sap', 'quarterstaff', 'spear', 'shortspear', 'longspear', 'lightmace', 'heavymace', 'morningstar', 'sickle', 'gauntlet', 'spikedgauntlet', 'punchingdagger', 'greatclub', 'javelin', 'sling', 'shortbow', 'longbow']);
   function craftDC(k) {   // the SRD's Craft DCs
     if (BREW[k]) return BREW[k].dc;
@@ -2424,7 +2425,8 @@ function Sim(opts = {}) {
     J.hourAcc += dt;
     if (J.hourAcc >= 60) {
       J.hourAcc = 0;
-      const dc = craftDC(J.item), r = d(20) + Math.max(...ws.map(craftBonus)) + ws.length;
+      const own = shopOwner(bid), head = ws.includes(own) ? own : ws.slice().sort((x, y) => craftBonus(y) - craftBonus(x))[0], helpers = Math.min(8, ws.filter(q => q !== head).length);
+      const dc = craftDC(J.item), r = d(20) + craftBonus(head) + helpers;   // the owner leads the work when they're at it
       if (r < dc) {
         J.stall = sim.t + 60;
         if (dc - r >= 5) {
@@ -2598,7 +2600,7 @@ function Sim(opts = {}) {
     }
     return got;
   }
-  const skillsText = (p, first) => `Skills: add "skills":{"<skill>":ranks, ...} to spend your skill points (by the class you take: ${Object.keys(PC).map(c => c + ' ' + skillPoints(p, c, first)).join(', ')}). A skill of your class costs 1 a rank (at most ${(first ? 1 : (p.level || 1) + 1) + 3} ranks); any other costs 2 a rank (at most ${Math.floor(((first ? 1 : (p.level || 1) + 1) + 3) / 2)}). The skills: bluff, diplomacy, sense (motive), intimidate, hide, sneak (move silently), sleight (of hand), spot, listen, heal, openlock, escape (artist). Class skills: ${Object.entries(CLASS_SKILLS).map(([c, l]) => c + ' ' + (l.join('/') || 'none of these')).join('; ')}.${p.ranks && Object.keys(p.ranks).length ? ' Your ranks: ' + Object.entries(p.ranks).map(([k, n]) => k + ' ' + n).join(', ') + '.' : ''}`;
+  const skillsText = (p, first) => `Skills: add "skills":{"<skill>":ranks, ...} to spend your skill points (by the class you take: ${Object.keys(PC).map(c => c + ' ' + skillPoints(p, c, first)).join(', ')}). A skill of your class costs 1 a rank (at most ${(first ? 1 : (p.level || 1) + 1) + 3} ranks); any other costs 2 a rank (at most ${Math.floor(((first ? 1 : (p.level || 1) + 1) + 3) / 2)}). The skills: craft (smithing, alchemy), bluff, diplomacy, sense (motive), intimidate, hide, sneak (move silently), sleight (of hand), spot, listen, heal, openlock, escape (artist). Class skills: ${Object.entries(CLASS_SKILLS).map(([c, l]) => c + ' ' + (l.join('/') || 'none of these')).join('; ')}.${p.ranks && Object.keys(p.ranks).length ? ' Your ranks: ' + Object.entries(p.ranks).map(([k, n]) => k + ' ' + n).join(', ') + '.' : ''}`;
   // ---- caravans: Marrowford pays full price for weapons, armour and shields; the town taxes the sale. About six hours each way.
   const CARAVAN_SPEED = 0.95, BANDIT_ODDS = 0.4, CARAVAN_XP = 1000;
   function spawnBandits(p, C) {
@@ -2631,13 +2633,15 @@ function Sim(opts = {}) {
         else { for (const b of up) if (!b.fight) startFight(b, p, { mode: b.prefMode || 'nonlethal', why: 'banditry' }); continue; }
         banditsLeave(C);
       }
-      if (!p.fight && conscious(p) && p.task?.kind !== 'caravan' && !(p.jailedUntil > 0)) setTask(p, 'caravan', { phase: C.phase, to: C.phase === 'out' ? SPOTS.marrowMarket : SPOTS.store, until: sim.t + 720 });
+      if (!p.fight && conscious(p) && (!p.task || ['idle', 'wait', 'goto', 'hold'].includes(p.task.kind)) && !(p.jailedUntil > 0) && (p.water ?? 1) > 0.2 && p.food > 0.15) setTask(p, 'caravan', { phase: C.phase, to: C.phase === 'out' ? SPOTS.marrowMarket : SPOTS.store, until: sim.t + 720 });
     }
   }
   function caravanCargo(p, text) {
     const own = JOBS[p.job]?.owner, cargo = [], officer = p.id === sim.mayorId || p.id === sim.captainId, sstock = sim.business.smithy.stock;
     const take = (k, n, owner, src) => { if (n <= 0) return; if (src !== p.items) { src[k] -= n; p.items[k] = (p.items[k] || 0) + n; } const c = cargo.find(x => x.k === k && x.owner === owner); if (c) c.n += n; else cargo.push({ k, n, owner }); };
-    const named = String(text || '').split(/,|\band\b/).map(x => x.trim()).filter(Boolean).map(x => { const m = /^(\d+)\s+(.*)$/.exec(x); return { n: m ? +m[1] : 1, k: itemKeyOf(m ? m[2] : x) }; }).filter(x => x.k && gearOf(x.k));
+    const [sellPart, buyPart] = String(text || '').split(/;?\s*\bbuy\b/);
+    const parse = t => String(t || '').split(/,|\band\b/).map(x => x.trim()).filter(Boolean).map(x => { const m = /^(\d+)\s+(.*)$/.exec(x); return { n: m ? +m[1] : 1, k: itemKeyOf(m ? m[2] : x) }; }).filter(x => x.k);
+    const named = parse(sellPart).filter(x => gearOf(x.k) || MARROW.buys[x.k] != null); cargo.buy = parse(buyPart).filter(x => MARROW.sells[x.k] != null || (GOODS[x.k]?.price && !gearOf(x.k)));
     for (const { n, k } of named) { let left = n; for (const [src, owner] of [[p.items, p.id], ...(own === 'smithy' ? [[sstock, p.id]] : []), ...(officer ? [[sim.rack, 'town']] : [])]) { const m = Math.min(left, src[k] || 0); take(k, m, owner, src); left -= m; } }
     if (!named.length && own === 'smithy') { let room = 12; for (const [k, n] of Object.entries(sstock)) { if (!gearOf(k) || room <= 0) continue; const m = Math.min(room, gearOf(k).magic ? n : Math.max(0, n - 5)); take(k, m, p.id, sstock); room -= m; } }
     return cargo;
@@ -2894,7 +2898,7 @@ function Sim(opts = {}) {
     if (own === 'tavern') { const n = Math.min(12, sim.business.tavern.stock.ale || 0); if (n) { sim.business.tavern.stock.ale -= n; p.items.ale = (p.items.ale || 0) + n; } }
     if (roadDanger(p) > 0 || p.traits.caution > 0.6) gatherParty(p, 'caravan escort', Infinity, true);
     const ev = { id: 'cv' + (++sim.rec.crimes), caravan: true, actor: p.id, t: sim.t, type: 'caravan' }; sim.events.push(ev);
-    sim.caravans[p.id] = { leader: p.id, cargo, purse: [], phase: 'out', t: sim.t, robbed: false, bandits: null, tried: {} };
+    sim.caravans[p.id] = { leader: p.id, cargo, buy: cargo.buy || [], purse: [], phase: 'out', t: sim.t, robbed: false, bandits: null, tried: {} };
     log('trade', `${p.name} sets out for Marrowford with a cart${cargo.length ? ' (' + cargo.map(c => c.n + ' ' + itemName(c.k)).join(', ') + ')' : ''}${p.party ? ' and an escort' : ''}.`, [p.id]);
     return setTask(p, 'caravan', { phase: 'out', to: SPOTS.marrowMarket, until: sim.t + 720 });
   }
@@ -2904,15 +2908,16 @@ function Sim(opts = {}) {
     if (tk.phase === 'out') {
       if (!arrive(p, SPOTS.marrowMarket, dt, C ? CARAVAN_SPEED : 1.8)) return;
       let got = 0;
-      for (const [k, price] of Object.entries(MARROW.buys)) { if (gearOf(k)) continue; const n = p.items[k] || 0; if (!n) continue; const mv = sim.market.moved[k] || 0, each = Math.max(1, Math.round(price * Math.pow(0.95, mv))); p.items[k] = 0; p.coin += n * each; got += n * each; sim.market.moved[k] = mv + n; }
+      for (const [k, price] of Object.entries(MARROW.buys)) { if (gearOf(k) || C?.cargo.some(c => c.k === k)) continue; const n = Math.max(0, (p.items[k] || 0) - (GOODS[k]?.food ? 2 : 0)); if (!n) continue; const mv = sim.market.moved[k] || 0, each = Math.max(1, Math.round(price * Math.pow(0.95, mv))); p.items[k] -= n; p.coin += n * each; got += n * each; sim.market.moved[k] = mv + n; }
       // weapons, armour and shields at full price, into the cart's purse (paid out at home, less the town's tax)
-      let gear = 0;
-      if (C) for (const c of C.cargo) { const n = Math.min(c.n, p.items[c.k] || 0); if (!n) continue; p.items[c.k] -= n; const amt = (GOODS[c.k]?.price || 0) * n; C.purse.push({ owner: c.owner, amt }); gear += amt; }
+      let gear = 0, spent0 = 0; const bought0 = {};
+      if (C) for (const c of C.cargo) { const n = Math.min(c.n, p.items[c.k] || 0); if (!n) continue; p.items[c.k] -= n; const amt = (gearOf(c.k) ? GOODS[c.k]?.price || 0 : MARROW.buys[c.k] ?? Math.round((GOODS[c.k]?.price || 0) * 0.8)) * n; C.purse.push({ owner: c.owner, amt }); gear += amt; }
+      if (C) for (const b of C.buy) { const each = MARROW.sells[b.k] ?? Math.round((GOODS[b.k]?.price || 0) * 1.1); let n = Math.min(b.n, Math.floor(p.coin / Math.max(1, each))); if (sim.market.stock[b.k] != null) n = Math.min(n, sim.market.stock[b.k]); if (n <= 0) continue; p.coin -= n * each; spent0 += n * each; if (sim.market.stock[b.k] != null) sim.market.stock[b.k] -= n; p.items[b.k] = (p.items[b.k] || 0) + n; (bought0[b.k] = (bought0[b.k] || 0) + n); }
       const want = [['grain', priceOf('farm', 'grain')], ['meat', priceOf('store', 'meat')], ['turnip', priceOf('store', 'turnip')]].sort((a, b) => (b[1] - MARROW.sells[b[0]]) - (a[1] - MARROW.sells[a[0]]));
       let spent = 0, bought = {};
       for (const [k] of want) { const mv = -(sim.market.moved[k] || 0); while (p.coin > 30 && (sim.market.stock[k] || 0) > 0 && Object.values(bought).reduce((a, b) => a + b, 0) < 24) { const each = Math.max(1, Math.round(MARROW.sells[k] * Math.pow(1.04, mv + (bought[k] || 0)))); if (each > priceOf(k === 'grain' ? 'farm' : 'store', k) * 0.8) break; p.coin -= each; spent += each; sim.market.stock[k]--; bought[k] = (bought[k] || 0) + 1; } }
       for (const [k, n] of Object.entries(bought)) { p.items[k] = (p.items[k] || 0) + n; sim.market.moved[k] = (sim.market.moved[k] || 0) - n; }
-      log('trade', `${p.name} trades in Marrowford: sold for ${money(got + gear)}${gear ? ` (${money(gear)} of it gear)` : ''}, bought ${Object.entries(bought).map(([k, n]) => n + ' ' + k).join(', ') || 'nothing'} (${money(spent)}).`, [p.id]);
+      log('trade', `${p.name} trades in Marrowford: sold for ${money(got + gear)}${gear ? ` (${money(gear)} of it gear)` : ''}, bought ${Object.entries({ ...bought0, ...bought }).map(([k, n]) => n + ' ' + k).join(', ') || 'nothing'} (${money(spent + spent0)}).`, [p.id]);
       tk.phase = 'home'; tk.until = sim.t + 720; if (C) C.phase = 'home'; return;
     }
     const dest = SPOTS[p.job === 'baker' ? 'bakery' : p.job === 'innkeep' ? 'tavern' : 'store'];
@@ -3868,7 +3873,7 @@ function Sim(opts = {}) {
     p.cls = cls; p.classes = { [cls]: 1 }; p.level = 1; p.levelReady = false;
     const hp = Math.max(2, PC[cls].hd + mod(p.st.con)), lost = Math.max(0, (p.maxhp || hp) - (p.hp ?? hp)); p.maxhp = hp; p.hp = Math.max(1, hp - lost);
     const allot = skillWant && typeof skillWant === 'object' && !Array.isArray(skillWant);
-    p.skills = skillsFor(cls, p.st, 1, allot ? [] : [...new Set([...(p.focus || []), ...PC[cls].skills])]); p.ranks = {};
+    const trade = p.ranks?.craft || 0; p.skills = skillsFor(cls, p.st, 1, allot ? [] : [...new Set([...(p.focus || []), ...PC[cls].skills])]); p.ranks = trade ? { craft: trade } : {}; p.skills.craft += trade;
     if (allot) allotSkills(p, cls, skillWant, true);
     bakeHeritageSkills(p);
     p.feats = [];
@@ -5806,7 +5811,7 @@ function Sim(opts = {}) {
   const SEEDY = ['pickpocket (lift coin from people)', 'burglar (houses and shops, at night)', 'mugger (rob people by force)', 'shop robber (hold up a keeper)', 'extortionist (sell a business "insurance")', 'bandit (ambush carts on the Old Road)', 'rustler (take the ranch\'s animals)', 'fence (sell stolen goods)', 'gang boss or member (found or join a crew)', 'sellsword (hire out as muscle)', 'a bribe-taking official (if you hold an office)', 'liar and slanderer'];
   const COMMANDS = ['train (guards and deputies: at the Training hall behind the Artillery barracks, 6:00-18:00)', 'help at <the smithy | the apothecary> (work beside the smith or the alchemist; every pair of hands, up to 8, makes the work go faster)',
     "commission <n> <item> (the mayor or the guard captain: ordered for the town on loan; the smithy makes every weapon, armour and shield, and +1 and +2 ones; the apothecary healing draughts, potions of bull's strength, cat's grace and cure moderate wounds)", 'pay <amount> toward the commissions',
-    'deposit <amount> | withdraw <amount> (at the Bank behind the town hall, or the bank in Marrowford; 1% interest a day)', "caravan [<n> <item>, ...] (to Marrowford and back, about half a day: Marrowford pays full price for weapons, armour and shields, and the town taxes the sale; the smith can load the smithy's stock, the mayor or the captain the town's rack)",
+    'deposit <amount> | withdraw <amount> (at the Bank behind the town hall, or the bank in Marrowford; 1% interest a day)', "caravan [<n> <item>, ...] [; buy <n> <item>, ...] (to Marrowford and back, about half a day: Marrowford buys and sells food, wood, pelts, iron, grain and the like, and pays full price for weapons, armour and shields; the town taxes what you sell; the smith can load the smithy's stock, the mayor or the captain the town's rack)",
     "drink <potion> (bull's strength, cat's grace, cure)", 'follow the captain | decide for myself (put yourself under the guard captain\'s orders, or not)', 'build a palisade in front of <house | the shelter | the barracks | the Cellar> (3 wood, 40 minutes a section; up to 5 people on one stretch work that much faster)', 'set a <trap> [at <place>] (traps from the SRD; the criminal guild are the trap makers: ' + Object.entries(TRAPS).map(([k, T]) => `${T.name.toLowerCase()} CR ${T.cr}, ${trapHours(T)}h, ${money(trapParts(T))}${Object.keys(T.mats).length ? ' + ' + Object.entries(T.mats).map(([m, n]) => n + ' ' + m).join(' ') : ''}`).join('; ') + ')', 'order a <trap> at <place> (in the Cellar: the criminal guild sells traps and sets them for you, paid up front)', 'disarm trap (one you know of, beside you)', 'reset trap (a sprung one you know of)', 'deputize <name> [melee | ranged] (guards: anyone willing, for 8 hours, with armour and a weapon from the station\'s loan rack)', 'stand down | return the gear (a deputy: hand back the badge and the kit)', 'cast alarm [at <place>] (wizards and sorcerers, one arcane spell: for 2 hours a level, anything wild within 20 ft sets it ringing and everyone asleep within 60 ft wakes)', 'formation <column | line | wedge | ring | loose> (a party leader: how your party walks around you)', 'familiar <bat | cat | hawk | lizard | owl | rat | raven | snake | toad | weasel> (wizards and sorcerers, once)', 'favored enemy <beasts | giants | people> (rangers, once; beasts if never chosen)', 'calm <beast> (druids and rangers: wild empathy, d20 + level + Cha vs 20; a calmed beast goes back to the Wildwood)', 'enlist <guard | night guard | artillery | mage guard> (walks you to its barracks by the fields gate and joins if there is a place; town pay; members bunk free; artillery get a crossbow; mage guards must cast spells)', 'give <name> <amount | item> | donate <amount> to <name> (any sum: 1 cp, a silver, 2 gp; or something you carry)', 'busk (sing or play in the Market square for tossed coins)', 'wake <name> | wake the neighbours (rouse those asleep near you)', 'ring the alarm (the bell in the Market square: wakes the whole town; guards and militia turn out)', 'sleep [N hours] (any time of day; 8 hours of sleep restores your spells and heals you)', 'stay awake [N hours] (even at night)', 'pool <number> <item> for <the guards | the militia | everyone | us | a name> (start a money pool everyone can chip into)', 'chip in <amount> to <item> (put coin into an open money pool)', 'take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house address or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3 sp, the Chapel cleric cures anything for 6 sp; only a few patients at a time)', 'shout for the guard (any time)', 'point out <person> to the guard (someone on the bounty board you can see)', 'bribe <person> <amount, e.g. 5 sp>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <amount>', 'propose to <person>', 'invite <person> (to come with you; add an amount to pay them)', 'hire <person> as a bodyguard <amount> (the mayor, guard captain or a gang boss: they follow and fight for you for a day)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'buy house <address> (1 gp, at the town hall)', 'rent <address> (a bed from its owner, a night at a time; renews itself while you can pay)', 'move out', 'take in <person> for work (as a house owner: they live free, their wages come to you)', 'turn out <person> (a lodger)', 'whittle club / whittle spear (in the Wildwood or the orchard: a club in an hour, a spear in two)', 'gather stones (stones to throw, or ammunition for a sling; outside town)', 'chop wood (in the Wildwood, an hour: 9 wood, 15 with an axe)', 'barricade <address> (3 wood, 40 minutes, your own house: anyone getting in must batter it down)', 'build palisade (3 wood, 40 minutes on the town palisade at the edge of the Wildwood)', 'light a watch-fire (2 wood: light until dawn, outdoors)', 'write <words> (on the notice board in the Market square)', 'go to <place, address or person> (e.g. "go to 3 Wick Lane", "go to Guard station")', 'rally <place or address> (the mayor calls the town, the guard captain the guards, a gang boss the crew: they come and hold there about two hours)', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
   function careers() {
     const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.hunt ? ', your own boss: hunt game in the Wildwood and sell the meat and pelts at the store ("become a hunter")' : j.craft ? ', your own boss: turn pelts and hides into leather and hide armour, sold to the smithy ("become a leatherworker")' : j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${money(sim.wages[k] ?? j.wage)} by the town` : j.wage ? `, ${money(j.wage)} a shift from the owner` : ''})`);
@@ -6331,7 +6336,7 @@ function Sim(opts = {}) {
         const filled = living().filter(q => q.job === job && q !== me).length, room = { bakehand: 2, shophand: 2, apprentice: 2, journeyman: 2, server: 2, farmhand: 3, ranchhand: 2, guard: 3, nightguard: 3, jailer: 1, clerk: 2, laborer: 4, undertaker: 1, teacher: 1, cleric: 2, doctor: 1 }[job] ?? 1;
         const purse = JOBS[job].payer === 'town' ? sim.treasury : t.coin;
         if (filled >= room || purse < JOBS[job].wage * 4) return `${t.name}: "Nothing going right now."`;
-        const r = d20r() + me.skills.diplomacy + Math.round(R(t, me).like * 8 + R(t, me).trust * 4), dc = 12 + (JOBS[job].guard ? 3 : 0);
+        const r = d20r() + me.skills.diplomacy + Math.round(R(t, me).like * 8 + R(t, me).trust * 4) + (own === 'smithy' ? (me.ranks?.craft || 0) * 2 : 0), dc = 12 + (JOBS[job].guard ? 3 : 0);
         if (r < dc) { bump(t, me, 'like', -0.02); return `${t.name} won't take you on. (Diplomacy ${r} vs ${dc})`; }
         me.job = job; me.worked = 0; log('life', `${me.name} of the City takes work as ${JOBS[job].title.toLowerCase()} for ${t.name}.`, ['player', t.id]);
         return `Hired: ${JOBS[job].title}, ${JOBS[job].from}:00 to ${JOBS[job].to % 24}:00, ${money(JOBS[job].wage)} a shift. Be at the ${AREAS[JOBS[job].place]?.name.toLowerCase()} for most of the shift to get paid. (${r} vs ${dc})`;

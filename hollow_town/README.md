@@ -311,3 +311,17 @@ palisade, six rangers with longbows +1 aiming at legs, feet and arms, three cler
 captain barking. "Fire" adds two flasks of alchemist's fire each for the tanks and archers. Against the troll it works.
 Against a single bear the squad does no better than staying indoors: standing at the palisade puts people in
 reach of something that would otherwise have to break a door.
+
+### Later the same day
+- **Craft is a skill with ranks** (an Int skill, a class skill for every class). The smiths and the alchemist
+  start with ranks in their trade (smith and alchemist 4, journeyman 3, apprentice 1), and AIs can spend points
+  on it. A workshop's check is d20 + the owner's craft ranks + what their feats add - what their flaws (Witless:
+  -4) and hunger take + 1 per helper (up to 8). When the owner isn't there, the most skilled hand leads. The
+  smithy favours applicants with craft ranks, and plain townsfolk with ranks lean towards helping at the workshops.
+- **Commissions aren't a dead end.** The town can sell gear and resources in Marrowford to pay them off.
+- **Meat by the animal:** rabbit and pheasant 1, wolf 3, deer 8, dire wolf 8, boar 10, bear 25.
+- **Marrowford trades in resources both ways:** food, wood, pelts, iron, grain, rope, potions and so on.
+  "caravan 20 wood, 2 bear pelt; buy 10 grain, 5 iron" sells the first list and brings the second home.
+- **Fixed:** a caravan leader who got thirsty was put back on the road every moment and never reached water.
+  The smith's old caravan instinct (always "12 pieces to export") pulled the smith off the forge every morning.
+  It now counts real surplus.
