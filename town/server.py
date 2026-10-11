@@ -128,7 +128,49 @@ def ask_model(cfg, prompt, system=None, history=None):
                  {"Authorization": "Bearer " + key} if key else {}, timeout=90)
         spend(model, j.get("prompt_eval_count", 0), j.get("eval_count", 0))
         return (j.get("message") or {}).get("content", "")
+    if prov == "cloude":
+        return ask_cloude(model or "mayor", msgs, system)
     return None
+
+# The "cloude" provider: the person is played by Cloude itself, through a mailbox folder, the
+# same road Legends of Harpine's LLM seat uses. A request_<id>.json goes into
+# ..\seats\town_<seat>\, Cloude's seat runner answers it in its game chat (with its memory),
+# and writes reply_<id>.txt back. Nothing here talks to any model directly.
+CLOUDE_SEATS = os.path.join(HERE, "..", "seats")
+
+def ask_cloude(seat, msgs, system, wait=150):
+    seat = safe(seat)
+    box = os.path.join(CLOUDE_SEATS, "town_" + seat)
+    os.makedirs(box, exist_ok=True)
+    meta = os.path.join(box, "SEAT.json")
+    if not os.path.exists(meta):
+        with open(meta, "w", encoding="utf-8") as f:
+            json.dump({"seat": seat, "game": "Hollow Town"}, f)
+    rid = "town%d" % int(time.time() * 1000)
+    req = os.path.join(box, f"request_{rid}.json")
+    rep = os.path.join(box, f"reply_{rid}.txt")
+    body = {"seat": seat, "wake": False, "awaiting_reply": True, "reply_to": f"reply_{rid}.txt",
+            "ts": int(time.time() * 1000), "deadline_s": wait,
+            "messages": ([{"role": "system", "content": system}] if system else []) + msgs}
+    with open(req + ".part", "w", encoding="utf-8") as f:
+        json.dump(body, f, ensure_ascii=False)
+    os.replace(req + ".part", req)
+    try:
+        end = time.time() + wait + 5
+        while time.time() < end:
+            if os.path.exists(rep):
+                time.sleep(0.5)      # let the write settle
+                with open(rep, encoding="utf-8", errors="replace") as f:
+                    text = f.read().strip()
+                return "" if text == "PASS" else text
+            time.sleep(1)
+        raise RuntimeError("Cloude didn't answer in time (is Cloude running, with seats on?)")
+    finally:
+        for p in (req, rep):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 def parse(text):
     if not text:
@@ -168,7 +210,7 @@ gate = threading.BoundedSemaphore(max(1, int(settings().get("parallel", 3))))
 # The page's settings menu reads and writes town_brains.json. Keys are never sent to the page:
 # it only learns whether one was found. Ollama hosts are limited to this computer or ollama.com,
 # so a changed setting can never send the Ollama key anywhere else.
-PROVIDERS = ("anthropic", "ollama", "off")
+PROVIDERS = ("anthropic", "ollama", "cloude", "off")
 
 def ok_host(h):
     return bool(re.fullmatch(r"(http://(localhost|127\.0\.0\.1)(:\d+)?|https://ollama\.com)", h or ""))
@@ -231,6 +273,8 @@ def think(req):
         book["chatted"] = time.time()
     elif req.get("brain") != "mayor-ai" and time.time() - book.get("asked", 0) < (20 if req.get("waiting") else 60 * float(st.get("folk_every_minutes", 10))):
         return None
+    elif cfg.get("provider") == "cloude" and time.time() - book.get("asked", 0) < 60 * float(st.get("cloude_every_minutes", 5)):
+        return None       # Cloude plays in its own chat: a plan every few minutes, not every tick
     else:
         book["asked"] = time.time()
     write_book(town, person, book)

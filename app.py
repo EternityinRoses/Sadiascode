@@ -1634,6 +1634,14 @@ def new_reports(chat, seat, folder):
     return ("(older lines cut)\n" + text[-3000:]) if len(text) > 3000 else text
 
 
+def seat_game(folder):
+    """Which game a mailbox plays: SEAT.json may say (Hollow Town's mayor seat does); LoH by default."""
+    try:
+        return json.loads((folder / "SEAT.json").read_text(encoding="utf-8")).get("game") or "Legends of Harpine"
+    except (OSError, ValueError, AttributeError):
+        return "Legends of Harpine"
+
+
 def game_turn(folder, seat, req, wake, timeout):
     """Put one game request into the chat as a turn, and return my final words."""
     cloud_seat = load_config().get("seat_brain") == "cloud"
@@ -1662,7 +1670,7 @@ def game_turn(folder, seat, req, wake, timeout):
         said = "\n".join(c if isinstance(c, str) else json.dumps(c)
                          for c in (m.get("content") for m in new)).strip()
 
-        parts = [f"🎲 GAME → you, as the seat \"{seat}\" in Legends of Harpine"
+        parts = [f"🎲 GAME → you, as the seat \"{seat}\" in {seat_game(folder)}"
                  + (" (a wake: nothing is waiting on you)" if wake else "")]
         brief = only_fresh(chat, seat, brief)
         if brief:
