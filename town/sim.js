@@ -1198,6 +1198,8 @@ function Sim(opts = {}) {
       case 'attack': {
         if (an.monster) { prowl(an, dtMin); break; }
         const t = an.hurtBy && sim.people[an.hurtBy]?.alive ? sim.people[an.hurtBy] : own && own.fight ? [...(sim.fights.find(f => f.sides.has(own.id))?.sides.keys() || [])].map(body).find(q => q && q.alive && q !== own && q !== an) : null;
+        // a beast doesn't keep savaging someone who's down or behind bars (that looped: attack, fight ends at once, attack again)
+        if (t && (!conscious(t) || t.jailedUntil > 0)) { if (an.hurtBy === t.id) an.hurtBy = null; an.act = 'stay'; break; }
         if (t && dist2(t, an) < 15) { if (dist2(t, an) > 1.8) stepToward(an, t, spd * 1.3, dtMin); else startFight(an, t, { mode: 'lethal', why: `${an.name} attacks` }); } else an.act = 'stay';
         break; }
       case 'home': if (!an.goal || areaOf(an.goal) !== home) an.goal = randIn(home, 2); stepToward(an, an.goal, spd, dtMin); break;
