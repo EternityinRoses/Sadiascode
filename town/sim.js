@@ -2253,7 +2253,7 @@ function Sim(opts = {}) {
       if (p.kind === 'human') for (const q of adj.filter(q => q.kind === 'human')) acts.push({ id: 'feint', target: q.id, label: `Feint ${q.name} (Bluff)`, cost: 'standard' });
       if (p.kind === 'human' && p.items.cure) acts.push({ id: 'drink', label: 'Drink a healing draught', cost: 'standard' });
       for (const q of f.order.map(body).filter(q => q && q.dying && f.sides.get(q.id) === f.sides.get(p.id) && dist2(q, p) <= 2.1)) acts.push({ id: 'stabilize', target: q.id, label: `Stabilize ${q.name} (Heal DC 15)`, cost: 'standard' });
-      // (no coup de grace: Rose asked for the instant kill on the helpless to go)
+      if (p.kind === 'human') for (const q of helpless) acts.push({ id: 'coup', target: q.id, label: `Coup de grace on ${q.name} (kills)`, cost: 'full' });
       for (const q of helpless) if (p.kind === 'human') acts.push({ id: 'rob', target: q.id, label: `Rob ${q.name}`, cost: 'standard' });
       if (tn.move) acts.push({ id: 'run', label: 'Run (4× speed, away)', cost: 'full' });
       if (tn.move && p.kind === 'human') acts.push({ id: 'withdraw', label: 'Withdraw (no attack of opportunity leaving)', cost: 'full' });
@@ -2635,7 +2635,7 @@ function Sim(opts = {}) {
     p.brain === 'mayor-ai' ? `You are an AI in a lifesim. You operate within a civilization as a living autonomous being with agency. Winning, for you, means holding power (and staying alive: death is permanent).` : INTRO + ` You start with nothing.`,
     `Here is what commands you have access to: ${COMMANDS.join('; ')}.`,
     `Here is what careers you can do: ${careers()}`,
-    `Fighting (D&D 3.5 rules): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false, "shout": true|false (call for the guard)}.`,
+    `Fighting (D&D 3.5 rules): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, coup de grace on the helpless, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false, "shout": true|false (call for the guard)}.`,
     personaOf(p),
     sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
     `You are one person, living one life. Each message you get is a moment of it: a PLAN moment (decide what to do) or a TALK moment (someone is in front of you). Each says what is available right now and how to reply.`,
@@ -2888,7 +2888,8 @@ function Sim(opts = {}) {
       if (p.state !== 'sleep' && Math.random() < dtMin / 8) p.yaw = (p.yaw || 0) + rnd(-1.6, 1.6);
       if (p.items.finery && Math.random() < dtMin / 120) showWealth(p, 70, 0.05);
       if (p.food <= 0) { p.starve = (p.starve || 0) + dtMin; if (p.starve > 3 * 1440 && p.hp > 1 && Math.random() < dtMin / 1440) p.hp -= 1; if (p.starve > 21 * 1440) { if (p.brain === 'human') { p.hp = -1; p.down = 'out'; p.downUntil = sim.t + 60; p.food = 0.3; p.starve = 0; } else die(p, null, 'starvation'); } } else p.starve = 0;
-      if (p.down === 'out' && sim.t >= (p.downUntil || 0) && p.hp > 0) { p.down = null; p.nl = Math.min(p.nl, p.hp - 1); if (p.state === 'idle' || p.state === 'fight') p.task = null; }
+      if (p.nl > 0 && !p.fight && p.down !== 'out') p.nl = Math.max(0, p.nl - dtMin * (p.level || 1) / 60);
+      if (p.down === 'out' && sim.t >= (p.downUntil || 0) && p.hp > 0) { p.down = null; p.nl = Math.min(p.nl, Math.floor(p.hp / 2)); if (p.state === 'idle' || p.state === 'fight') p.task = null; }
       if (p.jailedUntil > 0 && waitsForOrders(p) && !p.awaiting && !(p.cd?.jailask > sim.t)) { cool(p, 'jailask', 180); askOrders(p, 'You are locked in a cell at the guard station.'); }
       if (p.jailedUntil > 0 && p.agenda?.length && /^(escape|break)/.test(p.agenda[0].do)) { p.agenda.shift(); tryEscape(p, true); }
       if (p.jailedUntil > 0) { if (sim.t >= p.jailedUntil) { p.jailedUntil = 0; p.task = null; place(p, SPOTS.desk); log('law', `${fullName(p)} is released from jail.`, [p.id]); } else { if (p.brain !== 'human' && night() && Math.random() < dtMin / 600) tryEscape(p); continue; } }

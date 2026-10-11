@@ -93,3 +93,5 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **(Hollow Town) AI witnesses shout for the guard (Nimbus):** sim.js deed(): the hue-and-cry crier no longer skips AI-run people (!thinks), so with the townsfolk on an AI brain, witnesses of assault/murder still call the guard. Backup .backups\20261010-222500__town__sim.js.
 
 - **(Hollow Town) AI witnesses decide + no coup de grace (Nimbus):** sim.js deed(): the reflex shout is plain-brain only again; instead the 4 nearest AI witnesses of assault/mugging/murder/robbery get an immediate askOrders ('You just SAW X kill Y... shout for the guard, step in, flee, report, or look away'). Coup de grace removed from legalActions and the rules text. Backup .backups\20261010-224000__town__sim.js.
+
+- **(Hollow Town) Stun fix (Nimbus):** sim.js: waking from a knockout left nonlethal damage at hp-1 (one tap = out again, while HP looked full); now it's capped at half HP, and stun wears off at level per hour outside fights. view.js shows '(N stun)' in the combat order. Coup de grace restored (Rose: it was fine). Backups .backups\20261010-225500__town__*.

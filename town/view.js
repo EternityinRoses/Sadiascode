@@ -487,7 +487,7 @@ function drawCombat() {
   const f = S.fights.find(f => f.sides.has('player'));
   $('combat').hidden = !f;
   if (!f) return;
-  $('combatOrder').innerHTML = f.order.map(id => { const q = S.body(id); return `<span class="${f.sides.get(id) === f.sides.get('player') ? 'ally' : 'foe'}${f.waiting === id ? ' now' : ''}">${q.name} ${q.alive ? (S.conscious(q) ? Math.max(0, q.hp) + 'hp' : q.dying ? 'dying' : 'down') : 'dead'}</span>`; }).join(' ');
+  $('combatOrder').innerHTML = f.order.map(id => { const q = S.body(id); return `<span class="${f.sides.get(id) === f.sides.get('player') ? 'ally' : 'foe'}${f.waiting === id ? ' now' : ''}">${q.name} ${q.alive ? (S.conscious(q) ? Math.max(0, q.hp) + 'hp' + (q.nl >= 1 ? ' (' + Math.floor(q.nl) + ' stun)' : '') : q.dying ? 'dying' : 'down') : 'dead'}</span>`; }).join(' ');
   $('combatRound').textContent = `Round ${f.round}${f.waiting === 'player' ? ' · your turn' : ''}`;
   const tn = me.turnLeft;
   $('combatEcon').textContent = tn ? `standard ${tn.standard ? '●' : '○'} · move ${tn.move ? '●' : '○'} · swift ${tn.swift ? '●' : '○'} · 5-ft step ${tn.step ? '●' : '○'}` : '';
