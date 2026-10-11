@@ -5,7 +5,8 @@
 //   REMEMBER=1 node tools/generations.mjs ...   start every town knowing the beasts come
 //
 // Prints one JSON line per generation: won/failed, days lasted, deaths by cause, and how often
-// people barricaded, worked on the palisade or lit watch-fires.
+// people barricaded, built the palisade, lit watch-fires, woke others, rang the alarm bell, gave coin,
+// where they slept (shelter, Cellar, fields) and how much busking earned (in copper).
 import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
@@ -23,13 +24,17 @@ for (let g = 0; g < +gens; g++) {
   S.studentMode = process.env.MODE || 'blend'; S.genDays = 7; S.fightMode = 'script';
   if (lore) S.importLore(lore);
   if (process.env.REMEMBER) S.beastsSeen = 1;
-  const acts = { barricade: 0, palisade: 0, fire: 0 };
+  const acts = { barricade: 0, palisade: 0, fire: 0, wake: 0, bell: 0, give: 0 };
   S.onLog = e => {
-    if (e.kind !== 'life') return;
     if (/ barricades /.test(e.text)) acts.barricade++;
     if (/works on the palisade/.test(e.text)) acts.palisade++;
     if (/lights a watch-fire/.test(e.text)) acts.fire++;
+    if (e.kind === 'life' && / wakes /.test(e.text)) acts.wake++;
+    if (/rings the alarm bell/.test(e.text)) acts.bell++;
+    if (e.kind === 'life' && / gives /.test(e.text)) acts.give++;
   };
+  const nights = { shelter: 0, cellar: 0, fields: 0 };   // where people sleep at midnight, summed over nights
+  let lastDay = S.day;
   let steps = 0;
   while (!S.genOver() && steps < 2 * 60 * 24 * 9) {   // half-minute steps, as the page does
     S.step(0.5); steps++;
@@ -38,16 +43,22 @@ for (let g = 0; g < +gens; g++) {
     for (const q of S.decisionsPending.splice(0)) { q.done = true; q.fallback?.(); }
     if (S.pendingInvite) S.inviteAnswer('no');
     if (S.pendingArrest) S.arrestAnswer('quiet');
+    if (S.day !== lastDay) {
+      lastDay = S.day;
+      for (const p of S.living()) if (p.kind === 'human' && !p.town && p.state === 'sleep') { const a = S.areaOf(p); if (a in nights) nights[a]++; }
+    }
   }
-  const causes = {};
+  const causes = {}, beastWhere = {};
   for (const b of S.bodies) {
     if (b.stranger) continue;
     const k = b.killer && S.animals[b.killer] ? 'beasts' : b.killer ? 'people' : (b.how || 'other');
     causes[k] = (causes[k] || 0) + 1;
+    if (k === 'beasts') { const a = S.AREAS[S.areaOf(b)]?.name || 'somewhere'; beastWhere[a] = (beastWhere[a] || 0) + 1; }
   }
+  const busked = S.everyone().reduce((a, p) => a + (p.stats?.busked || 0), 0);
   const st = S.endGeneration();
   lore = S.exportLore();
   console.log(JSON.stringify({ gen: st.gen, won: st.won, failed: st.failed, days: st.days, alive: st.alive, people: st.people,
-    avgFit: st.avgFit, crimes: st.crimes, causes, acts, secs: +((Date.now() - t0) / 1000).toFixed(1) }));
+    avgFit: st.avgFit, crimes: st.crimes, causes, beastWhere, acts, nights, busked, secs: +((Date.now() - t0) / 1000).toFixed(1) }));
 }
 fs.writeFileSync(loreOut, JSON.stringify(lore));
