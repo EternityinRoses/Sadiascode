@@ -305,6 +305,7 @@ function Sim(opts = {}) {
   const R = (a, b) => { const id = typeof b === 'string' ? b : b.id; return a.rel[id] ||= { like: 0, trust: 0.2, fear: 0, court: 0 }; };
   sim.R = R;
   const bump = (a, b, k, v) => { const r = R(a, b); r[k] = k === 'like' ? clamp(r[k] + v, -1, 1) : clamp(r[k] + v); };
+  const later = []; const setTimeout0 = f => later.push(f);
   const remember = (a, fact) => { a.memory.push({ t: sim.t, day: sim.day, ...fact }); if (a.memory.length > 60) a.memory.shift(); };
 
   // ---- money: carried coin; households keep a stash at home
@@ -508,6 +509,7 @@ function Sim(opts = {}) {
     const seen = witnesses(at.kind ? P(at.x, at.z) : at, [actor], ['assault', 'mugging', 'murder', 'vandalism'].includes(type));
     if (victim && victim.kind === 'human' && conscious(victim) && !seen.includes(victim) && extra.victimKnows !== false && dist2(victim, at) < 2.5) seen.push(victim);
     if (victim && victim.kind === 'human' && seen.includes(victim)) victim.alert = true;
+    if (['assault', 'mugging', 'murder', 'robbery'].includes(type) && actor.id !== 'player' || ['assault', 'mugging', 'murder', 'robbery'].includes(type)) { const crier = seen.filter(w => w !== actor && w.kind === 'human' && !thinks(w) && w.brain !== 'human' && conscious(w) && !isGuard(w)).find(w => Math.random() < 0.25 + w.traits.honesty * 0.4 - w.traits.caution * 0.1); if (crier) setTimeout0(() => hueAndCry(crier)); }
     for (const w of seen) { perceive(w, ev, 'saw', null); w.alert = true; if (w.state === 'sleep' && w.brain !== 'human') { w.task = null; w.state = 'idle'; } }
     sim.events.push(ev); if (sim.events.length > 400) sim.events.shift();
     return { ev, seen };
@@ -909,13 +911,24 @@ function Sim(opts = {}) {
       case 'buy': { const item = Object.keys(GOODS).find(k => rest.includes(k) || rest.includes(GOODS[k].name.toLowerCase())); const shop = item && Object.keys(sim.business).find(b => (sim.business[b].stock[item] || 0) > 0 && shopOpen(b)); return shop && p.coin >= priceOf(shop, item) ? { kind: 'buy', shop, item, value: 0 } : null; }
       case 'hunt': { const sp = Object.keys(GAME).find(k => rest.includes(k)) || 'rabbit'; return { kind: 'hunt', species: sp, value: 0 }; }
       case 'fish': return { kind: 'fish', value: 0 };
+      case 'shout': case 'yell': case 'cry': return { kind: 'doas', verb: 'shout', value: 0 };
+      case 'bribe': case 'intimidate': case 'persuade': case 'propose': case 'give': case 'invite': case 'carry': case 'feed': {
+        const animal = kind === 'feed' ? Object.values(sim.animals).filter(a => a.alive && rest.includes(a.name.toLowerCase())).sort((a, b) => dist2(a, p) - dist2(b, p))[0] : null;
+        const t = animal || who; if (!t) return null; const n = +(rest.match(/\d+/) || [0])[0];
+        return { kind: 'doas', verb: kind, target: t, extra: { amount: n || 3, pay: n || 0, purpose: 'company' }, value: 0 };
+      }
+      case 'accuse': case 'call': { const near = living().filter(q => q !== p && q.kind === 'human' && conscious(q) && dist2(q, p) < 4).sort((a, b) => dist2(a, p) - dist2(b, p))[0]; const subj = who; if (!near || !subj || near === subj) return null; const crime = Object.keys(CRIMES).find(c => rest.includes(c.slice(0, 5))) || 'theft'; return { kind: 'doas', verb: 'lie', target: near, extra: kind === 'call' || /liar/.test(rest) ? { about: subj.id, liar: true } : { about: subj.id, crime, victim: near.id }, value: 0 }; }
+      case 'dismiss': return p.party ? { kind: 'doas', verb: 'dismiss', value: 0 } : null;
+      case 'quit': return p.job !== 'none' ? { kind: 'doas', verb: 'quit', value: 0 } : null;
+      case 'loot': { const b = sim.bodies.filter(b => !b.buried && b.coin > 0).sort((a, b2) => dist2(a, p) - dist2(b2, p))[0]; return b ? { kind: 'doas', verb: 'loot', at: P(b.x, b.z), value: 0 } : null; }
+      case 'dig': { const g = sim.graves.filter(g => !g.robbed).sort((a, b) => dist2(a.at, p) - dist2(b.at, p))[0]; return g ? { kind: 'doas', verb: 'dig', at: g.at, value: 0 } : null; }
       case 'lease': { const bid = Object.keys(sim.business).find(b => rest.includes(b) || rest.includes((AREAS[b]?.name || '').toLowerCase())); return bid && !sim.business[bid].owner ? { kind: 'lease', business: bid, value: 0 } : null; }
       case 'rob': { const bid = Object.keys(sim.business).find(b => rest.includes(b) || rest.includes((AREAS[b]?.name || '').toLowerCase())) || 'store'; return { kind: 'shoprob', business: bid, holdup: shopOpen(bid), value: 0 }; }
       case 'found': return !p.gang ? { kind: 'found', value: 0 } : null;
       case 'apply': return who && who.kind === 'human' ? { kind: 'apply', target: who, value: 0 } : { kind: 'seekwork', value: 0 };
       case 'seekwork': return { kind: 'seekwork', value: 0 };
-      case 'sell': case 'fence': return { kind: 'fence', value: 0 };
-      case 'report': return (p.toReport || []).length || who ? { kind: 'report', value: 0 } : null;
+      case 'sell': case 'fence': { const item = Object.keys(p.items).find(k => p.items[k] > 0 && (rest.includes(k) || rest.includes((GOODS[k]?.name || '').toLowerCase()))); const shop = item && Object.keys(sim.business).find(b => shopOpen(b) && (GOODS[item]?.shop === b || b === 'store')); return item && shop ? { kind: 'doas', verb: 'sell', at: SPOTS[shop], extra: { item }, value: 0 } : { kind: 'fence', value: 0 }; }
+      case 'report': { if (who) { const crime = Object.keys(CRIMES).find(c => rest.includes(c.slice(0, 5))) || 'theft'; return { kind: 'doas', verb: 'report', at: SPOTS.desk, extra: { about: who.id, crime }, value: 0 }; } return (p.toReport || []).length ? { kind: 'report', value: 0 } : null; }
       case 'extort': { const bid = Object.keys(sim.business).find(b => rest.includes(b) || rest.includes((AREAS[b]?.name || '').toLowerCase())); return bid && sim.business[bid].owner && sim.business[bid].owner !== p.id ? { kind: 'extort', business: bid, value: 0 } : null; }
       case 'recruit': return who ? { kind: 'recruit', value: 0 } : { kind: 'recruit', value: 0 };
       case 'signon': return p.job === 'none' ? { kind: 'signon', value: 0 } : null;
@@ -1299,6 +1312,7 @@ function Sim(opts = {}) {
       case 'mourn': return setTask(p, 'mourn', { to: o.grave.at, until: sim.t + 30 });
       case 'rescue': return setTask(p, 'rescue', { target: o.target.id, until: sim.t + 180 });
       case 'collect': return setTask(p, 'collect', { until: sim.t + 180 });
+      case 'doas': return setTask(p, 'doas', { verb: o.verb, target: o.target?.id || null, extra: o.extra || {}, to: o.at || null, until: sim.t + 90 });
       case 'apply': return setTask(p, 'apply', { target: o.target.id, until: sim.t + 90 });
       case 'lease': return setTask(p, 'lease', { to: SPOTS.hall, business: o.business, until: sim.t + 120 });
       case 'tail': return setTask(p, 'tail', { target: o.target.id, until: sim.t + 240 });
@@ -1361,6 +1375,14 @@ function Sim(opts = {}) {
       case 'fish': { if (!arrive(p, tk.to, dt)) return; if (Math.random() < dt / 30 * 0.5 * (sim.fish / 40)) { sim.fish--; p.items.fish = (p.items.fish || 0) + 1; if (p.items.fish >= 3) { eatFrom(p); p.task = null; } } return; }
       case 'hunt': return doHunt(p, dt);
       case 'lease': { if (!arrive(p, tk.to, dt)) return; leaseTo(p, tk.business); p.task = null; return; }
+      case 'doas': {
+        const t = tk.target && (sim.people[tk.target] || sim.animals[tk.target]);
+        if (tk.target && (!t || !t.alive)) { p.task = null; return; }
+        const goal = t || tk.to; if (goal && dist2(p, goal) > (t ? 2.2 : 1.2)) { arrive(p, goal, dt); return; }
+        const res = sim.doAs(p, tk.verb, tk.target, tk.extra) || '';
+        if (res) { remember(p, { text: `I tried to ${tk.verb}${t ? ' ' + (t.name || '') : ''}: ${res.replace(/^You /, 'I ')}` }); if (!/^(Get closer|You can't|No |Nobody)/.test(res)) log(['bribe', 'lie', 'report', 'loot', 'dig'].includes(tk.verb) ? 'crime' : 'life', `${p.name} (${tk.verb}${t ? ' ' + (t.name || '') : ''}): ${res.replace(/^You /, '').replace(/^your /i, 'their ')}`, [p.id, t?.id].filter(Boolean)); }
+        p.task = null; return;
+      }
       case 'apply': {
         const boss = sim.people[tk.target]; if (!boss || !boss.alive) { p.task = null; return; }
         if (dist2(p, boss) > 2.5) { arrive(p, boss, dt); return; }
@@ -1372,7 +1394,9 @@ function Sim(opts = {}) {
       }
       case 'wait': { if (sim.t >= tk.until) p.task = null; return; }
       case 'tail': { const L = sim.people[tk.target]; if (!L || !L.alive) { p.task = null; return; } if (dist2(p, L) > 2.2) arrive(p, L, dt, 2.2); else p.yaw = Math.atan2(L.x - p.x, L.z - p.z); return; }
-      case 'goto': { if (arrive(p, tk.to, dt)) p.task = null; return; }
+      case 'goto': {
+        if (tk.cry && isGuard(p)) for (const id of tk.cry) { const ev = sim.events.find(e => e.id === id), a = ev && sim.people[ev.actor]; if (a && a.alive && dist2(p, a) < 15 && sees(p, a)) { guardHears(p, ev, 'saw', null); tk.cry = tk.cry.filter(x => x !== id); log('law', `${p.name} arrives and sees ${a.id === 'player' ? 'you' : a.name}.`, [p.id, a.id]); } }
+        if (arrive(p, tk.to, dt)) p.task = null; return; }
       case 'talk': { const w = sim.people[tk.with]; if (w) p.yaw = Math.atan2(w.x - p.x, w.z - p.z); if (w && dist2(w, p) > 6) p.task = null; return; }
       case 'coup': {
         const boss = sim.people[tk.target], g = sim.gangs[p.gang];
@@ -1834,6 +1858,16 @@ function Sim(opts = {}) {
     const actor = sim.people[ev.actor]; if (!actor || actor === g) return;
     if (how === 'saw') { const r = actor.record.find(x => x.ev === ev.id); if (r) r.evidence = true; else actor.record.push({ ev: ev.id, type: ev.type, victim: ev.victim, by: [g.id], day: sim.day, served: false, evidence: true }); }
   }
+  function hueAndCry(p) {
+    if (p.cried && sim.t - p.cried < 10) return; p.cried = sim.t;
+    const at = P(p.x, p.z), evs = sim.events.filter(e => sim.t - e.t < 15 && e.at && dist2(e.at, at) < 20 && ['assault', 'mugging', 'murder', 'robbery', 'theft', 'burglary', 'extortion', 'vandalism'].includes(e.type));
+    log('law', `${p.id === 'player' ? 'You shout' : p.name + ' shouts'} "Guard! Guard!"`, [p.id]); p.bubble = { text: 'Guard! Guard!', t: sim.t };
+    for (const q of living()) if (q !== p && q.kind === 'human' && conscious(q) && dist2(q, p) < Math.max(25, hearOf(q) * 3)) {
+      q.alert = true; remember(q, { text: `${p.name} shouted for the guard near ${AREAS[areaOf(p)]?.name || 'here'}` });
+      if (isGuard(q) && q.jailedUntil <= 0 && !q.fight) { if (waitsForOrders(q)) askOrders(q, `${p.name} is shouting for the guard near ${AREAS[areaOf(p)]?.name || 'you'}.`); else setTask(q, 'goto', { to: at, until: sim.t + 40, cry: evs.map(e => e.id) }); }
+    }
+  }
+  sim.hueAndCry = hueAndCry;
   function confrontArrest(g, q) {
     // The guard states the charge; the suspect chooses: come quietly, talk, pay, run or fight.
     if (q.brain === 'human') { sim.pendingArrest = { guard: g.id, t: sim.t }; log('law', `${g.name}: "${q.name}, you're under arrest."`, [g.id, q.id]); if (sim.onArrest) sim.onArrest(g, q); return; }
@@ -2187,7 +2221,7 @@ function Sim(opts = {}) {
       case 'rob': { const n = t.coin; pay(t, p, n); p.stats.stolen += n; deed('theft', p, t, t, { victimKnows: false }); logF(f, `${p.name} empties ${t.name}'s purse (${n}c).`); spend('standard'); break; }
       case 'run': { const foe = foesOf(f, p)[0]; if (threatened(f, p).length) provoke(f, p); if (foe) moveAway(p, foe, SPEED(p) * 4); p.fled = (p.fled || 0) + 1; logF(f, `${p.name} runs!`); spend('full'); break; }
       case 'withdraw': { const foe = foesOf(f, p)[0]; if (foe) moveAway(p, foe, SPEED(p) * 2); p.fled = (p.fled || 0) + 1; logF(f, `${p.name} withdraws.`); spend('full'); break; }
-      case 'shout': { logF(f, `${p.name} shouts for help!`); for (const q of living()) if (!f.sides.has(q.id) && conscious(q) && dist2(q, p) < 30 && q.brain !== 'human') { const ally = R(q, p).like + (isGuard(q) && onDuty(q) ? 0.7 : 0) + (q.spouse === p.id ? 1 : 0); if (ally * q.traits.loyalty > 0.35 + q.traits.caution * 0.4) { join(f, q, f.sides.get(p.id), isGuard(q) ? 'nonlethal' : 'nonlethal'); logF(f, `${q.name} answers the call.`); } } spend('swift'); break; }
+      case 'shout': { hueAndCry(p); logF(f, `${p.name} shouts for help!`); for (const q of living()) if (!f.sides.has(q.id) && conscious(q) && dist2(q, p) < 30 && q.brain !== 'human') { const ally = R(q, p).like + (isGuard(q) && onDuty(q) ? 0.7 : 0) + (q.spouse === p.id ? 1 : 0); if (ally * q.traits.loyalty > 0.35 + q.traits.caution * 0.4) { join(f, q, f.sides.get(p.id), isGuard(q) ? 'nonlethal' : 'nonlethal'); logF(f, `${q.name} answers the call.`); } } spend('swift'); break; }
       case 'mode': f.mode.set(p.id, f.mode.get(p.id) === 'lethal' ? 'nonlethal' : 'lethal'); logF(f, `${p.name} switches to ${f.mode.get(p.id)} blows.`); break;
       case 'surrender': { p.surrendered = true; logF(f, `${p.name} surrenders.`); tn.standard = tn.move = tn.swift = tn.step = 0; break; }
       case 'end': tn.standard = tn.move = tn.swift = tn.step = 0; break;
@@ -2209,6 +2243,7 @@ function Sim(opts = {}) {
     if (coup && p.kind === 'human') { const t = body(coup.target), motive = (p.grudge?.[t.id] || 0) > 6 || [...(t.knows || [])].some(id => sim.events.find(e => e.id === id && e.actor === p.id && (CRIMES[e.type] || 0) >= 4)) || tr.aggression > 0.92; if (motive && (mode === 'lethal' || tr.aggression > 0.8)) return act(f, p, coup); }
     const rob = acts.find(a => a.id === 'rob' && body(a.target).coin > 0);
     if (rob && tr.greed > 0.6 && tr.honesty < 0.5) return act(f, p, rob);
+    if (p.kind === 'human' && !p.shoutedIn?.[f.id] && acts.some(a => a.id === 'shout') && (p.fightStyle?.shout ?? (Math.random() < 0.3 + tr.caution * 0.5 - tr.aggression * 0.3)) && (f.why !== 'arrest' && f.why !== 'resisting arrest') && !isGuard(p) && hpFrac < 0.9) { (p.shoutedIn ||= {})[f.id] = 1; act(f, p, acts.find(a => a.id === 'shout')); }
     const rl = acts.find(a => a.id === 'reload'); if (rl && !acts.some(a => a.id === 'attack')) return act(f, p, rl);
     const atk = acts.filter(a => a.id === 'attack').sort((x, y) => (body(x.target).hp - body(x.target).nl) - (body(y.target).hp - body(y.target).nl))[0];
     if (atk) { if (p.turnLeft.move && Math.random() < 0.15 && acts.find(a => a.id === 'demoralize')) act(f, p, acts.find(a => a.id === 'demoralize' && a.target === atk.target) || atk); return act(f, p, atk); }
@@ -2501,7 +2536,7 @@ function Sim(opts = {}) {
   // What an AI-played person is told. Facts about themselves and what they can perceive, what is
   // available, the commands they have, the careers that exist. No advice, no strategy: that's theirs.
   const SEEDY = ['pickpocket (lift coin from people)', 'burglar (houses and shops, at night)', 'mugger (rob people by force)', 'shop robber (hold up a keeper)', 'extortionist (sell a business "insurance")', 'bandit (ambush carts on the Old Road)', 'rustler (take the ranch\'s animals)', 'fence (sell stolen goods)', 'gang boss or member (found or join a crew)', 'sellsword (hire out as muscle)', 'a bribe-taking official (if you hold an office)', 'liar and slanderer'];
-  const COMMANDS = ['work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'go to <place or person>', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
+  const COMMANDS = ['shout for the guard', 'bribe <person> <coins>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <coins>', 'propose to <person>', 'invite <person> (to come with you; add coins to pay them)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body beside you)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'go to <place or person>', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
   function careers() {
     const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${sim.wages[k] ?? j.wage}c by the town` : j.wage ? `, ${j.wage}c a shift from the owner` : ''})`);
     return `${legit.join('; ')}; Mayor (elected, ${sim.wages.mayor ?? JOBS.mayor.wage}c); Guard captain (elected by the guards). Outside the law: ${SEEDY.join('; ')}.`;
@@ -2534,7 +2569,7 @@ function Sim(opts = {}) {
     p.brain === 'mayor-ai' ? `You are an AI in a lifesim. You operate within a civilization as a living autonomous being with agency. Winning, for you, means holding power (and staying alive: death is permanent).` : INTRO + ` You start with nothing.`,
     `Here is what commands you have access to: ${COMMANDS.join('; ')}.`,
     `Here is what careers you can do: ${careers()}`,
-    `Fighting (D&D 3.5 rules): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, coup de grace on the helpless, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false}.`,
+    `Fighting (D&D 3.5 rules): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, coup de grace on the helpless, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false, "shout": true|false (call for the guard)}.`,
     personaOf(p),
     sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
     `You are one person, living one life. Each message you get is a moment of it: a PLAN moment (decide what to do) or a TALK moment (someone is in front of you). Each says what is available right now and how to reply.`,
@@ -2717,7 +2752,7 @@ function Sim(opts = {}) {
     if (dec.platform && (sim.election.candidates.includes(p.id) || p.id === sim.mayorId)) { const pl = String(dec.platform).slice(0, 160); if (pl !== p.platform) { p.platform = pl; log('politics', `${p.name}'s platform: "${pl}"`, [p.id]); learnWords(pl); } }
     if (dec.vote_for && sim.people[dec.vote_for]?.alive) p.voteFor = dec.vote_for;
     if (dec.captain_vote && sim.people[dec.captain_vote]?.alive) p.captainVote = dec.captain_vote;
-    if (dec.fighting && typeof dec.fighting === 'object') { p.fightStyle = { blows: dec.fighting.blows === 'nonlethal' ? 'nonlethal' : dec.fighting.blows === 'lethal' ? 'lethal' : null, fleeBelow: typeof dec.fighting.flee_below === 'number' ? clamp(dec.fighting.flee_below, 0, 1) : null, surrender: typeof dec.fighting.surrender === 'boolean' ? dec.fighting.surrender : null }; if (p.fightStyle.blows) p.prefMode = p.fightStyle.blows; }
+    if (dec.fighting && typeof dec.fighting === 'object') { p.fightStyle = { shout: typeof dec.fighting.shout === 'boolean' ? dec.fighting.shout : null, blows: dec.fighting.blows === 'nonlethal' ? 'nonlethal' : dec.fighting.blows === 'lethal' ? 'lethal' : null, fleeBelow: typeof dec.fighting.flee_below === 'number' ? clamp(dec.fighting.flee_below, 0, 1) : null, surrender: typeof dec.fighting.surrender === 'boolean' ? dec.fighting.surrender : null }; if (p.fightStyle.blows) p.prefMode = p.fightStyle.blows; }
     if ((p.job === 'smith' || p.job === 'apprentice') && dec.forge != null) {
       if (dec.forge === 'no weapons' || dec.forge === 'none' && false) { p.noWeapons = true; p.forgeOnly = null; }
       else if (Array.isArray(dec.forge)) { p.forgeOnly = dec.forge.filter(k => FORGEABLE.includes(k) || GOODS[k]?.bundle).slice(0, 12); p.noWeapons = false; }
@@ -2736,11 +2771,11 @@ function Sim(opts = {}) {
     p.awaiting = sim.t;
     const kind = p.id === sim.mayorId ? 'mayor' : 'plan';
     const turn = (why ? `WHAT JUST HAPPENED: ${why}\n` : '') + sim.turnFor(p, kind);
-    const q = { id: p.id + '-w' + Math.floor(sim.t), person: p.id, kind, brain: p.brain, prompt: sim.identityFor(p) + '\n' + turn, turn, waiting: true, fallback: () => { p.awaiting = null; } };
+    const q = { id: p.id + '-w' + Math.floor(sim.t), person: p.id, kind, brain: p.brain, prompt: sim.identityFor(p) + '\n' + turn, turn, waiting: true, fallback: () => { p.awaiting = null; p.aiDownUntil = sim.t + 30; sim.aiMissed = (sim.aiMissed || 0) + 1; } };
     sim.decisionsPending.push(q); sim.onDecision?.(q);
   }
   sim.askOrders = askOrders;
-  const waitsForOrders = p => sim.aiOnly && thinks(p) && p.brain !== 'human';
+  const waitsForOrders = p => sim.aiOnly && thinks(p) && p.brain !== 'human' && !(p.aiDownUntil > sim.t);
   sim.waitsForOrders = waitsForOrders;
   function morning() {
     for (const p of living()) {
@@ -2756,6 +2791,7 @@ function Sim(opts = {}) {
   let lastHour = Math.floor(sim.t / 60), lastDay = Math.floor(sim.t / 1440);
   sim.step = dtMin => {
     sim.t += dtMin;
+    while (later.length) later.shift()();
     const hourNow = Math.floor(sim.t / 60), dayNow = Math.floor(sim.t / 1440);
     if (dayNow !== lastDay) { lastDay = dayNow; dailyTick(); }
     if (sim.pendingInvite && sim.t - sim.pendingInvite.t > 30) { const L = sim.people[sim.pendingInvite.leader]; if (L && !living().some(q => q !== L && q.party === L.party)) L.party = null; sim.pendingInvite = null; sim.onInvite?.(null); }
@@ -2834,8 +2870,10 @@ function Sim(opts = {}) {
 
   // ======================================================== the player ==
   // Rose acts through the same rules as everyone. Each returns a line for the log.
-  sim.playerDo = (kind, tid, extra = {}) => {
-    const me = sim.people.player, t = tid ? (sim.people[tid] || sim.animals[tid]) : null;
+  // Every verb Rose has, anyone has: the same code, the same dice. (Rose's buttons call it for her.)
+  sim.playerDo = (kind, tid, extra = {}) => sim.doAs(sim.people.player, kind, tid, extra);
+  sim.doAs = (me, kind, tid, extra = {}) => {
+    const t = tid ? (sim.people[tid] || sim.animals[tid]) : null;
     if (!me || !free(me)) return 'You can\'t do that right now.';
     const near = (r = 2) => t && dist2(me, t) <= r;
     const d20r = () => d(20);
@@ -2846,7 +2884,7 @@ function Sim(opts = {}) {
         const said = me.memory?.slice(-1)[0]?.said, heard = sim.learning && Math.random() < 0.4 ? babble(said) : null;
         if (!thinks(t)) { const said2 = plainSay(t, me, me.memory?.slice(-1)[0]?.text || null); if (said2) return `You chat with ${t.name}. (Diplomacy ${r})`; }
         const line = heard || (R(t, me).like > 0.3 ? 'Good to see you.' : R(t, me).like < -0.3 ? 'What do you want, city girl?' : pick(['Hm. The stranger.', 'Afternoon.', 'You\'re not from here.', 'Mind yourself in Hollow Town.']));
-        log('talk', `${t.name}: "${line}"`, [t.id, 'player']); return `You chat with ${t.name}. (Diplomacy ${r})`;
+        log('talk', `${t.name}: "${line}"`, [t.id, me.id]); return `You chat with ${t.name}. (Diplomacy ${r})`;
       }
       case 'say': {
         const text = String(extra.text || '').slice(0, 200); if (!text) return '';
@@ -2863,7 +2901,7 @@ function Sim(opts = {}) {
         if (!near(3) || t.kind !== 'human') return 'Get closer first.';
         const n = Math.min(me.coin, extra.amount || 3); if (n < 1) return 'You have nothing to offer.';
         const r = d20r() + me.skills.diplomacy + Math.min(10, n * 2), dc = 10 + Math.round(t.traits.honesty * 15);
-        if (r >= dc) { pay(me, t, n); bump(t, me, 'like', 0.15); bump(t, me, 'trust', 0.1); (t.voteBribes ||= {}).player = n; if (extra.forWhat === 'record') { openRecord(me).filter(x => x.by.includes(t.id)).forEach(x => x.by = x.by.filter(y => y !== t.id)); } return `${t.name} takes your ${n}c. (Diplomacy ${r} vs ${dc})`; }
+        if (r >= dc) { pay(me, t, n); bump(t, me, 'like', 0.15); bump(t, me, 'trust', 0.1); (t.voteBribes ||= {})[me.id] = n; if (extra.forWhat === 'record') { openRecord(me).filter(x => x.by.includes(t.id)).forEach(x => x.by = x.by.filter(y => y !== t.id)); } return `${t.name} takes your ${n}c. (Diplomacy ${r} vs ${dc})`; }
         if (r <= dc - 5) { const { seen } = deed('bribery', me, t, me); return `${t.name} refuses, loudly. (Diplomacy ${r} vs ${dc})${seen.length ? ' People heard.' : ''}`; }
         return `${t.name} won't take it. (Diplomacy ${r} vs ${dc})`;
       }
@@ -2953,6 +2991,8 @@ function Sim(opts = {}) {
         if (o.threat && t.traits.aggression > 0.6 && might(t) >= might(me)) startFight(t, me, { mode: 'nonlethal', why: 'won\'t be threatened' });
         return `${t.name} says no.`;
       }
+      case 'give': { if (!near(3) || !t || t.kind !== 'human') return 'Get closer first.'; const n = Math.min(me.coin, Math.max(1, extra.amount | 0)); if (n < 1) return 'You have nothing to give.'; pay(me, t, n, 'gift'); bump(t, me, 'like', Math.min(0.3, n * 0.03)); remember(t, { text: `${me.name} gave me ${n}c` }); return `You give ${t.name} ${n}c.`; }
+      case 'shout': { hueAndCry(me); return 'You shout for the guard.'; }
       case 'dismiss': { if (!me.party) return 'You have no party.'; disband(me); return 'You send your party home.'; }
       case 'fish': { if (dist2(me, SPOTS.pond) > 7) return 'Fish at the pond in the Wildwood.'; sim.t += 60; if (Math.random() < 0.6 * sim.fish / 40) { sim.fish--; me.items.fish = (me.items.fish || 0) + 1; return 'You catch a fish.'; } return 'An hour, and nothing bites.'; }
       case 'forage': { const k = areaOf(me) === 'orchard' ? 'apple' : areaOf(me) === 'wood' ? 'berries' : null; if (!k) return 'Forage in the orchard (apples) or the Wildwood (berries).'; sim.t += 30; if (sim.commons[k] <= 0) return 'Picked clean. Someone got here first.'; const n = Math.min(sim.commons[k], 2); sim.commons[k] -= n; me.items[k] = (me.items[k] || 0) + n; return `You gather ${n} ${k === 'apple' ? 'apples' : 'handfuls of berries'}.`; }
@@ -2963,8 +3003,8 @@ function Sim(opts = {}) {
         sim.t += 60; const n = pay(payer, me, 2); bump(payer, me, 'like', 0.05); return `You work an hour as a ${JOBS[j].title.toLowerCase()} (+${n}c).`;
       }
       case 'study': { if (areaOf(me) !== 'school' || !classInSession()) return 'No lesson on.'; sim.t += 60; me.studied = (me.studied || 0) + 60; if (me.studied >= 480) { me.studied = 0; const k = extra.skill || 'diplomacy'; me.skills[k]++; return `You finish a course: ${k} +1.`; } return `You sit a lesson (${me.studied}/480 minutes).`; }
-      case 'stand': { if (areaOf(me) !== 'hall') return 'Stand for mayor at the town hall.'; if (sim.election.candidates.includes('player')) return 'You are already standing.'; if (pay(me, 'town', 5) < 5) return 'The fee is 5c.'; sim.election.candidates.push('player'); log('politics', `${me.name} of the City stands for mayor.`, ['player']); return 'You are a candidate.'; }
-      case 'report': { if (areaOf(me) !== 'station') return 'Report crimes at the guard station desk.'; const subj = sim.people[extra.about]; if (!subj) return 'Report whom?'; const ev = sim.events.filter(e => e.actor === subj.id && (e.victim === 'player' || sees(me, e.at))).slice(-1)[0] || { id: 'pr' + Math.random(), type: extra.crime || 'theft', actor: subj.id, victim: 'player', lie: true }; fileReport(me, ev); return `It's on the record against ${subj.name}.`; }
+      case 'stand': { if (areaOf(me) !== 'hall') return 'Stand for mayor at the town hall.'; if (sim.election.candidates.includes(me.id)) return 'You are already standing.'; if (pay(me, 'town', 5) < 5) return 'The fee is 5c.'; sim.election.candidates.push(me.id); log('politics', `${fullName(me)} stands for mayor.`, [me.id]); return 'You are a candidate.'; }
+      case 'report': { if (areaOf(me) !== 'station') return 'Report crimes at the guard station desk.'; const subj = sim.people[extra.about]; if (!subj) return 'Report whom?'; const ev = sim.events.filter(e => e.actor === subj.id && (e.victim === me.id || sees(me, e.at))).slice(-1)[0] || { id: 'pr' + Math.random(), type: extra.crime || 'theft', actor: subj.id, victim: me.id, lie: true }; fileReport(me, ev); return `It's on the record against ${subj.name}.`; }
       case 'carry': { if (!t || t.kind !== 'human' || conscious(t) || !near(1.6)) return 'There\'s nobody down here to carry.'; me.carrying = me.carrying === t.id ? null : t.id; if (!me.carrying) drop(t); return me.carrying ? `You pick up ${t.name}.` : `You set ${t.name} down.`; }
       case 'loot': { const b = sim.bodies.find(b => !b.buried && dist2(me, b) < 1.6); if (!b) return 'No body here.'; const n = b.coin; b.coin = 0; me.coin += n; deed('theft', me, null, me); return `You go through ${b.name}'s pockets: ${n}c.`; }
       case 'dig': { const gr = sim.graves.find(g => dist2(me, g.at) < 1.5 && !g.robbed); if (!gr) return 'No grave here.'; gr.robbed = true; me.coin += gr.coin || 0; deed('desecration', me, null, me); return `You dig up ${gr.name}: ${gr.coin || 0}c.`; }

@@ -117,9 +117,9 @@ const ear = new THREE.Mesh(new THREE.RingGeometry(0.97, 1, 48), new THREE.MeshBa
 // ------------------------------------------------------------------- log --
 const logEl = $('log'); let filter = 'all';
 const KIND_CLASS = { crime: 'sig', law: 'law', politics: 'pol', gang: 'gang', death: 'death', life: 'life', lie: 'lie', rumor: 'know', fight: 'fight', talk: 'base', trade: 'coin', town: 'pol' };
-// which tab a line belongs in: crime = crimes, the law, and accusations (true or not)
+// which tab a line belongs in: crime = crimes that happened and the law; accusations stay under lies/rumors
 const ACCUSE = /committed|robs|steals|lifts|burgl|mugs|arrest|jail|report|wanted|bounty|ambush|slaughters one/i;
-const tabOf = e => e.kind === 'crime' || e.kind === 'law' || (e.kind === 'lie' || e.kind === 'rumor') && ACCUSE.test(e.text) ? 'crime' : e.kind === 'lie' || e.kind === 'rumor' ? (e.kind === 'rumor' ? 'rumor' : 'lie') : e.kind === 'town' ? 'politics' : e.kind;
+const tabOf = e => e.kind === 'crime' || e.kind === 'law' ? 'crime' : e.kind === 'lie' || e.kind === 'rumor' ? (e.kind === 'rumor' ? 'rumor' : 'lie') : e.kind === 'town' ? 'politics' : e.kind;
 const shows = d => filter === 'all' || d.dataset.tab === filter || d.dataset.kind === filter || filter === 'lie' && d.dataset.kind === 'lie' || filter === 'rumor' && d.dataset.kind === 'rumor';
 function emptyNote() { let n = $('logEmpty'); if (!n) { n = document.createElement('div'); n.id = 'logEmpty'; n.className = 'k'; logEl.appendChild(n); } n.textContent = `Nothing under "${filter}" yet.` + (filter === 'crime' ? ' Most crime happens in the evening and at night.' : ''); n.hidden = filter === 'all' || [...logEl.children].some(d => d !== n && !d.hidden); }
 function logLine(e) {
@@ -148,7 +148,7 @@ fetch('/brain/ping').then(r => r.ok ? r.json() : null).then(j => {
   S.aiOnly = townSetup.aiBodies === 'orders';
   fetch('/lore').then(r => r.ok ? r.json() : null).then(l => { if (l && l.v) S.importLore(l); }).catch(() => {});
 }).catch(() => {});
-setInterval(() => { if (server) fetch('/brain/ping').then(r => r.json()).then(j => { if (j?.ok) $('brainNote').textContent = `Brains: mayor = ${j.mayor}; townsfolk = ${j.folk} · ${j.calls} calls today, about $${j.cost.toFixed(2)}${j.capped ? ' · daily cap reached, plain brains only' : ''}`; }).catch(() => {}); }, 20000);
+setInterval(() => { if (server) fetch('/brain/ping').then(r => r.json()).then(j => { if (!j?.ok) return; const ai = S.living().filter(p => p.brain === 'folk-ai' || p.brain === 'mayor-ai'), wait = ai.filter(p => p.awaiting).length, fb = ai.filter(p => p.aiDownUntil > S.t).length; $('brainNote').textContent = `Brains: mayor = ${j.mayor}; townsfolk = ${j.folk} · ${j.calls} calls today, about $${j.cost.toFixed(2)}${j.errors ? ' · ' + j.errors + ' errors (see the Town.bat window)' : ''}${j.capped ? ' · daily cap reached' : ''} · ${wait} waiting on their AI${fb ? ', ' + fb + ' on habits because their AI didn\u2019t answer' : ''}`; }).catch(() => {}); }, 15000);
 if (window.claude?.use) window.claude.use('sample').then(s => { sample = s; if (s) $('brainNote').textContent = 'The mayor is Claude: press "Let the mayor decide" each morning.'; });
 const pending = [], mayorThread = [];
 S.onDecision = q => {
@@ -238,6 +238,7 @@ function townPanel() {
     <span class="k">Treasury</span> <b>${S.treasury}c</b> · tax ${Math.round(S.taxRate * 100)}% · rent ${S.rent}c · head ${S.headTax}c<br>
     <span class="k">Election</span> day ${nextE}${S.election.candidates.length ? ': ' + S.election.candidates.map(id => S.people[id]?.name).join(', ') : ''}${S.election.last ? ` <span class="k">(last: ${Object.entries(S.election.last.tally).map(([n, v]) => n + ' ' + v).join(', ')})</span>` : ''}<br>
     <span class="k">Gangs</span> ${gangs}<br>
+    <span class="k">Crimes so far</span> ${(() => { const c = {}; for (const e of S.events) if (S.CRIMES[e.type] && !e.lie && e.type !== 'warrant') c[e.type] = (c[e.type] || 0) + 1; return Object.entries(c).sort((x, y) => y[1] - x[1]).map(([k, n]) => k + ' ' + n).join(', ') || 'none yet'; })()}<br>
     <span class="k">Standing</span> ${['gentry', 'freeholder', 'commoner', 'lowborn'].map(r => r + ' ' + S.living().filter(p => p.kind === 'human' && !p.town && S.rankOf(p) === r).length).join(' · ')}<br>
     <span class="k">People</span> ${S.living().filter(p => p.kind === 'human').length} · <span class="k">jailed</span> ${S.living().filter(p => p.jailedUntil > 0).length} · <span class="k">dead</span> ${S.rec.deaths} · <span class="k">graves</span> ${S.graves.length} · <span class="k">inequality</span> ${h.gini}`;
 }
