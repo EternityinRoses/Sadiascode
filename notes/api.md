@@ -145,3 +145,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - HT win condition (Rose): community alive at noon on day 8 = win (sim.genWon); generation ends then.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT Apothecary/alchemist (cure, alchfire, healkit), discounts (b.discounts, sim.quote), mayor militia + arm batch-buy (armTown, backorders at dawn). Smoke: .backups/smoke_shop.mjs.
