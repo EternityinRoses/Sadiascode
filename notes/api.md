@@ -137,3 +137,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - Hollow Town LoH systems (86dccbd): maneuvers/prone/grapple/disarm/bull rush, dying road (disabled at 0, fallOf), cover, wolves trip; LoH-format fight turns (loh_turn rows: 20 inp, 7 acts) -> town/train_fight.mjs -> fightnet.json + dossiers/*.learn.json; Settings > Fight brains. Smoke: .backups/smoke_loh2.mjs.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT diag tools: .backups/diag_fight.mjs <simpath> N beast (staged party vs beast), diag_deaths.mjs (gen deaths). Lesson: body soft cover made beasts unshootable -> removed. Memories: big flag (deaths/warnings) kept, News of deaths at dailyTick.
