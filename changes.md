@@ -262,3 +262,6 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 
 ## 2026-10-11 08:41 Hollow Town: the Cellar is for the gang only
 - The Cellar (boss HQ) is free only to the boss and those who joined his gang (p.gang); thieves, payroll and seedy careers outside the gang sleep elsewhere, and only gang members count as roofed there for the vagrancy law.
+
+## 2026-10-11 08:52 Hollow Town: three barracks by the fields gate
+- Guard barracks (day/night guards; captain and jailer bunk there too), Artillery barracks (new job Artillery guard, 16:00-04:00, 3 sp; gets a light crossbow and 20 bolts if unarmed at range) and Mage barracks (new job Mage guard, 18:00-06:00, 4 sp; casters only). Nobody is assigned: "enlist <guard | night guard | artillery | mage guard>" walks you there and joins if a place is open (guard numbers + mayor's extra hires; treasury >= 2 gp; clean record; not owners/mayor/captain). Plain brains choose it like any option. Members bunk free (roof for the vagrancy law). After dark artillery and mage guards hold the fields gate unless posted. Prompts list openings; wages settable by the mayor. Smoke: .backups/smoke_barracks.mjs.
