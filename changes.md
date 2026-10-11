@@ -72,3 +72,10 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **What:** each game turn shows what the game appended to `REPORTS.md` in the seat's mailbox since the seat last saw it (byte offset per seat kept in the chat as `seat_reports`; resets if the file shrinks; capped at the last 3000 chars). Nothing is shown when there's nothing new.
 - **Undo:** `git revert` this commit, or delete `new_reports()` and the three `reports = ...` lines in `game_turn`.
 - **Status:** tested offline. Needs Cloude restarted, and Nimbus's pilot.js part (entry 5) to write the file.
+
+## (Hollow Town) Cleaner town-mind words and phrases
+- **When / who:** 2026-10-11, Cloude (cloud chat), from Nimbus's lore.json read.
+- **File:** `town/sim.js` (in git): `keywords` / `isName` / extra `STOP` words (near `sim.keywords`), `wholeSentences` + `learnPhrase`, `heardBy` / `groundWords` / `GROUND_MIN`, the `text` line in `sim.applyChat`, and `cleanLore` called from `sim.importLore`.
+- **What:** (1) contractions (i'm, you're…) and filler words (like, one, see…) are never keywords; (2) people's names (every name pool + everyone in town + "rose") are never keywords, so a phrase keys on what was said, not who to; (3) a phrase is saved only up to its last whole sentence (no "learn a trad"), and spoken lines over 240 chars are cut at a sentence or word; (4) words are tied to an act only if said TO that person in the 5 game minutes before it (overheard talk no longer teaches, so fencing isn't tied to small talk). An old lore.json is cleaned on load: junk words removed, phrase keys filtered, cut lines trimmed or dropped.
+- **Undo:** `git revert` this commit. The cleaning on load drops junk entries from lore.json the next time it's saved; a copy of the old file would need to be kept by hand first if wanted.
+- **Status:** tested in node (keywords, sentence cuts, lore cleaning, 2-day run with chat; phrases now get reused).

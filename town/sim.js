@@ -1060,9 +1060,12 @@ function Sim(opts = {}) {
   sim.studentMode = 'blend';      // 'habit' (the old scripted scores), 'blend', 'student'
   sim.studentWeight = 0.5;
   // ---- words a person hears, and what they do next ----------------------------------
-  function heardBy(q, words) { q.heard = (q.heard || []).filter(r => sim.t - r.t < 30).concat(words.map(w => ({ w, t: sim.t }))).slice(-12); }
+  function heardBy(q, words, direct = false) { q.heard = (q.heard || []).filter(r => sim.t - r.t < 30).concat(words.map(w => ({ w, t: sim.t, direct }))).slice(-12); }
+  // a word is tied to an act only when it was said to them (or shouted) in the 5 minutes before it;
+  // talk they merely overheard doesn't teach what to do
+  const GROUND_MIN = 5;
   function groundWords(p, kind) {
-    const ws = (p.heard || []).filter(r => sim.t - r.t < 30); if (!ws.length) return;
+    const ws = (p.heard || []).filter(r => r.direct && sim.t - r.t < GROUND_MIN); if (!ws.length) { p.heard = (p.heard || []).filter(r => !r.direct); return; }
     const W = (sim.lore.words ||= {});
     for (const { w } of ws) { const e = (W[w] ||= { n: 0, acts: {} }); e.n++; e.acts[kind] = (e.acts[kind] || 0) + 1; }
     p.heard = [];
@@ -1254,7 +1257,11 @@ function Sim(opts = {}) {
   }
   sim.babble = babble; sim.learnWords = learnWords;
   const STOP = new Set('the and you your for are but not with this that have has was were what who how why when where can will just his her its our their they them she him out about from into there here then than been would could should does did doing very much some any all get got say said tell told yes yeah well'.split(' '));
-  const keywords = t => [...new Set((String(t || '').toLowerCase().match(/[a-z']{3,}/g) || []).filter(w => !STOP.has(w)))].slice(0, 12);
+  'like one see know think going come came want lot bit sure maybe also too now day yet still even back over off down only own way well thing things something nothing anything let lets'.split(' ').forEach(w => STOP.add(w));
+  // people's names are who, not what: they never become keywords (lines swap names for slots instead)
+  let namesAt = -1, NAMESET = new Set();
+  const isName = w => { if (namesAt !== sim.peopleAdded) { namesAt = sim.peopleAdded; NAMESET = new Set(['rose', ...Object.values(NAMES).flat(), ...SURNAMES].map(x => String(x).toLowerCase())); for (const q of everyone()) if (q.kind === 'human') for (const part of fullName(q).toLowerCase().split(/\s+/)) if (part.length > 2) NAMESET.add(part); } return NAMESET.has(w); };
+  const keywords = t => [...new Set((String(t || '').toLowerCase().match(/[a-z']{3,}/g) || []).filter(w => !w.includes("'") && !STOP.has(w) && !isName(w)))].slice(0, 12);
   sim.keywords = keywords;
   // turn names into slots, so a line learned about one person can be said about another
   function slotify(text, sp, to) {
@@ -1264,11 +1271,18 @@ function Sim(opts = {}) {
     for (const q of living()) if (q !== sp && q !== to && q.kind === 'human' && q.name.length > 2 && t.includes(q.name)) sw(q.name, '{someone}');
     return t;
   }
+  // cut a line at a sentence end (never mid-word); null if there's no whole sentence in it
+  function wholeSentences(t, max = 240) {
+    t = String(t || '').replace(/\s+/g, ' ').trim(); if (t.length <= max && /[.!?…]["')]?$/.test(t)) return t;
+    const m = t.slice(0, max).match(/^.*[.!?…]["')]?(?=\s|$)/); return m ? m[0] : null;
+  }
+  sim.wholeSentences = wholeSentences;
   function learnPhrase(sp, to, heard, said) {
     const ph = (sim.lore.phrases ||= {}), role = roleOf(sp), list = (ph[role] ||= []);
     const k = heard ? keywords(heard) : ['^'];
-    if (!k.length) return;
-    const say = slotify(said, sp, to);
+    const whole = wholeSentences(said);
+    if (!k.length || !whole) return;
+    const say = slotify(whole, sp, to);
     if (list.some(e => e.say === say)) return;
     list.push({ k, say, n: 0 }); if (list.length > 400) list.splice(Math.floor(Math.random() * 200), 1);
     sim.lore.phrasesLearned = (sim.lore.phrasesLearned || 0) + 1;
@@ -1299,7 +1313,11 @@ function Sim(opts = {}) {
     return line;
   }
   sim.plainSay = plainSay;
-  sim.importLore = o => { if (o && o.v === 1 && o.acts) { sim.lore = o; sim.lore.runs = (o.runs || 0) + 1; if (o.net?.theta) o.net.theta = Float32Array.from(o.net.theta); mutateAll(); } };
+  function cleanLore(o) {
+    for (const w of Object.keys(o.words || {})) if (w.includes("'") || STOP.has(w) || isName(w)) delete o.words[w];
+    for (const [role, list] of Object.entries(o.phrases || {})) o.phrases[role] = list.filter(e => { e.k = (e.k || []).filter(w => w === '^' || !w.includes("'") && !STOP.has(w) && !isName(w)); const ws = wholeSentences(e.say); if (ws) e.say = ws; return ws && e.k.length; });
+  }
+  sim.importLore = o => { if (o && o.v === 1 && o.acts) { cleanLore(o); sim.lore = o; sim.lore.runs = (o.runs || 0) + 1; if (o.net?.theta) o.net.theta = Float32Array.from(o.net.theta); mutateAll(); } };
   sim.exportLore = () => { const o = JSON.parse(JSON.stringify({ ...sim.lore, net: undefined, animals: undefined })); o.animals = Object.fromEntries(Object.entries(sim.lore.animals || {}).map(([k, n]) => [k, { ...n, theta: Array.from(n.theta, v => +v.toFixed(5)) }])); const n = netOf(); o.net = { ...n, theta: Array.from(n.theta, v => +v.toFixed(5)) }; return o; };
   sim.loreSize = () => ({ phrases: Object.values(sim.lore.phrases || {}).reduce((a, l) => a + l.length, 0), situations: Object.keys(sim.lore.acts).length, taught: sim.lore.taught, scored: sim.lore.scored, words: Object.keys(sim.lore.chain).length, runs: sim.lore.runs });
   sim.options = options; sim.choose = choose;
@@ -2700,12 +2718,12 @@ function Sim(opts = {}) {
   sim.chatPrompt = (sp, to, heard) => sim.identityFor(sp) + '\n' + sim.chatTurn(sp, to, heard);
   sim.applyChat = (sp, to, dec) => {
     if (!sp || !to || !sp.alive || !dec || typeof dec !== 'object' || !dec.say) return null;
-    const text = String(dec.say).replace(/\s+/g, ' ').slice(0, 240);
+    const raw = String(dec.say).replace(/\s+/g, ' ').trim(), text = raw.length <= 240 ? raw : wholeSentences(raw) || raw.slice(0, 240).replace(/\s+\S*$/, '') + '…';
     log('talk', `${sp.name} to ${to.id === 'player' ? 'you' : to.name}: "${text}"`, [sp.id, to.id]);
     sp.bubble = { text, t: sim.t };
     // talking stops you where you stand (unless you're in a fight or in jail)
     for (const [x, y] of [[sp, to], [to, sp]]) if (x.brain !== 'human' && conscious(x) && !x.fight && !(x.jailedUntil > 0)) { if (dec.end) { if (x.task?.kind === 'talk') x.task = null; } else setTask(x, 'talk', { with: y.id, until: sim.t + 6 }); }
-    heardBy(to, keywords(text)); if (to.brain !== 'human') to.alert = true;
+    heardBy(to, keywords(text), true); if (to.brain !== 'human') to.alert = true;
     if (dec.do) { const step = { do: String(dec.do).slice(0, 80) }; (sp.agenda ||= []).unshift(step); if (!sp.fight && !(sp.jailedUntil > 0)) { sp.task = null; choose(sp); } log('life', sp.agenda[0] !== step ? `${sp.name} goes to ${sp.lastStep}.` : `${sp.name} wants to ${step.do}, but can't right now.`, [sp.id]); }
     if (sp.offerFrom && sp.offerFrom.from === to.id && typeof dec.accept === 'boolean') { const of = sp.offerFrom; sp.offerFrom = null; if (dec.accept && canGive(sp, of.offer.want) && canGive(to, of.offer.give)) settleDeal(to, sp, of.offer); else log('trade', `${sp.name} turns down ${to.name}'s ${of.offer.threat ? 'demand' : 'offer'}.`, [sp.id, to.id]); }
     if (dec.offer && typeof dec.offer === 'object') makeOffer(sp, to, dec.offer);
