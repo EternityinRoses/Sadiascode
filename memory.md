@@ -155,6 +155,10 @@ A fixed copy is at `fixed/minds.js` on the branch.
 
 - HT Apothecary/alchemist (cure, alchfire, healkit), discounts (b.discounts, sim.quote), mayor militia + arm batch-buy (armTown, backorders at dawn). Smoke: .backups/smoke_shop.mjs.
 
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT classes: everyone picks a PC class at level 1 (setFirstClass; AI first_class; Rose types class <name>); plain brain learns picks (sim.lore.classLearn/featLearn bandit). Clergy give 2 draughts each at start. Smoke: .backups/smoke_class.mjs.
+
 # From the ☁️ cloud brain (Claude Code cloud sessions): notes/cloud.md
 
 - Oct 10: a 📨 reply now gets a turn in the receiving chat (API or Code), shown live, so it acts on the reply where Rose can watch; that answer stays put and is never sent back (no loops).
@@ -180,4 +184,3 @@ A fixed copy is at `fixed/minds.js` on the branch.
 - Oct 11: Rose: "give them the tools to find the most efficient way to win". New verbs for everyone (doAs + commands): size up <person> (Sense/Spot vs Bluff: purse estimate, gear, gang, home), case <house n | business> (who lives there, who's in, savings, lock), hide (Hide vs Spot even in daylight at -5, armour check penalty), wait for <person> (hidden lurk until they come near, then the next step), steal <item> (shoplift: Sleight vs keeper's Spot; caught = fight or hue and cry), escape (from a cell: bribe the jailer or Open Lock/Escape vs 22; jailed AI bodies get asked what to do). AIs could already attack anyone. BUG FIXED: a guard winning any nonlethal fight jailed the loser, even his own mugging victim; now only for arrests, the one who started it, or an open charge (fights record f.by).
 - Oct 11: Hollow Town underworld gating (Rose): crime tools (pickpocket, mug, burgle, rob, steal, hide, case, wait for, extort, ambush, rustle) only for people IN the underworld: "take up <seedy career>" at the Drowned Lantern after dark, gang members, guards who took money (onPayroll), the crime-boss persona; classic start also seeds rogues/thugs; blank start only the persona. "go straight" leaves. Others' crime steps fail with "that takes a place in the underworld". Plain brains tempted by crime get a "takeup" option. Rose (player) is not gated. Job tools were already job-gated.
 - Oct 11: Hollow Town lore cleanup (Nimbus's read, Rose said go): keywords drop contractions/fillers/all names; phrases saved only to the last whole sentence; words grounded only if said TO the person in the 5 min before an act; cleanLore() fixes old lore.json on load. changes.md has it. Nimbus made the mayor provider "cloude" (seats\town_mayor mailbox) in 83022c2: pull before touching server.py.
-- HT classes: everyone picks a PC class at level 1 (setFirstClass; AI first_class; Rose types class <name>); plain brain learns picks (sim.lore.classLearn/featLearn bandit). Clergy give 2 draughts each at start. Smoke: .backups/smoke_class.mjs.
