@@ -6,7 +6,7 @@
 //
 // Prints one JSON line per generation: won/failed, days lasted, deaths by cause, and how often
 // people barricaded, built the palisade, lit watch-fires, woke others, rang the alarm bell, gave coin,
-// people enlisted, beasts killed, the guard corps still alive at the end,
+// people enlisted, alarm spells cast and set off, party formations chosen, beasts killed, the guard corps still alive at the end,
 // where they slept (shelter, Cellar, fields) and how much busking earned (in copper).
 import { createRequire } from 'module';
 import fs from 'fs';
@@ -25,7 +25,7 @@ for (let g = 0; g < +gens; g++) {
   S.studentMode = process.env.MODE || 'blend'; S.genDays = 7; S.fightMode = 'script';
   if (lore) S.importLore(lore);
   if (process.env.REMEMBER) S.beastsSeen = 1;
-  const acts = { barricade: 0, palisade: 0, fire: 0, wake: 0, bell: 0, give: 0, enlist: 0 };
+  const acts = { barricade: 0, palisade: 0, fire: 0, wake: 0, bell: 0, give: 0, enlist: 0, alarmCast: 0, alarmRang: 0, formation: 0 };
   S.onLog = e => {
     if (/ barricades /.test(e.text)) acts.barricade++;
     if (/works on the palisade/.test(e.text)) acts.palisade++;
@@ -34,6 +34,9 @@ for (let g = 0; g < +gens; g++) {
     if (/rings the alarm bell/.test(e.text)) acts.bell++;
     if (e.kind === 'life' && / gives /.test(e.text)) acts.give++;
     if (/ enlists in the /.test(e.text)) acts.enlist++;
+    if (/ casts alarm at /.test(e.text)) acts.alarmCast++;
+    if (/^The alarm.* rings out/.test(e.text)) acts.alarmRang++;
+    if (/party falls into/.test(e.text) && e.kind === 'life' && !/\(formation\)/.test(e.text)) acts.formation++;
   };
   const nights = { shelter: 0, cellar: 0, fields: 0 };   // where people sleep at midnight, summed over nights
   let lastDay = S.day;
