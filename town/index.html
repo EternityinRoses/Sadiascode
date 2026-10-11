@@ -153,6 +153,7 @@ table.why{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}tabl
   <h3>Training</h3>
   <div class="grid two"><label for="setBodies">AI bodies</label><select id="setBodies"><option value="orders">Wait for orders (only the LLM moves them)</option><option value="habits">LLM plans, habits fill the gaps</option></select>
   <label for="setBrain">Plain brains</label><select id="setBrain"><option value="habit">Habits (my hand-made scores)</option><option value="blend">Blend: habits and the student</option><option value="student">Student only (learned)</option><option value="brain">Trained NPC brain (npcbrain.json)</option></select>
+  <label for="setFight">Fight brains</label><select id="setFight"><option value="script">Script (with LoH's maneuvers)</option><option value="net">Trained fight net (fightnet.json, LoH's 20 numbers and 7 acts)</option></select>
   <label for="setGen" title="it ends sooner if everyone in town is dead; the last night brings a troll and two bears">Days per generation</label><select id="setGen"><option>3</option><option>7</option><option>14</option><option>21</option><option>30</option></select></div>
   <div class="row"><button id="evolveGo">Evolve non-stop</button><span class="k">Runs town after town at full speed (no AI calls), evolving the student between them. Keep the tab open.</span></div>
   <div class="row" style="align-items:center"><button id="ff1">Run 1 day</button><button id="ff7">Run 7 days</button><button id="newTown">New town</button><span id="ffNote" class="k">Fast, no drawing, plain brains only. A new town keeps what the town mind learned.</span></div>
@@ -186,5 +187,6 @@ table.why{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}tabl
 <script type="module" src="srd_bridge.js"></script>
 <script src="sim.js"></script>
 <script src="npcbrain.js"></script>
+<script src="fightnet.js"></script>
 <script src="view.js"></script>
 </body></html>

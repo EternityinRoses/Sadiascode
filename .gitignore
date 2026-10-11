@@ -29,3 +29,5 @@ town/dataset.jsonl
 town/dataset.jsonl.old
 town/chatlogs/
 town/npcbrain.json
+town/fightnet.json
+town/dossiers/

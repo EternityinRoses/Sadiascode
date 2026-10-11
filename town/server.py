@@ -395,6 +395,12 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, "Nothing said yet.".encode("utf-8"), "text/plain; charset=utf-8")
             with open(f, "rb") as fh:
                 return self.send(200, fh.read(), "text/plain; charset=utf-8")
+        if path == "/fightnet":
+            f = os.path.join(HERE, "fightnet.json")
+            if not os.path.exists(f):
+                return self.send(404, "{}")
+            with open(f, "rb") as fh:
+                return self.send(200, fh.read())
         if path == "/npcbrain":
             f = os.path.join(HERE, "npcbrain.json")
             if not os.path.exists(f):

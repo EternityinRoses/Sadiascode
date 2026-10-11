@@ -6,7 +6,7 @@ let townSetup = { start: 'blank', personas: null, studentMode: 'blend', genDays:
 try { townSetup = { ...townSetup, ...JSON.parse(localStorage.getItem('hollow-setup') || '{}') }; } catch (e) {}
 if (!townSetup.gen7) { townSetup.genDays = 7; townSetup.gen7 = true; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }   // Rose: generations are a week (ending with a troll and two bears)
 const S = TownSim.Sim({ start: townSetup.start, personas: townSetup.personas || undefined });
-S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays;
+S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays; S.fightMode = townSetup.fightMode || 'script';
 const me = S.addPlayer('Rose', 'f', { ghost: townSetup.spectate !== false });   // Rose watches by default: an invisible camera, not a person in the town
 if (me.ghost) setTimeout(() => { for (const id of ['meBox', 'acts', 'say']) { const e = document.getElementById(id); if (e) e.style.display = 'none'; } }, 0);
 window.town = S;      // for poking at it from the console
@@ -154,6 +154,7 @@ fetch('/brain/ping').then(r => r.ok ? r.json() : null).then(j => {
   if (j.folk && j.folk !== 'off') for (const p of S.living()) if (p.kind === 'human' && p.brain === 'script' && !p.town) p.brain = 'folk-ai';
   S.aiOnly = townSetup.aiBodies === 'orders';
   fetch('/lore').then(r => r.ok ? r.json() : null).then(l => { if (l && l.v) S.importLore(l); }).catch(() => {});
+fetch('/fightnet').then(r => r.ok ? r.json() : null).then(j => { if (j && j.w1 && window.FightNet) S.fightNet = FightNet.load(j); }).catch(() => {});   // the fight net (train_fight.mjs), if there is one
 fetch('/npcbrain').then(r => r.ok ? r.json() : null).then(j => { if (j && j.W1 && window.NPCBrain) { S.npcBrain = NPCBrain.load(j); S.npcBrainStats = j.stats || {}; } }).catch(() => {});   // the trained NPC brain (train_brain.js), if there is one
 }).catch(() => {});
 setInterval(() => { if (server) fetch('/brain/ping').then(r => r.json()).then(j => { if (!j?.ok) return; const ai = S.living().filter(p => p.brain === 'folk-ai' || p.brain === 'mayor-ai'), wait = ai.filter(p => p.awaiting).length, fb = ai.filter(p => p.aiDownUntil > S.t).length; $('brainNote').textContent = `Brains: mayor = ${j.mayor}; townsfolk = ${j.folk} · ${j.calls} calls today, about $${j.cost.toFixed(2)}${j.errors ? ' · ' + j.errors + ' errors (see the Town.bat window)' : ''}${j.capped ? ' · daily cap reached' : ''} · ${wait} waiting on their AI${fb ? ', ' + fb + ' on habits because their AI didn\u2019t answer' : ''}`; }).catch(() => {}); }, 15000);
@@ -375,7 +376,7 @@ async function fillModels(x) {
 async function openSettings() {
   $('settings').hidden = false; $('sMsg').textContent = '';
   $('setServer').hidden = !server; $('setNoServer').hidden = !!server;
-  $('setBodies').value = townSetup.aiBodies; $('setBrain').value = townSetup.studentMode; $('setGen').value = String(townSetup.genDays); $('evolveGo').textContent = evolving() ? 'Stop evolving' : 'Evolve non-stop';
+  $('setBodies').value = townSetup.aiBodies; $('setBrain').value = townSetup.studentMode; $('setFight').value = townSetup.fightMode || 'script'; $('setGen').value = String(townSetup.genDays); $('evolveGo').textContent = evolving() ? 'Stop evolving' : 'Evolve non-stop';
   $('setStart').value = townSetup.start; $('setPersonas').value = (townSetup.personas || S.PERSONAS).join('\n\n');
   $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning);
   if (!server) return;
@@ -469,8 +470,8 @@ function drawMind() {
 document.querySelectorAll('[data-mind]').forEach(b => b.onclick = () => { mindTab = b.dataset.mind; drawMind(); });
 $('mindBtn').onclick = () => { $('mind').hidden = false; drawMind(); }; $('mindClose').onclick = () => $('mind').hidden = true; $('sClose').onclick = () => $('settings').hidden = true;
 $('learnMode2').onclick = () => { S.learning = S.learning ? 0 : 1; $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning); drawLore(); };
-function saveSetup() { townSetup.aiBodies = $('setBodies').value; if (server) S.aiOnly = townSetup.aiBodies === 'orders'; townSetup.studentMode = $('setBrain').value; townSetup.genDays = +$('setGen').value || 7; S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays; townSetup.start = $('setStart').value; const ps = $('setPersonas').value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean); townSetup.personas = ps.length ? ps : null; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }
-$('setStart').onchange = saveSetup; $('setBrain').onchange = saveSetup; $('setBodies').onchange = saveSetup; $('setGen').onchange = saveSetup; $('setPersonas').onchange = saveSetup;
+function saveSetup() { townSetup.aiBodies = $('setBodies').value; if (server) S.aiOnly = townSetup.aiBodies === 'orders'; townSetup.studentMode = $('setBrain').value; townSetup.genDays = +$('setGen').value || 7; S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays; townSetup.fightMode = $('setFight').value; S.fightMode = townSetup.fightMode; townSetup.start = $('setStart').value; const ps = $('setPersonas').value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean); townSetup.personas = ps.length ? ps : null; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }
+$('setStart').onchange = saveSetup; $('setBrain').onchange = saveSetup; $('setFight').onchange = saveSetup; $('setBodies').onchange = saveSetup; $('setGen').onchange = saveSetup; $('setPersonas').onchange = saveSetup;
 $('sSave').onclick = async () => {
   saveSetup();
   if (!server) { $('settings').hidden = true; return; }
@@ -515,7 +516,7 @@ function drawCombat() {
   const f = S.fights.find(f => f.sides.has('player'));
   $('combat').hidden = !f;
   if (!f) return;
-  $('combatOrder').innerHTML = f.order.map(id => { const q = S.body(id); return `<span class="${f.sides.get(id) === f.sides.get('player') ? 'ally' : 'foe'}${f.waiting === id ? ' now' : ''}">${q.name} ${q.alive ? (S.conscious(q) ? Math.max(0, q.hp) + 'hp' : q.dying ? 'dying' : 'down') : 'dead'}</span>`; }).join(' ');
+  $('combatOrder').innerHTML = f.order.map(id => { const q = S.body(id); return `<span class="${f.sides.get(id) === f.sides.get('player') ? 'ally' : 'foe'}${f.waiting === id ? ' now' : ''}">${q.name} ${q.alive ? (S.conscious(q) ? Math.max(0, q.hp) + 'hp' : q.dying ? 'dying' : 'down') : 'dead'}${q.alive && q.prone ? ' prone' : ''}${q.heldBy || q.holding ? ' grappling' : ''}${q.alive && S.isDisabled?.(q) ? ' disabled' : ''}</span>`; }).join(' ');
   $('combatRound').textContent = `Round ${f.round}${f.waiting === 'player' ? ' · your turn' : ''}`;
   const tn = me.turnLeft;
   $('combatEcon').textContent = tn ? `standard ${tn.standard ? '●' : '○'} · move ${tn.move ? '●' : '○'} · swift ${tn.swift ? '●' : '○'} · 5-ft step ${tn.step ? '●' : '○'}` : '';

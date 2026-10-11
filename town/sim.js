@@ -251,6 +251,10 @@ const FEATS = {
   'Self-Sufficient':       { req: () => true, blurb: '+2 heal' },
   'Improved Unarmed Strike': { req: () => true, blurb: 'your fists count as armed: punching an armed foe no longer gives them a free swing at you, and you choose lethal or nonlethal at no cost' },
   'Precise Shot':          { req: p => p.feats?.includes('Point Blank Shot'), blurb: 'no -4 for shooting into a melee' },
+  'Improved Trip':         { req: p => p.st.int >= 13, blurb: 'trip without a free swing at you, +4 on the check, and a free blow at the one you drop' },
+  'Improved Disarm':       { req: p => p.st.int >= 13, blurb: 'disarm without a free swing at you, +4 on the roll' },
+  'Improved Grapple':      { req: p => p.st.dex >= 13 && p.feats?.includes('Improved Unarmed Strike'), blurb: 'grab without a free swing at you, +4 on grapple checks' },
+  'Diehard':               { req: p => p.st.con >= 13, blurb: 'below 0 hp you stay on your feet, stable, until -10' },
 };
 function rollStats(bias = {}) {
   const s = {};
@@ -309,7 +313,7 @@ const hasFeat = (p, k) => !!p.feats?.includes(k);
 const classLine = p => Object.entries(classesOf(p)).map(([k, n]) => k + ' ' + n).join(', ');
 const hungerPace = p => p.kind === 'human' ? (p.food < 0.1 ? 0.5 : p.food < 0.3 ? 0.75 : 1) : 1;   // the hungry move slowly (Rose)
 const babOf = p => Object.entries(classesOf(p)).reduce((t, [k, n]) => t + ((PC[k] || CLASSES[k])?.bab(n) || 0), 0);
-const conscious = p => p.alive && !p.down && !p.dying && p.hp > 0;   // one health bar (LoH's rule): bruising comes off it too
+const conscious = p => p.alive && !p.down && !p.dying && (p.hp > 0 || (!!p.disabled && p.hp > -10));   // one health bar (LoH's rule): bruising comes off it too
 const free = p => conscious(p) && !(p.jailedUntil > 0);
 
 // ------------------------------------------------------------- the sim --
@@ -504,7 +508,7 @@ function Sim(opts = {}) {
     log('death', `${first ? 'Something big' : n > 1 ? n + ' beasts' : 'A beast'} ${n > 1 ? 'come' : 'comes'} out of the Wildwood: ${n > 1 ? n + ' ' + ({ wolf: 'wolves', boar: 'wild boar', bear: 'bears', direwolf: 'dire wolves', ogre: 'ogres' }[kind]) : b.name.toLowerCase()}, heading for town!`, got.map(a => a.id));
     sim.nextInvasion = day + irnd(3, 6);
   }
-  sim.invade = invade; sim.BEASTS = BEASTS;
+  sim.invade = invade; sim.BEASTS = BEASTS; sim.spawnBeast = spawnBeast;
   // a beast hunts: the nearest person or animal it can see, otherwise toward the houses
   // a beast is loud (Rose): a bear's roar, an ogre or troll crashing through, a wolf pack howling wakes the sleepers near it
   const LOUD = { bear: [16, 8, 'a bear roaring'], ogre: [20, 10, 'something huge crashing through the dark'], troll: [22, 12, 'a troll bellowing and crashing through the dark'], direwolf: [14, 7, 'wolves howling'], wolf: [12, 6, 'wolves howling'], boar: [10, 5, 'a boar grunting and snorting'] };
@@ -2911,7 +2915,7 @@ function Sim(opts = {}) {
   }
   const fistArmed = p => p.kind !== 'human' || hasFeat(p, 'Improved Unarmed Strike') || clvl(p, 'monk') > 0;
   // who threatens the ground around them (SRD): a melee weapon, a natural weapon, or an "armed" fist
-  const threatens = p => p.kind === 'animal' ? true : p.weapon === 'fists' ? fistArmed(p) : !!WEAPONS[p.weapon]?.melee;
+  const threatens = p => !p.heldBy && !p.holding && (p.kind === 'animal' ? true : p.weapon === 'fists' ? fistArmed(p) : !!WEAPONS[p.weapon]?.melee);
   sim.threatens = threatens;
   // flanking (SRD): an ally who threatens the foe from the far side of it
   function flankAlly(f, a, t) {
@@ -2927,7 +2931,10 @@ function Sim(opts = {}) {
     const parts = [], dparts = []; let hp = 0, dp = 0;
     const term = (n, w, dmg) => { if (!n) return; if (dmg) { dp += n; dparts.push([n, w]); } else { hp += n; parts.push([n, w]); } };
     let move;
-    if (!human) {
+    if (o.touch) {   // an unarmed melee touch attack: a trip's or a grapple's first step (SRD)
+      const tb = human ? babOf(a) : (a.atk ?? 2);
+      move = { name: 'touch', type: 'attack', touch: true, toHit: tb + strM, toHitTerms: nz([[tb, human ? 'base attack' : 'attack'], [strM, 'Strength']]), dmg: '1d1', critMult: 1, threat: 21, dmgType: 'bludgeoning', rangeFt: 5, light: true, unarmed: true };
+    } else if (!human) {
       move = { name: a.attackName || 'bite', type: 'attack', natural: true, toHit: a.atk ?? 2, dmg: `${a.bite[0]}d${a.bite[1]}${sgn(a.dmgBonus || 0)}`, critMult: 2, threat: 20, dmgType: /claw|tusk|club/.test(a.attackName || '') ? (/club/.test(a.attackName) ? 'bludgeoning' : 'slashing') : 'piercing', rangeFt: 5 };
     } else {
       const bab = babOf(a);
@@ -2966,25 +2973,349 @@ function Sim(opts = {}) {
       meleeAtkMod: hp, rangedAtkMod: hp, meleeAtkParts: parts, rangedAtkParts: parts, attackMod: 0, dmgMod: dp,
       pullBlows: human && mode === 'nonlethal', strikeToKill: human && mode === 'lethal', monkLevel: human ? clvl(a, 'monk') : 0,
       powerAttack: human && mode === 'lethal' && !rangedMove && hasFeat(a, 'Power Attack') ? Math.min(2, Math.max(1, babOf(a))) : 0,
-      sneakDice: human ? Math.ceil(clvl(a, 'rogue') / 2) : 0 };
-    const tV = { name: t.id === 'player' ? 'Rose' : t.name, dexMod: t.kind === 'human' ? mod(t.st.dex) : 0, flatFooted: !!t.flatfooted, acMod: 0, naturalAc: 0 };
+      sneakDice: human ? Math.ceil(clvl(a, 'rogue') / 2) : 0, prone: !!a.prone };
+    const tV = { name: t.id === 'player' ? 'Rose' : t.name, dexMod: t.kind === 'human' ? mod(t.st.dex) : 0, flatFooted: !!t.flatfooted, acMod: 0, naturalAc: 0, prone: !!t.prone, deniedDexTo: t.feinted && t.feinted.by === a.id ? { by: actorV } : null, pinnedBy: null };
     const ally = !rangedMove ? flankAlly(f, a, t) : null;
     const intoMelee = rangedMove && f.order.some(id => { const q = body(id); return q && q !== a && q.alive && conscious(q) && f.sides.get(q.id) === f.sides.get(a.id) && dist2(q, t) <= 2.1; }) && !hasFeat(a, 'Precise Shot') ? -4 : 0;
     const dark = () => night() && !litAt(P(t.x, t.z), t);   // shadowy light: concealment, 20% (SRD)
     const gather = () => ({ scene: {}, weather: 0, distFt: dFt, intoMelee, flank: { ally: ally ? { name: ally.name, feats: [] } : null, bonus: 2, backToBack: false },
-      feat: { damage: { n: 0, note: '' }, guard: { n: 0, note: '' } }, acBase: t.kind === 'animal' ? t.ac : acOf(t), totalDefense: 0, helpless: !conscious(t),
-      attackerHeld: false, targetHeldByOther: false, cover: null, surprise: f.round === 1 });
+      feat: { damage: { n: 0, note: '' }, guard: { n: 0, note: '' } }, acBase: o.touch ? touchAc(t) : t.kind === 'animal' ? t.ac : acOf(t), totalDefense: 0, helpless: !conscious(t),
+      attackerHeld: !!(a.heldBy || a.holding), targetHeldByOther: !!(t.heldBy || t.holding) && t.heldBy !== a.id && t.holding !== a.id, cover: rangedMove ? coverOf(a, t) : null, surprise: f.round === 1 });
     const ask = { helpless: () => !conscious(t), unobserved: () => false, flanked: () => !!ally, spend: () => {}, concealment: () => dark() ? { total: false } : null, perceives: () => false,
       feat: { deflect: () => ({ deflected: false, note: '' }), blackCat: () => false }, confirmTerms: () => [],
       sneak: () => { if (!actorV.sneakDice || dark()) return null; const why = !conscious(t) ? 'helpless' : t.flatfooted ? 'flat-footed' : !rangedMove && ally ? 'flanked' : null; return why && (!rangedMove || dFt <= 30) ? { dice: actorV.sneakDice, why } : null; },
       opening: () => null, damageDice: m => S.damageDiceOf(m) };
     const swing = { attacker: actorV, target: tV, move };
     const rec = S.attackRoll(swing, gather, ask);
+    if (tV.deniedDexTo && !rangedMove) t.feinted = null;   // the feint is spent on the swing it bought, hit or miss
+    if (o.touch) return { hit: rec.hit, line: rec.rollLine, move };
     if (!rec.hit) return { hit: false, line: rec.rollLine, move };
     const res = S.rollDamage(rec, swing, ask);
     return { hit: true, crit: rec.crit, dmg: res.dmg, nonlethal: human && S.pullsBlows(actorV, move), line: rec.rollLine + ' ' + res.dmgLine, move };
   }
   sim.srdAttack = srdAttack;
+  // ---- MORE OF LoH: MANEUVERS, PRONE, THE DYING ROAD, COVER (rules/maneuvers.js, conditions.js, health.js via SRD) -----
+  // Rose: "do more of the systems loh has until you have the gist a smart npc needs to survive in loh". Every sum below is
+  // LoH's own (trip, trip back, disarm, disarm back, bull rush and its push, the grapple check, its tie, its dice, the way
+  // out, the feint, a bare fist that finishes nobody, the fall onto the dying road, the d% that stops the bleeding, the
+  // strenuous point, a cure over one pool); Hollow Town only builds the bodies they read and rolls the d20s.
+  const SIZE_OF = { rabbit: 'tiny', pheasant: 'tiny', hen: 'tiny', cow: 'large', sheep: 'medium', direwolf: 'large', ogre: 'large', troll: 'large', dog: 'small' };
+  const TWO_LEGS = new Set(['pheasant', 'hen', 'ogre', 'troll']);
+  const BEAST_ABIL = { wolf: [13, 15, 2], boar: [15, 10, 2], bear: [19, 13, 2], direwolf: [25, 15, 2], ogre: [21, 8, 6], troll: [23, 14, 6], dog: [13, 17, 2], deer: [12, 15, 2], cow: [18, 9, 2], sheep: [12, 10, 2], rabbit: [3, 15, 2], pheasant: [3, 15, 2], hen: [3, 12, 2] };   // SRD Str, Dex, Int
+  const wolfish = q => q.kind === 'animal' && (q.species === 'wolf' || q.species === 'direwolf' || /wolf/i.test(q.name || ''));
+  const sizeOf = q => q.kind === 'human' ? 'medium' : wolfish(q) && q.species === 'dog' ? 'medium' : SIZE_OF[q.species] || 'medium';
+  const abilOf = q => { if (q.kind === 'human') return { str: q.st.str, dex: q.st.dex, int: q.st.int }; const b = BEAST_ABIL[wolfish(q) && q.species === 'dog' ? 'wolf' : q.species] || [10, 12, 2]; return { str: b[0], dex: b[1], int: b[2] }; };
+  const LIGHT = new Set(['fists', 'dagger', 'sickle', 'sap', 'handaxe', 'lightmace', 'shortsword']);
+  // the body as LoH's maneuver sums read it
+  function mview(q) {
+    const ab = abilOf(q), human = q.kind === 'human';
+    return { name: q.name, size: sizeOf(q), strMod: mod(ab.str), dexMod: mod(ab.dex), int: ab.int, bab: human ? babOf(q) : Math.max(0, (q.atk ?? 2) - mod(ab.str)),
+      moreLegs: !human && !TWO_LEGS.has(q.species), nonhumanoid: !human && q.species !== 'ogre' && q.species !== 'troll', nonprofAcp: 0,
+      monkLevel: human ? clvl(q, 'monk') : 0, pullBlows: false, unarmedMove: { dmg: human && clvl(q, 'monk') ? (clvl(q, 'monk') >= 4 ? '1d8' : '1d6') : '1d3' } };
+  }
+  const touchAc = t => t.kind === 'animal' ? 10 + Math.floor((t.ac - 10) / 3) : 10 + Math.min(mod(t.st.dex), (ARMOR[t.armor] || ARMOR.none).maxDex) + (hasFeat(t, 'Dodge') ? 1 : 0);
+  sim.touchAc = touchAc; sim.mview = mview;
+  // the chance d20 + a beats d20 + b (a tie to the higher modifier, equal ones even); and a plain hit's chance
+  const pBeat = (a, b) => { let w = 0; for (let x = 1; x <= 20; x++) for (let y = 1; y <= 20; y++) { const s = x + a, u = y + b; w += s > u ? 1 : s < u ? 0 : a > b ? 1 : a < b ? 0 : 0.5; } return w / 400; };
+  const pHit = (bonus, ac) => Math.min(0.95, Math.max(0.05, (21 - (ac - bonus)) / 20));
+  sim.pBeat = pBeat;
+  // an opposed roll, by LoH's contestOf (the higher check, a tie to the higher modifier, equal modifiers roll again)
+  function opposed(mine, theirs) { for (let i = 0; i < 6; i++) { const x = d(20) + mine, y = d(20) + theirs, c = globalThis.SRD.contestOf(x, mine, y, theirs); if (!c.again) return { won: c.won, x, y }; } return { won: false, x: 0, y: 0 }; }
+  const freeSwing = (f, by, at, why) => { if (!threatens(by) || by.aooUsed === f.round || !conscious(by) || dist2(by, at) > 2.1) return true; by.aooUsed = f.round; logF(f, `${at.name} ${why}: ${by.name} gets a free swing.`); attack(f, by, at, { aoo: true }); return conscious(at); };
+
+  // COVER (SRD, combatModifiers; LoH's coverBetween): a wall between two rooms is total cover unless the line runs through
+  // their door (+4); the palisade +4; a body in the line of a shot is soft cover (+4)
+  const segT = (q, a, t) => { const dx = t.x - a.x, dz = t.z - a.z, L = dx * dx + dz * dz || 1, u = ((q.x - a.x) * dx + (q.z - a.z) * dz) / L; return { u, d: Math.hypot(a.x + dx * u - q.x, a.z + dz * u - q.z) }; };
+  function coverOf(a, t) {
+    if (!a || !t) return null;
+    const A = areaOf(a), B = areaOf(t);
+    if (A !== B && (AREAS[A]?.indoor || AREAS[B]?.indoor)) { const door = DOORS.find(dr => ((dr.a === A && dr.b === B) || (dr.a === B && dr.b === A)) && segT(dr.at, a, t).d < 1.2); return door ? { ac: 4, prop: { name: 'doorway' } } : { ac: 0, total: true, prop: { name: 'wall' } }; }
+    if (sim.palisade?.hp > 0 && ((A === 'wood' && B === 'fields') || (A === 'fields' && B === 'wood'))) return { ac: 4, prop: { name: 'palisade' } };
+    for (const q of [...living(), ...Object.values(sim.animals)]) { if (q === a || q === t || !q.alive || q.buried || !conscious(q)) continue; const s = segT(q, a, t); if (s.u > 0.15 && s.u < 0.85 && s.d < 0.45) return { ac: 4, soft: true }; }
+    return null;
+  }
+  sim.coverOf = coverOf;
+
+  // THE DYING ROAD (rules/health.js fallOf): 0 is disabled (on your feet, one action, and a standard one costs a hit point),
+  // -1 to -9 dying, -10 dead; Diehard stands stable below 0. A blow of 50 or more asks a DC 15 Fortitude save (SRD).
+  const isDisabled = p => !!p.disabled && p.alive && p.hp <= 0 && !p.dying && !p.down;
+  sim.isDisabled = isDisabled;
+  function lohFall(t, dmg, by) {
+    if (dmg >= 50 && t.hp > -10 && fortSave(t) < 15) { t.hp = -10; log('fight', `${t.name} fails a Fortitude save against massive damage.`, [t.id]); }
+    const fall = globalThis.SRD.fallOf(t.hp, { diehard: hasFeat(t, 'Diehard'), prior: t.down === 'out' ? 'cold' : t.stable ? 'stable' : t.dying ? 'dying' : null });
+    if (fall.road === 'dead') { if (by?.monster) by.kills = (by.kills || 0) + 1; return die(t, by, 'killed in a fight'); }
+    if (fall.road === 'up') { t.disabled = false; return; }
+    if (fall.road === 'cold') return;
+    if (fall.road === 'disabled' || fall.road === 'stable') { t.disabled = true; t.stable = fall.road === 'stable'; t.dying = false; if (t.down === 'dying') t.down = null; return; }
+    t.dying = true; t.down = 'dying'; t.stable = false; t.disabled = false;
+  }
+  // a standard action taken disabled costs its hit point (rules/health.js strenuousOf), and below 0 the body is dying again
+  function strain(f, p) {
+    if (!globalThis.SRD.strenuousOf({ hp: p.hp, began: true, dying: p.dying })) return;
+    p.hp -= 1; logF(f, `${p.name} strains on, disabled, and loses 1 hp.`);
+    if (p.hp <= -10) return die(p, null, 'pushed on while dying');
+    if (p.hp < 0 && !hasFeat(p, 'Diehard')) { p.dying = true; p.down = 'dying'; p.disabled = false; logF(f, `${p.name} collapses, dying.`); }
+  }
+
+  // THE MANEUVERS (rules/maneuvers.js)
+  // trip: an unarmed melee touch attack (it provokes unless Improved Trip), then the opposed check; a failed trip may be
+  // tripped back. A wolf's bite trips for free (o.free: no touch, no free swing, no trip back), as the SRD's wolf.
+  function tripAt(f, a, t, o = {}) {
+    const S = globalThis.SRD, A = mview(a), B = mview(t), imp = hasFeat(a, 'Improved Trip');
+    if (S.tooBigFor(A, B)) { if (!o.free) logF(f, `${a.name} can't trip ${t.name}: too big.`); return false; }
+    if (!o.free) {
+      if (!imp && !freeSwing(f, t, a, `grabs for ${t.name}'s legs`)) return false;
+      const r = srdAttack(f, a, t, { touch: true });
+      if (!r.hit) { logF(f, `${a.name} tries to trip ${t.name}: ${r.line}`); return false; }
+    }
+    const c = S.tripChecks(A, B, { atk: imp ? 4 : 0 }), r = opposed(c.mine, c.theirs);
+    if (r.won) { S.proneDown(t); logF(f, `${a.name} ${o.free ? 'drags' : 'trips'} ${t.name} down: prone (${r.x} vs ${r.y}).`); if (imp && !o.free && conscious(t)) attack(f, a, t); return true; }
+    logF(f, `${t.name} keeps their feet (${r.x} vs ${r.y}).`);
+    if (!o.free && conscious(t) && !t.prone) { const b = S.tripBackChecks(A, B), r2 = opposed(b.back, b.mine); if (r2.won) { S.proneDown(a); logF(f, `${t.name} trips ${a.name} back: prone (${r2.x} vs ${r2.y}).`); } }
+    return false;
+  }
+  const blowOf = q => q.kind !== 'human' ? { toHit: q.atk ?? 2, unarmed: true } : { toHit: babOf(q) + mod(q.st.str) + (WEAPONS[q.weapon]?.enh || 0), twoHanded: WEAPONS[q.weapon]?.hands === 2, light: LIGHT.has(q.weapon), unarmed: q.weapon === 'fists', disarmBonus: q.weapon === 'flail' ? 2 : 0 };
+  function dropWeapon(f, q) { const k = q.weapon; q.weapon = 'fists'; q.unloaded = false; (f.dropped ||= []).push({ k, owner: q.id, x: q.x, z: q.z }); return k; }
+  // disarm: opposed attack rolls by the weapons' heft and size (it provokes unless Improved Disarm); empty-handed, you
+  // take the weapon; failed, the foe may disarm you back
+  function disarmAt(f, a, t) {
+    const S = globalThis.SRD, imp = hasFeat(a, 'Improved Disarm');
+    if (t.kind !== 'human' || t.weapon === 'fists') return logF(f, `${t.name} has nothing to disarm.`);
+    if (!imp && !freeSwing(f, t, a, `reaches for ${t.name}'s weapon`)) return;
+    const c = S.disarmChecks(mview(a), blowOf(a), mview(t), blowOf(t), { improved: imp ? 4 : 0 }), r = opposed(c.mine, c.theirs);
+    if (r.won) {
+      if (a.kind === 'human' && a.weapon === 'fists') { const k = t.weapon; t.weapon = 'fists'; t.unloaded = false; a.weapon = k; logF(f, `${a.name} wrenches the ${WEAPONS[k].name.toLowerCase()} out of ${t.name}'s hands and keeps it (${r.x} vs ${r.y}).`); }
+      else { const k = dropWeapon(f, t); logF(f, `${a.name} knocks the ${WEAPONS[k].name.toLowerCase()} out of ${t.name}'s hands (${r.x} vs ${r.y}).`); }
+      return true;
+    }
+    logF(f, `${t.name} keeps hold of their weapon (${r.x} vs ${r.y}).`);
+    if (a.kind === 'human' && a.weapon !== 'fists' && conscious(t)) { const b = S.disarmBackChecks(mview(a), blowOf(a), mview(t), blowOf(t)), r2 = opposed(b.back, b.keep); if (r2.won) { const k = dropWeapon(f, a); logF(f, `${t.name} disarms ${a.name} back: the ${WEAPONS[k].name.toLowerCase()} falls (${r2.x} vs ${r2.y}).`); } }
+  }
+  // bull rush: it provokes from all who threaten you; won, the foe is pushed 5 ft and 5 more for each 5 you beat it by
+  function rushAt(f, a, t) {
+    const S = globalThis.SRD, A = mview(a), B = mview(t);
+    if (S.tooBigFor(A, B)) return logF(f, `${a.name} can't shove ${t.name}: too big.`);
+    if (!hasFeat(a, 'Improved Bull Rush') && threatened(f, a).length) { provoke(f, a); if (!conscious(a)) return; }
+    const c = S.bullRushChecks(A, B, { charging: !!a.charged }), r = opposed(c.mine, c.theirs);
+    if (r.won) { const ft = S.pushOf(r.x, r.y); moveAway(t, a, ft * 0.3048); moveToward(a, t, ft * 0.3048, 1.5); logF(f, `${a.name} shoves ${t.name} back ${ft} ft (${r.x} vs ${r.y}).`); }
+    else { moveAway(a, t, 1.524); logF(f, `${t.name} stands firm against ${a.name}'s shove (${r.x} vs ${r.y}).`); }
+  }
+  // the grapple: a touch, then the opposed grapple check; the hold deals an unarmed strike (lethal at -4, a monk's free)
+  const gmod = q => globalThis.SRD.grappleModOf(mview(q), hasFeat(q, 'Improved Grapple') ? 4 : 0);
+  function breakHold(p) { for (const q of [body(p.holding), body(p.heldBy)]) if (q) { if (q.heldBy === p.id) q.heldBy = null; if (q.holding === p.id) q.holding = null; } p.holding = null; p.heldBy = null; }
+  function holdCheck(f, p) { for (const k of ['holding', 'heldBy']) if (p[k]) { const q = body(p[k]); if (!q || !q.alive || !conscious(q) || !conscious(p) || !f.sides.has(q.id) || dist2(p, q) > 2.5) breakHold(p); } }
+  function holdBlow(f, a, t, c) {
+    const S = globalThis.SRD, hd = S.holdDiceOf(mview(a), f.mode.get(a.id) === 'lethal'), dmg = Math.max(1, S.roll(hd.dice).total + mod(abilOf(a).str));
+    hurt(t, dmg, !hd.lethal, a); return `${dmg}${hd.lethal ? '' : ' nonlethal'}`;
+  }
+  function grappleAt(f, a, t) {
+    const S = globalThis.SRD, A = mview(a), B = mview(t);
+    if (!hasFeat(a, 'Improved Grapple') && !freeSwing(f, t, a, `lunges to grab ${t.name}`)) return;
+    const r = srdAttack(f, a, t, { touch: true });
+    if (!r.hit) return logF(f, `${a.name} grabs at ${t.name}: ${r.line}`);
+    if (S.tooBigFor(A, B)) return logF(f, `${a.name} gets hold of ${t.name}, who is far too big to hold.`);
+    const hd = S.holdDiceOf(A, f.mode.get(a.id) === 'lethal'), c = opposed(gmod(a) + hd.check, gmod(t));
+    if (!c.won) return logF(f, `${t.name} twists out of ${a.name}'s grab (${c.x} vs ${c.y}).`);
+    a.holding = t.id; t.heldBy = a.id;
+    const n = holdBlow(f, a, t); logF(f, `${a.name} gets ${t.name} in a hold (${c.x} vs ${c.y}) and hurts them for ${n}. ${status(t)}`);
+  }
+  function squeezeAt(f, a, t) {
+    const hd = globalThis.SRD.holdDiceOf(mview(a), f.mode.get(a.id) === 'lethal'), c = opposed(gmod(a) + hd.check, gmod(t));
+    if (!c.won) return logF(f, `${a.name} strains against ${t.name} in the hold (${c.x} vs ${c.y}).`);
+    const n = holdBlow(f, a, t); logF(f, `${a.name} hurts ${t.name} in the hold for ${n} (${c.x} vs ${c.y}). ${status(t)}`);
+  }
+  function escapeFrom(f, a, t) {
+    const e = globalThis.SRD.escapeCheckOf(gmod(a), a.kind === 'human' ? (a.skills?.escape ?? -99) : -99), c = opposed(e.mod, gmod(t));
+    if (c.won) { breakHold(a); logF(f, `${a.name} ${e.ea ? 'wriggles' : 'breaks'} free of ${t.name} (${c.x} vs ${c.y}).`); } else logF(f, `${a.name} can't get free of ${t.name} (${c.x} vs ${c.y}).`);
+  }
+  // the feint (SRD; LoH feintChecksOf): Bluff against Sense Motive and base attack; -4 against a beast, -8 against an animal's
+  // wits; won, the next melee swing it bought finds the foe without its Dexterity
+  function feintAt(f, a, t) {
+    const B = mview(t), c = globalThis.SRD.feintChecksOf(B, { bluff: a.skills?.bluff || 0, sense: t.kind === 'human' ? t.skills.sense : (t.skills?.spot || 0) });
+    if (c.impossible) return logF(f, `${t.name} can't be fooled by a feint.`);
+    const r = opposed(c.mine, c.theirs);
+    if (r.won) { t.feinted = { by: a.id, round: f.round }; logF(f, `${a.name} feints; ${t.name} drops their guard for the next blow (${r.x} vs ${r.y}).`); }
+    else logF(f, `${t.name} sees through ${a.name}'s feint (${r.x} vs ${r.y}).`);
+  }
+
+  // what a body may do now, by these rules: prone (stand up, no bow, no moving), the hold (only the hold's acts and a light
+  // blade or bare hands at the one held), a fist can't finish, no shot through a wall, the maneuvers, a dropped weapon,
+  // backing off; disabled bodies take no full-round action
+  function lohActs(f, p, acts, tn) {
+    if (!srdOn()) return;
+    holdCheck(f, p);
+    const S = globalThis.SRD, foes = foesOf(f, p), adj = foes.filter(q => dist2(q, p) <= 2.1), w = p.kind === 'human' ? (WEAPONS[p.weapon] || {}) : { melee: true };
+    const shot = a => (a.id === 'attack' && w.range) || a.id === 'throw';
+    let keep = acts;
+    const held = p.heldBy || p.holding;
+    if (held) {
+      const other = body(held), light = p.kind !== 'human' || LIGHT.has(p.weapon);
+      keep = acts.filter(a => ['mode', 'surrender', 'end', 'shout'].includes(a.id) || (a.id === 'attack' && a.target === held && light && !w.range));
+      if (tn.standard) { keep.unshift({ id: 'squeeze', target: held, label: `Grapple ${other.name} (hurt them)`, cost: 'standard' }); if (p.heldBy) keep.unshift({ id: 'escape', target: held, label: `Break free of ${other.name}`, cost: 'standard' }); }
+      if (p.holding) keep.push({ id: 'release', target: held, label: `Let go of ${other.name}`, cost: 'free' });
+    } else {
+      if (p.prone) { keep = acts.filter(a => !['move', 'charge', 'run', 'withdraw', 'step'].includes(a.id) && !(shot(a) && !w.reload)); if (tn.move) keep.unshift({ id: 'stand', label: 'Stand up (provokes)', cost: 'move' }); }
+      keep = keep.filter(a => !(a.id === 'coup' && p.kind === 'human' && p.weapon === 'fists' && !clvl(p, 'monk')));   // a bare fist finishes nobody
+      keep = keep.filter(a => !shot(a) || !coverOf(p, body(a.target))?.total);
+      if (tn.standard && !p.prone && p.kind === 'human') for (const q of adj) {
+        const A = mview(p), B = mview(q), small = !S.tooBigFor(A, B);
+        if (small && !q.prone) keep.push({ id: 'trip', target: q.id, label: `Trip ${q.name}`, cost: 'standard' });
+        if (q.kind === 'human' && q.weapon !== 'fists' && !w.range) keep.push({ id: 'disarm', target: q.id, label: `Disarm ${q.name}`, cost: 'standard' });
+        if (small && !q.heldBy && !q.holding) keep.push({ id: 'grapple', target: q.id, label: `Grapple ${q.name}`, cost: 'standard' });
+        if (small) keep.push({ id: 'rush', target: q.id, label: `Bull rush ${q.name}`, cost: 'standard' });
+      }
+      if (tn.move && !p.prone && p.kind === 'human') for (const g of (f.dropped || [])) if (dist2(g, p) <= 2.5) keep.push({ id: 'pickup', target: g.k, label: `Pick up the ${WEAPONS[g.k].name.toLowerCase()}`, cost: 'move' });
+      if (tn.move && !p.prone && foes.length) keep.push({ id: 'back', label: 'Back away (move)', cost: 'move' });
+    }
+    if (isDisabled(p)) keep = keep.filter(a => a.cost !== 'full');
+    const out = keep.slice(); acts.length = 0; acts.push(...out);
+  }
+  function lohAct(f, p, a, t, spend) {
+    switch (a.id) {
+      case 'trip': lohSaw(f, p, 'melee', t); tripAt(f, p, t); spend('standard'); return true;
+      case 'disarm': lohSaw(f, p, 'melee', t); disarmAt(f, p, t); spend('standard'); return true;
+      case 'rush': lohSaw(f, p, 'melee', t); rushAt(f, p, t); spend('standard'); return true;
+      case 'grapple': lohSaw(f, p, 'melee', t); grappleAt(f, p, t); spend('standard'); return true;
+      case 'squeeze': lohSaw(f, p, 'melee', t); squeezeAt(f, p, t); spend('standard'); return true;
+      case 'escape': escapeFrom(f, p, t); spend('standard'); return true;
+      case 'release': logF(f, `${p.name} lets go of ${t?.name || 'their hold'}.`); breakHold(p); return true;
+      case 'stand': if (threatened(f, p).length) provoke(f, p); if (p.alive) { globalThis.SRD.standUp(p); logF(f, `${p.name} gets back up.`); } spend('move'); return true;
+      case 'pickup': { const g = (f.dropped || []).find(x => x.k === a.target && dist2(x, p) <= 2.5); if (g) { if (threatened(f, p).length) provoke(f, p); f.dropped.splice(f.dropped.indexOf(g), 1); if (p.weapon !== 'fists') p.items[p.weapon] = (p.items[p.weapon] || 0) + 1; p.weapon = g.k; if (g.owner !== p.id) { const o = body(g.owner); if (o && o.kind === 'human') deed('theft', p, o, o); } logF(f, `${p.name} snatches up the ${WEAPONS[g.k].name.toLowerCase()}.`); } spend('move'); return true; }
+      case 'back': { const foe = foesOf(f, p).sort((x, y) => dist2(p, x) - dist2(p, y))[0]; if (threatened(f, p).length) provoke(f, p); if (foe && conscious(p)) moveAway(p, foe, SPEED(p)); logF(f, `${p.name} backs away.`); spend('move'); return true; }
+    }
+    return false;
+  }
+
+  // A SMART BODY'S FIRST THOUGHTS, before the script's (or the fight net's) choice: get up, deal with a hold, a disabled
+  // body doesn't swing, drink before it's too late, keep a dying friend alive, pick a dropped weapon back up
+  function lohSmart(f, p, acts, hpFrac, tr) {
+    if (!srdOn()) return false;
+    const find = id => acts.find(a => a.id === id);
+    if (p.prone && find('stand')) { act(f, p, find('stand')); if (conscious(p) && !p.prone && p.turnLeft?.standard) npcTurn(f, p); return true; }
+    if (p.heldBy || p.holding) return holdTurn(f, p, acts, hpFrac);
+    if (p.kind !== 'human') return false;
+    const thr = threatened(f, p).length;
+    if (isDisabled(p)) { const dr = find('drink'), b = find('back'); if (dr) act(f, p, dr); else if (b && thr) act(f, p, b); else act(f, p, { id: 'end' }); return true; }
+    if (find('drink') && hpFrac < 0.35 && thr < 2) { act(f, p, find('drink')); return true; }
+    const st = acts.find(a => a.id === 'stabilize'); if (st && !thr && (p.skills.heal >= 2 || (tr.loyalty || 0) > 0.55)) { act(f, p, st); return true; }
+    const pk = find('pickup'); if (pk && p.weapon === 'fists') { act(f, p, pk); if (conscious(p) && p.turnLeft?.standard) npcTurn(f, p); return true; }
+    return false;
+  }
+  function holdTurn(f, p, acts, hpFrac) {
+    const find = id => acts.find(a => a.id === id), other = body(p.heldBy || p.holding);
+    if (!other) return false;
+    if (p.heldBy) {
+      const e = globalThis.SRD.escapeCheckOf(gmod(p), p.kind === 'human' ? (p.skills?.escape ?? -99) : -99), odds = pBeat(e.mod, gmod(other));
+      const hit = acts.find(a => a.id === 'attack' && a.target === other.id);
+      if (find('escape') && (odds > 0.4 || hpFrac < 0.5 || !hit)) return act(f, p, find('escape')), true;
+      if (hit) return act(f, p, hit), true;
+    } else if (hpFrac < 0.3 && p.kind === 'human' && find('release')) { act(f, p, find('release')); npcTurn(f, p); return true; }
+    const sq = find('squeeze'), hit = acts.find(a => a.id === 'attack' && a.target === other.id);
+    if (hit && (p.kind !== 'human' || p.weapon !== 'fists')) return act(f, p, hit), true;
+    if (sq) return act(f, p, sq), true;
+    return false;
+  }
+  // a maneuver over a plain swing, when LoH's own sums say it's likely to work and worth the free swing it may cost
+  function pickManeuver(f, p, acts, t) {
+    if (!srdOn() || !t || dist2(p, t) > 2.1 || WEAPONS[p.weapon]?.range) return null;
+    const S = globalThis.SRD, A = mview(p), B = mview(t), find = id => acts.find(a => a.id === id && a.target === t.id);
+    const allies = f.order.map(body).filter(q => q && q !== p && conscious(q) && f.sides.get(q.id) === f.sides.get(p.id) && dist2(q, t) <= 2.1).length;
+    const risky = threatens(t) && t.aooUsed !== f.round;
+    const touch = pHit(A.bab + A.strMod, touchAc(t));
+    const tr = find('trip'); if (tr) { const c = S.tripChecks(A, B, { atk: hasFeat(p, 'Improved Trip') ? 4 : 0 }), pr = touch * pBeat(c.mine, c.theirs); if (pr > (risky && !hasFeat(p, 'Improved Trip') ? 0.7 : 0.5) && (allies || t.kind === 'animal')) return tr; }
+    const da = find('disarm'); if (da && avgDmg(t.weapon) >= 4.5) { const c = S.disarmChecks(A, blowOf(p), B, blowOf(t)), pr = pBeat(c.mine, c.theirs); if (pr > (risky && !hasFeat(p, 'Improved Disarm') ? 0.72 : 0.55)) return da; }
+    const gr = find('grapple'); if (gr && ((t.missiles || 0) + (t.rays || 0) > 0)) { const pr = touch * pBeat(gmod(p), gmod(t)); if (pr > 0.5) return gr; }
+    return null;
+  }
+  sim.pickManeuver = pickManeuver;
+
+  // ---- LoH's FIGHT DOSSIERS (battle/learn.js + battle/profile.js): the same twenty numbers at a turn's start, the same
+  // seven acts at its end, filed per name (every wolf in one file, as LoH pools generic names) --------------------------
+  const lohName = q => !q ? 'something' : q.id === 'player' ? 'Rose' : q.kind === 'animal' ? (q.monster || q.game ? q.name : q.owner ? 'Companion ' + q.species : q.species) : fullName(q);
+  sim.lohName = lohName;
+  function dossier(q) { const D = (sim.dossiers ||= {}), n = lohName(q); return D[n] ||= (globalThis.SRD?.blankBrain ? globalThis.SRD.blankBrain() : { profile: null, recs: [], lastAct: -1 }); }
+  const hpf = q => q && q.alive ? Math.max(0, q.hp) / (q.maxhp || 1) : 0;
+  function nearestFoeOf(f, p) { let best = null, bd = Infinity; for (const q of foesOf(f, p)) { const dd = dist2(q, p); if (dd < bd) { bd = dd; best = q; } } return best ? { foe: best, ft: bd / 0.3048 } : null; }
+  function flankedNow(f, p) { const th = threatened(f, p); for (let i = 0; i < th.length; i++) for (let j = i + 1; j < th.length; j++) { const ax = th[i].x - p.x, az = th[i].z - p.z, bx = th[j].x - p.x, bz = th[j].z - p.z; if ((ax * bx + az * bz) / ((Math.hypot(ax, az) * Math.hypot(bx, bz)) || 1) < -0.5) return true; } return false; }
+  function quarterOf(p, foe) { let rel = Math.atan2(p.x - foe.x, p.z - foe.z) - (foe.yaw || 0); while (rel > Math.PI) rel -= Math.PI * 2; while (rel < -Math.PI) rel += Math.PI * 2; const a = Math.abs(rel); return a < Math.PI / 4 ? 3 : a > 3 * Math.PI / 4 ? 0 : rel > 0 ? 1 : 2; }
+  // the twenty numbers, in LoH's order and meaning (battle/learn.js features)
+  function lohFeatures(f, p, near, lastAct) {
+    const inp = new Array(20).fill(0), foe = near?.foe;
+    inp[0] = Math.min(1, (near ? near.ft : 60) / 60);
+    inp[1] = p.maxhp > 0 ? Math.max(0, p.hp / p.maxhp) : 1;
+    inp[2] = foe && foe.maxhp > 0 ? Math.max(0, foe.hp / foe.maxhp) : 0;
+    inp[3] = threatened(f, p).length ? 1 : 0;
+    inp[4] = foe && threatens(p) && dist2(foe, p) <= 2.1 ? 1 : 0;
+    inp[5] = foe && coverOf(p, foe) ? 1 : 0;
+    inp[6] = foe && coverOf(foe, p) ? 1 : 0;
+    inp[7] = flankedNow(f, p) ? 1 : 0;
+    inp[8] = p.kind === 'human' && WEAPONS[p.weapon]?.range ? 1 : 0;
+    inp[9] = Math.min(1, ((p.cures || 0) + (p.missiles || 0) + (p.rays || 0)) / 6);
+    inp[10] = Math.min(1, (f.round || 1) / 10);
+    if (lastAct >= 0 && lastAct <= 6) inp[11 + lastAct] = 1;
+    inp[18] = Math.min(1, (p.kind === 'animal' ? p.ac : acOf(p)) / 25);
+    inp[19] = p.prone ? 1 : 0;
+    return inp;
+  }
+  sim.lohFeatures = (f, p) => lohFeatures(f, p, nearestFoeOf(f, p), dossier(p).lastAct);
+  // the turn before is judged when the body's next turn comes (or the fight ends): the hp it took off the foe it faced,
+  // less the hp it lost meanwhile
+  function settleLoh(f, p) { const row = f.lohLast?.[p.id]; if (!row || row.r != null) return; row.r = +((row.foeHp0 - hpf(body(row.foe))) - (row.hp0 - hpf(p))).toFixed(3); }
+  function lohStart(f, p) {
+    holdCheck(f, p);
+    const near = nearestFoeOf(f, p), b = dossier(p);
+    if (!(f.lohSeen ||= new Set()).has(p.id)) { f.lohSeen.add(p.id); if (b.profile && globalThis.SRD?.noteFight) globalThis.SRD.noteFight(b); }
+    settleLoh(f, p);
+    (f.watch ||= new Map()).set(p.id, { startFt: near ? near.ft : null, foe: near?.foe.id || null, hp0: hpf(p), foeHp0: near ? hpf(near.foe) : 0, inp: lohFeatures(f, p, near, b.lastAct), melee: 0, ranged: 0, spell: null, atkFt: 0, atkN: 0 });
+  }
+  function lohSaw(f, p, kind, t) { const o = f.watch?.get(p.id); if (!o) return; if (kind === 'cast') { o.spell = { name: 'a spell' }; return; } o[kind]++; if (t) { o.atkFt += dist2(p, t) / 0.3048; o.atkN++; } }
+  function lohEnd(f, p) {
+    const o = f.watch?.get(p.id); if (!o) return; f.watch.delete(p.id);
+    for (const q of f.order.map(body)) if (q?.feinted && q.feinted.by === p.id && q.feinted.round < f.round) q.feinted = null;   // a feint lasts to the end of the feinter's next turn
+    const near = nearestFoeOf(f, p), endFt = near ? near.ft : o.startFt;
+    let mv = 1; if (o.startFt != null && endFt != null) { const dd = o.startFt - endFt; if (dd > 2) mv = 0; else if (dd < -2) mv = 2; }
+    const act = o.spell ? 3 : o.ranged ? 2 : o.melee ? (mv === 0 ? 0 : 1) : mv === 0 ? 4 : mv === 2 ? 5 : 6;
+    const foe = body(o.foe), b = dossier(p);
+    const t = { act, mv, dist: +(((o.startFt ?? endFt) || 0)).toFixed(1), atkDist: o.atkN ? +(o.atkFt / o.atkN).toFixed(1) : null, cover: !!(foe && coverOf(foe, p)), threatened: o.inp[3] === 1, flanked: o.inp[7] === 1,
+      angle: foe ? quarterOf(p, foe) : -1, hp: p.hp, maxHp: p.maxhp, weapon: p.kind === 'animal' ? (p.attackName || 'bite') : (WEAPONS[p.weapon]?.name || null), spell: o.spell, inp: o.inp };
+    if (b.profile && globalThis.SRD?.noteTurn) globalThis.SRD.noteTurn(b, t); else b.lastAct = act;
+    const row = { type: 'loh_turn', fight: f.id, day: sim.day, who: lohName(p), id: p.id, kind: p.kind, role: p.kind === 'human' ? (p.job || 'none') : p.species, player: p.brain === 'human', net: o.net ?? null,
+      ...t, hp0: +o.hp0.toFixed(3), foe: o.foe, foeHp0: +o.foeHp0.toFixed(3), r: null, outcome: null };
+    (f.lohRows ||= []).push(row); (f.lohLast ||= {})[p.id] = row;
+  }
+  function lohFightEnd(f, winnerSide) {
+    for (const id of f.order) { const q = body(id); if (q) settleLoh(f, q); }
+    const outcome = q => !q || !q.alive ? -1 : !conscious(q) ? -0.6 : q.surrendered ? -0.4 : (q.fled || 0) >= 2 ? -0.1 : f.sides.get(q.id) === winnerSide ? 1 : -0.2;
+    for (const r of f.lohRows || []) { r.outcome = outcome(body(r.id)); dataRow(r); }
+    for (const id of f.order) { const q = body(id); if (!q || (q.alive && conscious(q))) continue; const by = body(q.lastHurtBy || q.hurtBy), b = dossier(q); if (b.profile && globalThis.SRD?.noteDefeat) globalThis.SRD.noteDefeat(b, lohName(by)); dataRow({ type: 'loh_defeat', fight: f.id, day: sim.day, who: lohName(q), by: lohName(by) }); }
+    // the ground: a weapon knocked loose goes back to its owner; holds, falls and feints end with the fight
+    for (const g of f.dropped || []) { const o = sim.people[g.owner]; if (o && o.alive) { if (o.weapon === 'fists') o.weapon = g.k; else o.items[g.k] = (o.items[g.k] || 0) + 1; } }
+    f.dropped = [];
+    for (const id of f.order) { const q = body(id); if (q) { q.prone = false; q.heldBy = null; q.holding = null; q.feinted = null; } }
+  }
+
+  // THE FIGHT NET'S TURN (town/fightnet.js, trained by train_fight.mjs): it picks one of LoH's seven acts from the twenty
+  // numbers; Hollow Town turns the act into this turn's actions
+  function netTurn(f, p, acts, foes) {
+    const o = f.watch?.get(p.id), near = nearestFoeOf(f, p); if (!o || !near) return false;
+    const w = WEAPONS[p.weapon] || {}, find = id => acts.find(a => a.id === id), weakest = l => l.sort((x, y) => body(x.target).hp - body(y.target).hp)[0];
+    const melee = acts.filter(a => a.id === 'attack' && !w.range), shots = acts.filter(a => (a.id === 'attack' && w.range) || a.id === 'throw');
+    const canCast = (p.cures || 0) + (p.missiles || 0) + (p.rays || 0) + (p.layPool || 0) > 0;
+    const mask = [!w.range && !!(find('charge') || find('move')), melee.length > 0, shots.length > 0, canCast, !!find('move'), !!(find('back') || find('withdraw') || find('step') || find('run')), true];
+    const pr = sim.fightNet.decide(o.inp, mask); let k = 0; for (let i = 1; i < 7; i++) if (pr[i] > pr[k]) k = i;
+    if (sim.fightNetSample) { let u = Math.random(); for (let i = 0; i < 7; i++) { u -= pr[i]; if (u <= 0) { k = i; break; } } }
+    o.net = k; (sim.netStats ||= { turns: 0, acts: [0, 0, 0, 0, 0, 0, 0] }).turns++; sim.netStats.acts[k]++;
+    switch (k) {
+      case 0: { const ch = find('charge'); if (ch) return act(f, p, ch), true; const mv = find('move'); if (mv) { act(f, p, mv); const a2 = legalActions(f, p).filter(a => a.id === 'attack'); if (a2.length) act(f, p, weakest(a2)); return true; } break; }
+      case 1: { const t = body(weakest(melee).target), m = pickManeuver(f, p, acts, t); return act(f, p, m || weakest(melee)), true; }
+      case 2: return act(f, p, weakest(shots)), true;
+      case 3: if (castTurn(f, p, foes)) { lohSaw(f, p, 'cast'); return true; } break;
+      case 4: { const mates = f.order.map(body).filter(q => q && q !== p && conscious(q) && f.sides.get(q.id) === f.sides.get(p.id)); const mv = acts.filter(a => a.id === 'move').sort((x, y) => mates.filter(q => dist2(q, body(y.target)) <= 2.1).length - mates.filter(q => dist2(q, body(x.target)) <= 2.1).length)[0]; if (mv) return act(f, p, mv), true; break; }
+      case 5: { const b = find('withdraw') || find('back') || find('step') || find('run'); if (b) return act(f, p, b), true; break; }
+      case 6: { const dr = find('drink'); if (dr && hpf(p) < 0.6) return act(f, p, dr), true; const st = find('stabilize'); if (st) return act(f, p, st), true; const df = find('defend'); if (df) return act(f, p, df), true; break; }
+    }
+    return false;
+  }
   function startFight(a, b, o = {}) {
     if (!conscious(a) || !b.alive) return null;
     let f = sim.fights.find(f => f.sides.has(a.id) || f.sides.has(b.id));
@@ -3050,6 +3381,7 @@ function Sim(opts = {}) {
     if (a.kind === 'human' && !o.cleave && hasFeat(a, 'Cleave') && !WEAPONS[a.weapon]?.range && !conscious(t) && a.cleaveAt !== f.id + ':' + f.round) { const t2 = foesOf(f, a).find(q => dist2(q, a) <= 2.1); if (t2) { a.cleaveAt = f.id + ':' + f.round; logF(f, `${a.name} cleaves on into ${t2.name}!`); attack1(f, a, t2, { ...o, cleave: true }); } }
   }
   function attack1(f, a, t, o = {}) {
+    if (!o.aoo) lohSaw(f, a, o.stone || (a.kind === 'human' && WEAPONS[a.weapon]?.range && !o.bash) ? 'ranged' : 'melee', t);
     const w = a.kind === 'animal' ? { name: a.attackName || 'bite', dmg: a.bite, crit: [20, 2], melee: true } : weaponOf(a);
     const mode = o.mode || f.mode.get(a.id) || 'lethal';
     const ranged = !!w.range && !o.bash && !o.stone;
@@ -3070,7 +3402,9 @@ function Sim(opts = {}) {
       if (!r.hit) return logF(f, r.line);
       hurt(t, r.dmg, r.nonlethal, a);
       if (a.kind === 'animal' && t.kind === 'human' && t.alive && Math.random() < 0.3) expose(t, ({ bear: 'redache', boar: 'redache', direwolf: 'chills', ogre: 'demon' })[a.species] || 'filth', 'a ' + String(a.name).toLowerCase() + ' bite');
-      return logF(f, `${r.line}${r.nonlethal ? ' (nonlethal)' : ''} ${status(t)}`);
+      logF(f, `${r.line}${r.nonlethal ? ' (nonlethal)' : ''} ${status(t)}`);
+      if (wolfish(a) && t.alive && conscious(t) && !t.prone && !o.aoo) tripAt(f, a, t, { free: true });   // the SRD wolf: a bite that hits may trip, free
+      return;
     }
     if (ranged && w.ammo) { if (!(a.items[w.ammo] > 0)) return logF(f, `${a.name} has nothing left to shoot.`); if (w.reload && a.unloaded) return logF(f, `${a.name}'s crossbow isn't loaded.`); a.items[w.ammo]--; if (w.reload) a.unloaded = true; }
     if (!ranged && dist2(a, t) > 2.1) return logF(f, `${a.name} can't reach ${t.name}.`);
@@ -3143,6 +3477,7 @@ function Sim(opts = {}) {
     if (nonlethal) { const real = Math.min(dmg, Math.max(0, t.hp)); t.hp -= real; t.nl += real; t.lastHurtBy = by?.id; if (t.hp <= 0 && !t.down) { t.down = 'out'; t.downUntil = sim.t + 30 + dmg * 6; } return; }
     t.hp -= dmg;
     t.lastHurtBy = by?.id;
+    if (srdOn() && t.kind === 'human' && t.brain !== 'human') return lohFall(t, dmg, by);
     if (t.hp <= -10 && by?.monster) by.kills = (by.kills || 0) + 1;
     if (t.hp <= -10) { if (t.brain === 'human') { t.hp = 0; t.down = 'out'; t.downUntil = sim.t + 30; } else die(t, by, 'killed in a fight'); }
     else if (t.hp <= 0) { if (t.brain === 'human') { t.down = 'out'; t.downUntil = sim.t + 30; } else { t.dying = t.hp < 0; t.down = 'dying'; } }
@@ -3170,7 +3505,7 @@ function Sim(opts = {}) {
       if (tn.move && tn.standard) for (const q of foes) { const dd = dist2(q, p); if (dd > 3 && dd <= SPEED(p) * 2 && w.melee) acts.push({ id: 'charge', target: q.id, label: `Charge ${q.name}`, cost: 'full' }); }
       acts.push({ id: 'defend', label: 'Total defence (+4 AC)', cost: 'standard' });
       if (p.kind === 'human') for (const q of foes.filter(q => q.kind === 'human' && dist2(q, p) < 9)) acts.push({ id: 'demoralize', target: q.id, label: `Intimidate ${q.name}`, cost: 'standard' });
-      if (p.kind === 'human') for (const q of adj.filter(q => q.kind === 'human')) acts.push({ id: 'feint', target: q.id, label: `Feint ${q.name} (Bluff)`, cost: 'standard' });
+      if (p.kind === 'human') for (const q of adj.filter(q => q.kind === 'human' || srdOn())) acts.push({ id: 'feint', target: q.id, label: `Feint ${q.name} (Bluff)`, cost: 'standard' });
       if (p.kind === 'human' && p.items.cure) acts.push({ id: 'drink', label: 'Drink a healing draught', cost: 'standard' });
       for (const q of f.order.map(body).filter(q => q && q.dying && f.sides.get(q.id) === f.sides.get(p.id) && dist2(q, p) <= 2.1)) acts.push({ id: 'stabilize', target: q.id, label: `Stabilize ${q.name} (Heal DC 15)`, cost: 'standard' });
       if (p.kind === 'human' || p.monster) for (const q of helpless) acts.push({ id: 'coup', target: q.id, label: `Coup de grace on ${q.name} (kills)`, cost: 'full' });
@@ -3186,24 +3521,26 @@ function Sim(opts = {}) {
     if (p.kind === 'human') acts.push({ id: 'mode', label: `Switch to ${f.mode.get(p.id) === 'lethal' ? 'nonlethal' : 'lethal'} blows`, cost: 'free' });
     if (p.kind === 'human') acts.push({ id: 'surrender', label: 'Surrender', cost: 'free' });
     acts.push({ id: 'end', label: 'End turn', cost: 'free' });
+    lohActs(f, p, acts, tn);
     return acts;
   }
   sim.legalActions = legalActions;
   function act(f, p, a) {
     const tn = p.turnLeft; const t = a.target ? body(a.target) : null;
     const spend = c => { if (c === 'full') { tn.standard = 0; tn.move = 0; tn.step = 0; } else if (c === 'standard') tn.standard = 0; else if (c === 'move') { tn.move = 0; tn.step = 0; } else if (c === 'swift') tn.swift = 0; else if (c === 'step') { tn.step = 0; tn.moved = true; } };
+    if (lohAct(f, p, a, t, spend)) return lohAfter(f, p, a);
     switch (a.id) {
       case 'attack': attack(f, p, t); spend('standard'); break;
       case 'throw': if (p.items.stones > 0) { p.items.stones--; attack(f, p, t, { stone: true }); } spend('standard'); break;
       case 'reload': p.unloaded = false; logF(f, `${p.name} reloads.`); spend(a.cost); break;
       case 'bash': { const keep = p.weapon; p.weapon = 'club'; attack(f, p, t); p.weapon = keep; spend('standard'); break; }
-      case 'charge': { moveToward(p, t, SPEED(p) * 2, 1.6); provoke(f, p); p.charged = true; attack(f, p, t, { charge: true }); spend('full'); break; }
+      case 'charge': { if (threatened(f, p).length) provoke(f, p); if (!conscious(p)) { spend('full'); break; } moveToward(p, t, SPEED(p) * 2, 1.6); p.charged = true; attack(f, p, t, { charge: true }); spend('full'); break; }
       case 'move': { if (threatened(f, p).length) provoke(f, p); moveToward(p, t, SPEED(p), 1.6); spend('move'); break; }
       case 'step': { const foe = foesOf(f, p).sort((x, y) => dist2(p, x) - dist2(p, y))[0]; if (foe) moveAway(p, foe, 1.5); spend('step'); logF(f, `${p.name} takes a 5-foot step.`); break; }
       case 'defend': p.defending = true; spend('standard'); logF(f, `${p.name} goes on total defence.`); break;
       case 'demoralize': { const r = d(20) + p.skills.intimidate, dc = 10 + t.level + mod(t.st.wis); if (r >= dc) { t.shaken = (f.round + 2); logF(f, `${p.name} intimidates ${t.name}: shaken (−2) (${r} vs ${dc}).`); } else logF(f, `${t.name} isn't impressed by ${p.name} (${r} vs ${dc}).`); spend('standard'); break; }
-      case 'feint': { const r = d(20) + p.skills.bluff, dc = d(20) + t.skills.sense + babOf(t); if (r >= dc) { t.flatfooted = true; logF(f, `${p.name} feints; ${t.name} is caught flat-footed (${r} vs ${dc}).`); } else logF(f, `${t.name} sees through ${p.name}'s feint.`); spend('standard'); break; }
-      case 'drink': { if (threatened(f, p).length) provoke(f, p); p.items.cure--; const h = roll(1, 8) + 1; p.hp = Math.min(p.maxhp, p.hp + h); logF(f, `${p.name} drinks a draught (+${h} hp).`); spend('standard'); break; }
+      case 'feint': { if (srdOn()) { feintAt(f, p, t); spend('standard'); break; } const r = d(20) + p.skills.bluff, dc = d(20) + t.skills.sense + babOf(t); if (r >= dc) { t.flatfooted = true; logF(f, `${p.name} feints; ${t.name} is caught flat-footed (${r} vs ${dc}).`); } else logF(f, `${t.name} sees through ${p.name}'s feint.`); spend('standard'); break; }
+      case 'drink': { if (threatened(f, p).length) provoke(f, p); p.items.cure--; const h = roll(1, 8) + 1; if (srdOn()) { const m = globalThis.SRD.mendOf({ now: p.hp, max: p.maxhp, grey: p.nl || 0 }, h); p.hp = m.now; p.nl = Math.max(0, (p.nl || 0) - m.lifted); } else p.hp = Math.min(p.maxhp, p.hp + h); if (p.hp > 0) p.disabled = false; logF(f, `${p.name} drinks a draught (+${h} hp).`); spend('standard'); break; }
       case 'stabilize': { const r = d(20) + p.skills.heal; if (r >= 15) { t.dying = false; t.down = 'out'; t.downUntil = sim.t + 120; logF(f, `${p.name} stabilizes ${t.name}.`); } else logF(f, `${p.name} fails to stop ${t.name}'s bleeding.`); spend('standard'); break; }
       case 'coup': { logF(f, p.monster ? `The ${p.name.toLowerCase()} falls on ${t.name} where they lie.` : `${p.name} delivers a coup de grace to ${t.name}.`); const w = p.kind === 'animal' ? { dmg: p.bite, crit: [20, 2] } : WEAPONS[p.weapon], dmg = roll(w.dmg[0], w.dmg[1]) * w.crit[1] + (p.kind === 'animal' ? (p.dmgBonus || 0) : mod(p.st.str)) * w.crit[1]; const save = d(20) + mod(t.st?.con ?? 10) + 1; if (t.brain === 'human') { t.hp = Math.min(t.hp, 0); t.down = 'out'; t.downUntil = sim.t + 240; logF(f, `${t.name} is left for dead.`); } else if (dmg >= t.hp + 10 || save < 10 + dmg) die(t, p, p.monster ? 'savaged' : 'coup de grace'); else hurt(t, dmg, false, p); spend('full'); break; }
       case 'rob': { const n = t.coin; pay(t, p, n); p.stats.stolen += n; deed('theft', p, t, t, { victimKnows: false }); logF(f, `${p.name} empties ${t.name}'s purse (${money(n)}).`); spend('standard'); break; }
@@ -3214,7 +3551,10 @@ function Sim(opts = {}) {
       case 'surrender': { p.surrendered = true; logF(f, `${p.name} surrenders.`); tn.standard = tn.move = tn.swift = tn.step = 0; break; }
       case 'end': tn.standard = tn.move = tn.swift = tn.step = 0; break;
     }
+    lohAfter(f, p, a);
   }
+  // a disabled body gets one move or one standard action, and a standard one costs a hit point (SRD; LoH strenuousOf)
+  function lohAfter(f, p, a) { if (!srdOn() || !isDisabled(p) || !p.turnLeft) return; if (['standard', 'full'].includes(a.cost) && !['end', 'surrender', 'mode', 'release'].includes(a.id)) strain(f, p); if (['standard', 'move', 'full'].includes(a.cost)) { const tn = p.turnLeft; tn.standard = 0; tn.move = 0; tn.step = 0; } }
   sim.act = act;
   function moveToward(p, t, maxd, stopAt) { const dd = dist2(p, t), go = Math.max(0, Math.min(maxd, dd - stopAt)); if (dd > 0) { p.x += (t.x - p.x) / dd * go; p.z += (t.z - p.z) / dd * go; p.yaw = Math.atan2(t.x - p.x, t.z - p.z); } if (!walkable(p)) { p.x -= (t.x - p.x) / dd * go * 0.5; p.z -= (t.z - p.z) / dd * go * 0.5; } }
   function moveAway(p, t, maxd) { const dx = p.x - t.x, dz = p.z - t.z, l = Math.hypot(dx, dz) || 1; for (let s = maxd; s > 0.5; s *= 0.6) { const n = P(p.x + dx / l * s, p.z + dz / l * s); if (walkable(n)) { p.x = n.x; p.z = n.z; return; } } }
@@ -3233,8 +3573,9 @@ function Sim(opts = {}) {
       q.task = null;
     }
   }
-  function healUp(q, h) { q.hp = Math.min(q.maxhp, q.hp + h); if (q.hp > 0) { q.dying = false; if (q.down) { q.down = null; q.downUntil = 0; } } }
+  function healUp(q, h) { q.hp = Math.min(q.maxhp, q.hp + h); if (q.hp > 0) { q.dying = false; q.disabled = false; q.stable = false; if (q.down) { q.down = null; q.downUntil = 0; } } else if (q.dying) { q.dying = false; q.stable = true; q.down = 'out'; q.downUntil = sim.t + 60; } else if (q.hp === 0 && q.kind === 'human' && q.down === 'dying') { q.down = null; q.disabled = true; } }
   function castTurn(f, p, foes) {
+    if (p.heldBy || p.holding) return false;   // no casting in a hold
     const side = f.sides.get(p.id), mates = f.order.map(body).filter(q => q && q.kind === 'human' && q.alive && f.sides.get(q.id) === side);
     const hurtMate = mates.filter(q => q.dying || q.hp / q.maxhp < 0.5).sort((a, b) => a.hp / a.maxhp - b.hp / b.maxhp)[0];
     if (hurtMate && p.cures > 0) { p.cures--; const h = d(8) + Math.min(5, clvl(p, 'cleric') + clvl(p, 'druid')); healUp(hurtMate, h); logF(f, `${p.name} casts cure light wounds on ${hurtMate === p ? 'themself' : hurtMate.name}: +${h} hp. ${status(hurtMate)}`); return true; }
@@ -3256,6 +3597,7 @@ function Sim(opts = {}) {
     const hpFrac = p.kind === 'animal' ? p.hp / p.maxhp : (p.hp - p.nl) / p.maxhp;
     if (p.kind === 'animal' && (p.livestock || p.game && (GAME[p.species].flees || hpFrac < 0.3) || !p.monster && !p.owner && hpFrac < 0.5)) { const run = acts.find(a => a.id === 'run') || acts.find(a => a.id === 'withdraw'); if (run && !p.flatfooted) return act(f, p, run); }
     if (p.monster) { const c = acts.find(a => a.id === 'coup'); if (c && Math.random() < 0.5) return act(f, p, c); }   // a beast often finishes the fallen first
+    if (lohSmart(f, p, acts, hpFrac, tr)) return;
     const fs = p.fightStyle;
     if (p.kind === 'human' && fs && fs.fleeBelow != null) { if (hpFrac < fs.fleeBelow) { const run = acts.find(a => a.id === 'withdraw') || acts.find(a => a.id === 'run'); if (run) return act(f, p, run); } }
     else if (p.kind === 'human' && hpFrac < 0.35 && tr.caution > 0.3) { const run = acts.find(a => a.id === 'withdraw') || acts.find(a => a.id === 'run'); if (run) return act(f, p, run); }
@@ -3265,9 +3607,11 @@ function Sim(opts = {}) {
     const rob = acts.find(a => a.id === 'rob' && body(a.target).coin > 0);
     if (rob && tr.greed > 0.6 && tr.honesty < 0.5) return act(f, p, rob);
     if (p.kind === 'human' && !p.shoutedIn?.[f.id] && acts.some(a => a.id === 'shout') && (p.fightStyle?.shout ?? (Math.random() < 0.3 + tr.caution * 0.5 - tr.aggression * 0.3)) && (f.why !== 'arrest' && f.why !== 'resisting arrest') && !isGuard(p) && hpFrac < 0.9) { (p.shoutedIn ||= {})[f.id] = 1; act(f, p, acts.find(a => a.id === 'shout')); }
-    if (p.kind === 'human' && castTurn(f, p, foes)) return;
+    if (p.kind === 'human' && sim.fightMode === 'net' && sim.fightNet && p.brain === 'script' && netTurn(f, p, acts, foes)) return;
+    if (p.kind === 'human' && castTurn(f, p, foes)) { lohSaw(f, p, 'cast'); return; }
     const rl = acts.find(a => a.id === 'reload'); if (rl && !acts.some(a => a.id === 'attack')) return act(f, p, rl);
     const atk = acts.filter(a => a.id === 'attack').sort((x, y) => (body(x.target).hp - body(x.target).nl) - (body(y.target).hp - body(y.target).nl))[0];
+    if (atk && p.kind === 'human') { const m = pickManeuver(f, p, acts, body(atk.target)); if (m) return act(f, p, m); }
     if (atk) { if (p.turnLeft.move && Math.random() < 0.15 && acts.find(a => a.id === 'demoralize')) act(f, p, acts.find(a => a.id === 'demoralize' && a.target === atk.target) || atk); return act(f, p, atk); }
     { const th = acts.find(a => a.id === 'throw'); if (th && (WEAPONS[p.weapon]?.weak || WEAPONS[p.weapon]?.range) && dist2(body(th.target), p) > 2.1 && (tr.caution > 0.4 || threatens(body(th.target)) && !fistArmed(p))) return act(f, p, th); }   // the unarmed keep their distance and throw
     const charge = acts.find(a => a.id === 'charge'); if (charge && p.kind === 'human' && tr.aggression > 0.4) return act(f, p, charge);
@@ -3281,14 +3625,16 @@ function Sim(opts = {}) {
     const p = body(f.order[f.turn]);
     if (!p || !p.alive || !conscious(p) || p.surrendered || (p.fled || 0) >= 2 || foesOf(f, p).every(q => dist2(q, p) > 30)) { f.turn++; return checkEnd(f); }
     if (!p.turnLeft || p.turnRound !== f.round) { p.turnLeft = { standard: 1, move: 1, swift: 1, step: 1 }; p.turnRound = f.round; p.defending = false; p.charged = false; if (f.round > 1) p.flatfooted = false; }
+    lohStart(f, p);
     if (p.brain === 'human') { f.waiting = p.id; return 'player'; }
     if (p.brain !== 'script' && p.brain !== 'human' && p.kind === 'human') { /* AI people fight with the same script; their AI chose to be here */ }
     npcTurn(f, p);
+    lohEnd(f, p);
     f.turn++; p.turnLeft = null;
     return checkEnd(f);
   };
-  sim.playerDone = f => { const p = body(f.waiting); f.waiting = null; if (p) p.turnLeft = null; f.turn++; checkEnd(f); };
-  function bleed(f) { for (const id of f.order) { const q = body(id); if (q && q.alive && q.regen && q.hp > 0 && q.hp < q.maxhp && !(q.burnedRound >= f.round - 1)) q.hp = Math.min(q.maxhp, q.hp + q.regen); if (q && q.alive && q.dying) { if (d(10) === 1) { q.dying = false; q.down = 'out'; q.downUntil = sim.t + 240; logF(f, `${q.name} stabilizes.`); } else { q.hp--; if (q.hp <= -10) die(q, body(q.lastHurtBy), 'bled out'); } } } }
+  sim.playerDone = f => { const p = body(f.waiting); f.waiting = null; if (p) { lohEnd(f, p); p.turnLeft = null; } f.turn++; checkEnd(f); };
+  function bleed(f) { for (const id of f.order) { const q = body(id); if (q && q.alive && q.regen && q.hp > 0 && q.hp < q.maxhp && !(q.burnedRound >= f.round - 1)) q.hp = Math.min(q.maxhp, q.hp + q.regen); if (q && q.alive && q.dying) { if (srdOn() ? globalThis.SRD.bleedOf(q.hp, d(100)).stable : d(10) === 1) { q.dying = false; q.down = 'out'; q.downUntil = sim.t + 240; logF(f, `${q.name} stabilizes.`); } else { q.hp--; if (q.hp <= -10) die(q, body(q.lastHurtBy), 'bled out'); } } } }
   function checkEnd(f) {
     const sides = new Set(f.order.map(body).filter(q => q && q.alive && conscious(q) && !q.surrendered && (q.fled || 0) < 2 && (q.kind === 'human' || q.temper !== 'passive')).map(q => f.sides.get(q.id)));
     if (f.order.map(body).some(q => q?.game && q.alive && (q.fled || 0) >= 2)) { for (const q of f.order.map(body)) if (q?.game && q.alive && (q.fled || 0) >= 2) { log('fight', `The ${q.species} gets away.`, []); q.fled = 0; } }
@@ -3307,6 +3653,7 @@ function Sim(opts = {}) {
         for (const q of gangMembers(g.id)) if (q.coupSide) delete q.coupSide[g.id];
       }
     }
+    lohFightEnd(f, winnerSide);
     const winners = f.order.map(body).filter(q => q && q.alive && f.sides.get(q.id) === winnerSide && conscious(q));
     const fought = new Set(f.order);
     const losers = f.order.map(body).filter(q => q && q.alive && f.sides.get(q.id) !== winnerSide);
