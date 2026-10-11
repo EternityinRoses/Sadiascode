@@ -133,3 +133,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - Oct 11: Hollow Town is a TRAINING PLAYGROUND for Legends of Harpine (D:\Sadias Canvas). Rose: bring the rules, not the whole game. LoH rules copied read-only into town/srd/ by .backups/loh_bring.js (import closure; never edit there, re-bring). town/srd_bridge.js -> globalThis.SRD; sim.js srdAttack() builds the swing and calls LoH attackRoll/rollDamage; fists provoke unless IUS/monk; stones = improvised thrown; armour no soak. Smoke: .backups/smoke_srd.mjs. Not yet SRD: maneuvers (trip/grapple/disarm, LoH maneuvers.js is already brought), exact monster stat blocks, saves and skills.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- Hollow Town LoH systems (86dccbd): maneuvers/prone/grapple/disarm/bull rush, dying road (disabled at 0, fallOf), cover, wolves trip; LoH-format fight turns (loh_turn rows: 20 inp, 7 acts) -> town/train_fight.mjs -> fightnet.json + dossiers/*.learn.json; Settings > Fight brains. Smoke: .backups/smoke_loh2.mjs.
