@@ -726,6 +726,25 @@ function Sim(opts = {}) {
     remember(p, { text: `I took up a life as a ${SEEDY_ROLES[p.underworld.role]}` }); return true;
   }
   sim.takeUp = takeUp;
+  // stepping into someone else's fight (Rose): who in a fight nearby this person would back, and against whom
+  function helpChoices(p) {
+    const out = [];
+    if (p.fight || p.kind !== 'human' || !conscious(p) || p.jailedUntil > 0) return out;
+    for (const f of sim.fights) {
+      if (f.sides.has(p.id)) continue;
+      const ms = f.order.map(body).filter(q => q && q.alive && conscious(q));
+      if (ms.some(q => q.monster) || !ms.some(q => dist2(q, p) < 25 && sees(p, q))) continue;
+      for (const x of ms) {
+        if (x.kind !== 'human' || x === p) continue;
+        const foes = ms.filter(q => f.sides.get(q.id) !== f.sides.get(x.id)); if (!foes.length) continue;
+        const defender = f.sides.get(x.id) !== f.sides.get(f.by);
+        const stake = (p.spouse === x.id ? 1 : 0) + (p.home != null && p.home === x.home ? 0.6 : 0) + (p.gang && p.gang === x.gang ? 0.8 : 0) + R(p, x).like + (isGuard(p) && inShift(p.job, H()) && defender ? 1 : 0) + (defender ? 0.2 : -0.2);
+        if (stake < 0.5 || ms.filter(q => f.sides.get(q.id) === f.sides.get(x.id)).length >= 4) continue;   /* no riots: a side of four needs no more help */
+        out.push({ foe: foes.sort((a, b) => dist2(a, p) - dist2(b, p))[0], x, stake });
+      }
+    }
+    return out.sort((a, b) => b.stake - a.stake).slice(0, 2);
+  }
   function options(p) {
     const h = H(), out = [], j = JOBS[p.job];
     if (p.town === 'marrow') { if (p.food < 0.5) p.food = 1; if ((p.water ?? 1) < 0.5) p.water = 1; return [{ kind: 'work', value: 5 }]; }
@@ -800,10 +819,11 @@ function Sim(opts = {}) {
       if (pals >= 2 && p.traits.ambition > 0.55 && p.traits.honesty < 0.5 && !p.gang && !(p.cd?.found > sim.t)) { cool(p, 'found', 1440); add('found', p.traits.ambition * 3 + pals * 0.7 + desp - moral * 0.6 - (big ? gangMembers(big.id).length * 0.5 : 0) - wageOf(p) * 0.3); }
     }
     // beasts loose in town
-    for (const an of Object.values(sim.animals)) if (an.alive && an.monster && sees(p, an) && !an.fight) {
+    for (const an of Object.values(sim.animals)) if (an.alive && an.monster && sees(p, an)) {
       const nerve = (isGuard(p) ? 1.5 : 0) + p.traits.aggression - p.traits.caution + (p.weapon !== 'fists' ? 0.5 : -0.8) + (ARMOR[p.armor] || ARMOR.none).dr * 0.2 + (sim.bounty.beasts ?? 8) * 0.05 * p.traits.greed;
       if (nerve > 0.4) add('beast', 6 + nerve * 4, { target: an }); else add('flee', 8 + (1 - nerve) * 3, { from: an });
     }
+    for (const c of helpChoices(p)) add('assail', 2 + c.stake * 4 * (0.5 + p.traits.loyalty) - p.traits.caution * 4 + (p.weapon !== 'fists' ? 1 : -1) + (isGuard(p) ? 2 : 0), { target: c.foe, help: c.x });
     if (sim.beastsSeen && p.coin >= 8 && shopOpen('smithy') && !(p.cd?.arm > sim.t)) {
       const b = sim.business.smithy, budget = p.coin - 3, best = Object.keys(b.stock).filter(k => (b.stock[k] || 0) > 0 && priceOf('smithy', k) <= budget && ((WEAPONS[k] && WEAPONS[k].price && WEAPONS[k].dmg[0] * WEAPONS[k].dmg[1] > WEAPONS[p.weapon].dmg[0] * WEAPONS[p.weapon].dmg[1]) || (ARMOR[k] && ARMOR[k].ac > (ARMOR[p.armor] || ARMOR.none).ac) || (SHIELDS[k] && !SHIELDS[p.shield || 'none']?.ac))).sort((x, y) => priceOf('smithy', y) - priceOf('smithy', x))[0];
       if (best) add('buy', 2 + p.traits.caution * 3 + (isGuard(p) ? 3 : 0) + Math.min(4, sim.beastsSeen), { shop: 'smithy', item: best });
@@ -979,7 +999,7 @@ function Sim(opts = {}) {
   // how an option reads to an AI, and how an AI's step finds its option again later
   function optLabel(o) {
     const t = o.target && (o.target.name || sim.people[o.target]?.name);
-    if (o.kind === 'goto') return 'go to ' + (o.place || 'a spot'); if (o.kind === 'tail') return 'follow ' + (o.target.id === 'player' ? 'Rose' : o.target.name); if (o.kind === 'assail') return 'attack ' + o.target.name; if (o.kind === 'hold') return 'stay';
+    if (o.kind === 'goto') return 'go to ' + (o.place || 'a spot'); if (o.kind === 'tail') return 'follow ' + (o.target.id === 'player' ? 'Rose' : o.target.name); if (o.kind === 'assail') return o.help ? 'help ' + (o.help.id === 'player' ? 'Rose' : o.help.name) + ' against ' + (o.target.id === 'player' ? 'Rose' : o.target.name) : 'attack ' + o.target.name; if (o.kind === 'hold') return 'stay';
     if (o.kind === 'lease') return 'lease the ' + o.business; if (o.kind === 'shoprob') return (o.holdup ? 'hold up the ' : 'break into the ') + o.business; if (o.kind === 'extort') return 'extort the ' + o.business;
     return [o.kind, o.item ? o.item + (o.shop ? ' at the ' + o.shop : '') : '', o.species || '', t ? t : '', o.shop && !o.item ? o.shop : ''].filter(Boolean).join(' ');
   }
@@ -1000,7 +1020,8 @@ function Sim(opts = {}) {
       case 'wait': case 'lurk': return who ? { kind: 'lurkfor', target: who, value: 0 } : { kind: 'hold', value: 0 };
       case 'talk': case 'visit': case 'approach': case 'meet': return who ? { kind: 'visit', target: who, value: 0 } : null;
       case 'court': case 'flirt': return who ? { kind: 'court', target: who, value: 0 } : null;
-      case 'attack': case 'fight': case 'hit': case 'beat': return who && conscious(who) ? { kind: 'assail', target: who, value: 0 } : null;
+      case 'attack': case 'fight': case 'hit': case 'beat': { if (!who || !conscious(who)) return null; const f = who.fight && sim.fights.find(f => f.sides.has(who.id)); if (f && !f.sides.has(p.id)) { const ally = f.order.map(body).filter(q => q && q.kind === 'human' && q.alive && conscious(q) && f.sides.get(q.id) !== f.sides.get(who.id)).sort((a, b) => R(p, b).like - R(p, a).like)[0]; if (ally) return { kind: 'assail', target: who, help: ally, value: 0 }; } return { kind: 'assail', target: who, value: 0 }; }
+      case 'help': case 'defend': case 'aid': case 'save': case 'back': { if (!who || !who.alive) return null; const f = who.fight && sim.fights.find(f => f.sides.has(who.id)); if (!f || f.sides.has(p.id)) return { kind: 'tail', target: who, value: 0 }; const foe = f.order.map(body).filter(q => q && q.alive && conscious(q) && f.sides.get(q.id) !== f.sides.get(who.id)).sort((a, b) => dist2(a, p) - dist2(b, p))[0]; return foe ? { kind: 'assail', target: foe, help: who, value: 0 } : null; }
       case 'pickpocket': case 'mug': return who ? { kind, target: who, value: 0 } : null;
       case 'buy': { const item = Object.keys(GOODS).find(k => rest.includes(k) || rest.includes(GOODS[k].name.toLowerCase())); const shop = item && Object.keys(sim.business).find(b => (sim.business[b].stock[item] || 0) > 0 && shopOpen(b)); return shop && p.coin >= priceOf(shop, item) ? { kind: 'buy', shop, item, value: 0 } : null; }
       case 'hunt': { const sp = Object.keys(GAME).find(k => rest.includes(k)) || 'rabbit'; return { kind: 'hunt', species: sp, value: 0 }; }
@@ -1085,6 +1106,7 @@ function Sim(opts = {}) {
     put(beast); put(guard); put(Math.min(1, ppl / 8)); put(down);
     put(Object.keys(p.items).some(k => GOODS[k]?.food && p.items[k] > 0) ? 1 : 0); put(p.party ? 1 : 0); put(p.spouse ? 1 : 0);
     put(sim.election.candidates.includes(p.id) ? 1 : 0); put(Math.min(1, (nextElectionDay() - sim.day) / 7));
+    { let fn = 0, al = 0; for (const f of sim.fights) { if (f.sides.has(p.id)) continue; const ms = f.order.map(body).filter(q => q && q.alive && conscious(q)); if (!ms.some(q => dist2(q, p) < 25)) continue; fn = 1; if (ms.some(q => q.kind === 'human' && (p.spouse === q.id || (p.gang && p.gang === q.gang) || (p.home != null && p.home === q.home) || R(p, q).like > 0.4))) al = 1; } put(fn); put(al); }   // a fight nearby; someone they care about in it
     while (i < 46) put(0);
     for (const r of (p.heard || [])) if (sim.t - r.t < 30) x[46 + hashWord(r.w)] = 1;
     return x;
@@ -1468,7 +1490,8 @@ function Sim(opts = {}) {
       case 'tail': return setTask(p, 'tail', { target: o.target.id, until: sim.t + 240 });
       case 'goto': return setTask(p, 'goto', { to: o.at.kind ? P(o.at.x, o.at.z) : o.at, until: sim.t + 120 });
       case 'hold': return setTask(p, 'talk', { with: o.with?.id || p.task?.with || null, until: sim.t + 20 });
-      case 'assail': if (o.bounty) { cool(p, 'hunt', 240); p.huntFor = o.target.id; log('law', `${p.name} goes after ${o.target.name} for the bounty.`, [p.id, o.target.id]); } startFight(p, o.target, o.bounty ? { mode: 'nonlethal', why: 'bounty' } : { mode: p.prefMode || (p.traits.aggression > 0.75 ? 'lethal' : 'nonlethal'), why: 'picked a fight' }); return setTask(p, 'idle', { until: sim.t + 5 });
+      case 'assail': if (o.help) { const f = sim.fights.find(f => f.sides.has(o.target.id)); if (f && !f.sides.has(p.id) && f.sides.has(o.help.id)) { join(f, p, f.sides.get(o.help.id), isGuard(p) ? 'nonlethal' : (p.prefMode || (p.traits.aggression > 0.75 ? 'lethal' : 'nonlethal'))); log('fight', `${p.name} steps in on ${o.help.id === 'player' ? 'your' : o.help.name + "'s"} side against ${o.target.id === 'player' ? 'you' : o.target.name}!`, [p.id, o.help.id, o.target.id]); return setTask(p, 'idle', { until: sim.t + 5 }); } }
+        if (o.bounty) { cool(p, 'hunt', 240); p.huntFor = o.target.id; log('law', `${p.name} goes after ${o.target.name} for the bounty.`, [p.id, o.target.id]); } startFight(p, o.target, o.bounty ? { mode: 'nonlethal', why: 'bounty' } : { mode: p.prefMode || (p.traits.aggression > 0.75 ? 'lethal' : 'nonlethal'), why: 'picked a fight' }); return setTask(p, 'idle', { until: sim.t + 5 });
       case 'coup': { cool(p, 'coup', 1440 * 4); const g = sim.gangs[p.gang]; if (!g) return; g.coupBy = p.id; return setTask(p, 'coup', { target: o.target.id, until: sim.t + 180 }); }
       case 'caravan': return startCaravan(p);
       case 'boast': { cool(p, 'boast', 360); const q = o.target; const claim = Math.round(trueWorth(p) * 2 + 40); const ok = boast(p, q, claim); log('lie', `${p.name} lets ${q.name} know they're worth a good deal more than they look. ${ok ? q.name + ' believes it.' : q.name + " isn't fooled."}`, [p.id, q.id]); return setTask(p, 'idle', { until: sim.t + 10 }); }
@@ -2526,6 +2549,20 @@ function Sim(opts = {}) {
   function moveToward(p, t, maxd, stopAt) { const dd = dist2(p, t), go = Math.max(0, Math.min(maxd, dd - stopAt)); if (dd > 0) { p.x += (t.x - p.x) / dd * go; p.z += (t.z - p.z) / dd * go; p.yaw = Math.atan2(t.x - p.x, t.z - p.z); } if (!walkable(p)) { p.x -= (t.x - p.x) / dd * go * 0.5; p.z -= (t.z - p.z) / dd * go * 0.5; } }
   function moveAway(p, t, maxd) { const dx = p.x - t.x, dz = p.z - t.z, l = Math.hypot(dx, dz) || 1; for (let s = maxd; s > 0.5; s *= 0.6) { const n = P(p.x + dx / l * s, p.z + dz / l * s); if (walkable(n)) { p.x = n.x; p.z = n.z; return; } } }
   // the scripted fighter: hit the weakest reachable foe; flee when losing; finish only if lethal-minded
+  // people who come within sight of a fight already going: plain brains stop what they're doing and choose again
+  // (the habits or the student weigh stepping in); AI folk are asked
+  function walkUp(f) {
+    const ms = f.order.map(body).filter(q => q && q.alive && conscious(q)); if (!ms.length) return;
+    f.nudged ||= new Set();
+    for (const q of living()) {
+      if (q.kind !== 'human' || q.brain === 'human' || q.town || f.sides.has(q.id) || f.nudged.has(q.id) || q.fight || !conscious(q) || q.jailedUntil > 0) continue;
+      if (!ms.some(m => dist2(m, q) < 25 && sees(q, m))) continue;
+      f.nudged.add(q.id);
+      if (waitsForOrders(q)) { if (helpChoices(q).length || isGuard(q) || ms.some(m => m.monster)) askOrders(q, `A fight near you at ${AREAS[areaOf(ms[0])]?.name || 'here'}: ${ms.map(m => m.id === 'player' ? 'Rose' : m.name).join(', ')}. You could step in ("help <name>" or "attack <name>"), shout for the guard, or keep out of it.`); continue; }
+      if (['flee', 'rescue', 'arrest', 'muster', 'fetchguard'].includes(q.task?.kind)) continue;
+      q.task = null;
+    }
+  }
   function npcTurn(f, p) {
     const acts = legalActions(f, p), mode = f.mode.get(p.id), foes = foesOf(f, p), tr = p.traits || { aggression: 0.7, greed: 0, honesty: 1, caution: 0.2 };
     const hpFrac = p.kind === 'animal' ? p.hp / p.maxhp : (p.hp - p.nl) / p.maxhp;
@@ -2550,7 +2587,7 @@ function Sim(opts = {}) {
   // advance a fight by one turn; the player's turns wait for input
   sim.fightStep = f => {
     if (!f.order.length) return endFight(f);
-    if (f.turn >= f.order.length) { f.turn = 0; f.round++; bleed(f); }
+    if (f.turn >= f.order.length) { f.turn = 0; f.round++; bleed(f); walkUp(f); }
     const p = body(f.order[f.turn]);
     if (!p || !p.alive || !conscious(p) || p.surrendered || (p.fled || 0) >= 2 || foesOf(f, p).every(q => dist2(q, p) > 30)) { f.turn++; return checkEnd(f); }
     if (!p.turnLeft || p.turnRound !== f.round) { p.turnLeft = { standard: 1, move: 1, swift: 1, step: 1 }; p.turnRound = f.round; p.defending = false; p.charged = false; if (f.round > 1) p.flatfooted = false; }
