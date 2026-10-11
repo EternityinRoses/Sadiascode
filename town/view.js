@@ -2,9 +2,10 @@
 (function () {
 'use strict';
 const $ = id => document.getElementById(id);
-let townSetup = { start: 'blank', personas: null };
+let townSetup = { start: 'blank', personas: null, studentMode: 'blend', genDays: 14, aiBodies: 'orders' };
 try { townSetup = { ...townSetup, ...JSON.parse(localStorage.getItem('hollow-setup') || '{}') }; } catch (e) {}
 const S = TownSim.Sim({ start: townSetup.start, personas: townSetup.personas || undefined });
+S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays;
 const me = S.addPlayer('Rose', 'f');
 window.town = S;      // for poking at it from the console
 
@@ -144,6 +145,7 @@ fetch('/brain/ping').then(r => r.ok ? r.json() : null).then(j => {
   server = j; $('brainNote').textContent = `Brains: mayor = ${j.mayor}; townsfolk = ${j.folk}.`;
   // on the PC, the townsfolk get AI brains too (each with their own memory on the server)
   if (j.folk && j.folk !== 'off') for (const p of S.living()) if (p.kind === 'human' && p.brain === 'script' && !p.town) p.brain = 'folk-ai';
+  S.aiOnly = townSetup.aiBodies === 'orders';
   fetch('/lore').then(r => r.ok ? r.json() : null).then(l => { if (l && l.v) S.importLore(l); }).catch(() => {});
 }).catch(() => {});
 setInterval(() => { if (server) fetch('/brain/ping').then(r => r.json()).then(j => { if (j?.ok) $('brainNote').textContent = `Brains: mayor = ${j.mayor}; townsfolk = ${j.folk} · ${j.calls} calls today, about $${j.cost.toFixed(2)}${j.capped ? ' · daily cap reached, plain brains only' : ''}`; }).catch(() => {}); }, 20000);
@@ -160,7 +162,7 @@ async function ask(q) {
   q.asking = true; drawCouncil();
   try {
     let dec = null;
-    if (server) { const p = S.people[q.person]; const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: q.brain, kind: q.kind, system: p ? S.identityFor(p) : null, prompt: q.turn || q.prompt, town: townId, day: S.day, person: q.person, name: p ? S.fullName(p) : q.person }) }); dec = (await r.json()).decision; }
+    if (server) { const p = S.people[q.person]; const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ waiting: !!q.waiting, brain: q.brain, kind: q.kind, system: p ? S.identityFor(p) : null, prompt: q.turn || q.prompt, town: townId, day: S.day, person: q.person, name: p ? S.fullName(p) : q.person }) }); dec = (await r.json()).decision; }
     else if (sample) { const m = S.people[q.person]; mayorThread.push({ role: 'user', content: (mayorThread.length ? '' : S.identityFor(m) + '\n\n') + (q.turn || q.prompt) }); dec = await sample.json(mayorThread.slice(-12).filter((x, i, a) => !(i === 0 && x.role === 'assistant')), { modelTier: 'default' }); mayorThread.push({ role: 'assistant', content: JSON.stringify(dec) }); if (mayorThread.length > 24) { const first = mayorThread[0]; mayorThread.splice(0, mayorThread.length - 12); if (mayorThread[0].role !== 'user') mayorThread.shift(); mayorThread[0] = { role: 'user', content: first.content.split('\n\n')[0] + '\n\n' + mayorThread[0].content }; } }
     if (dec) { S.applyDecision(S.people[q.person], q.kind, dec); if (q.kind === 'mayor') logLine({ day: S.day, clock: S.clock(), kind: 'politics', text: `(${S.people[q.person].name}'s choices came from ${server ? server.mayor : 'Claude'}.)`, who: [] }); }
     else q.fallback?.();
@@ -352,6 +354,7 @@ async function fillModels(x) {
 async function openSettings() {
   $('settings').hidden = false; $('sMsg').textContent = '';
   $('setServer').hidden = !server; $('setNoServer').hidden = !!server;
+  $('setBodies').value = townSetup.aiBodies; $('setBrain').value = townSetup.studentMode; $('setGen').value = String(townSetup.genDays); $('evolveGo').textContent = evolving() ? 'Stop evolving' : 'Evolve non-stop';
   $('setStart').value = townSetup.start; $('setPersonas').value = (townSetup.personas || S.PERSONAS).join('\n\n');
   $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning);
   if (!server) return;
@@ -367,22 +370,66 @@ for (const [x, k] of [['m', 'mayor'], ['f', 'folk']]) {
 }
 let ffLeft = 0;
 function fastForward(days) {
-  ffLeft = days * 1440; paused = true; drawSpeed(); $('ffNote').textContent = 'Running…';
+  ffLeft = days * 1440; paused = true; drawSpeed(); $('ffNote').textContent = 'Running…'; const keepAi = S.aiOnly; S.aiOnly = false;
   const chunk = () => {
     const end = Math.min(ffLeft, 60);
     for (let m = 0; m < end; m += 0.5) { S.step(0.5); for (const f of S.fights.slice()) { if (f.sides.has('player')) { S.act(f, me, { id: 'end' }); S.playerDone(f); } S.fightStep(f); } for (const q of S.decisionsPending.splice(0)) { q.done = true; q.fallback?.(); } }
     pending.length = 0; ffLeft -= end;
     $('ffNote').textContent = ffLeft > 0 ? `Running… day ${S.day} ${S.clock()}` : `Done: day ${S.day}. ${S.rec.deaths} dead so far.`;
-    if (ffLeft > 0) setTimeout(chunk, 0); else { saveLore(); drawPanel(); drawLore(); }
+    if (ffLeft > 0) setTimeout(chunk, 0); else { S.aiOnly = keepAi; saveLore(); drawPanel(); drawLore(); }
   };
   chunk();
 }
+const evolving = () => { try { return sessionStorage.getItem('hollow-evolve') === '1'; } catch (e) { return false; } };
+function runGeneration() {
+  $('ffNote').textContent = 'Evolving…';
+  const left = Math.max(0, S.genDays - (S.day - 1)) * 1440;
+  ffLeft = left; paused = true; drawSpeed(); S.aiOnly = false;
+  const chunk = () => {
+    if (!evolving()) { $('ffNote').textContent = 'Stopped.'; return; }
+    const end = Math.min(ffLeft, 60);
+    for (let m = 0; m < end; m += 0.5) { S.step(0.5); for (const f of S.fights.slice()) { if (f.sides.has('player')) { S.act(f, me, { id: 'end' }); S.playerDone(f); } S.fightStep(f); } for (const q of S.decisionsPending.splice(0)) { q.done = true; q.fallback?.(); } }
+    pending.length = 0; ffLeft -= end;
+    $('ffNote').textContent = `Generation ${S.netOf().gen + 1}: day ${S.day} of ${S.genDays}`;
+    if (ffLeft > 0) return setTimeout(chunk, 0);
+    const st = S.endGeneration(); saveLore();
+    $('ffNote').textContent = `Generation ${st.gen} done: average fitness ${st.avgFit}, best ${st.bestFit}. Next town…`;
+    setTimeout(() => { if (evolving()) location.reload(); }, 900);
+  };
+  chunk();
+}
+$('evolveGo').onclick = () => { try { if (evolving()) sessionStorage.removeItem('hollow-evolve'); else sessionStorage.setItem('hollow-evolve', '1'); } catch (e) {} saveSetup(); $('evolveGo').textContent = evolving() ? 'Stop evolving' : 'Evolve non-stop'; if (evolving()) runGeneration(); };
+if (evolving()) setTimeout(runGeneration, 1500);
 $('ff1').onclick = () => fastForward(1); $('ff7').onclick = () => fastForward(7);
 $('newTown').onclick = () => { saveSetup(); if (!$('newTown').dataset.sure) { $('newTown').dataset.sure = 1; $('newTown').textContent = 'Sure? Start over'; return; } saveLore(); setTimeout(() => location.reload(), 300); };
-$('gear').onclick = openSettings; $('sClose').onclick = () => $('settings').hidden = true;
+$('gear').onclick = openSettings;
+let mindTab = 'words';
+function drawMind() {
+  document.querySelectorAll('[data-mind]').forEach(b => b.classList.toggle('on', b.dataset.mind === mindTab));
+  const n = S.netOf(), box = $('mindBody');
+  if (mindTab === 'words') {
+    const W = Object.entries(S.lore.words || {}).filter(([, e]) => e.n >= 2).sort((a, b) => b[1].n - a[1].n).slice(0, 120);
+    if (!W.length) { box.innerHTML = '<p class="k">No words learned yet. Words get tied to actions when people hear them and then act. AI conversations teach the most.</p>'; return; }
+    const max = W[0][1].n;
+    box.innerHTML = `<p class="k">Each word, sized by how often it was heard before someone acted, and what people did next most.</p><div class="cloud">${W.map(([w, e]) => { const [k, c] = Object.entries(e.acts).sort((a, b) => b[1] - a[1])[0]; const pct = Math.round(c / e.n * 100); return `<span title="${w}: heard ${e.n}×, then ${k} ${pct}%" style="font-size:${11 + Math.round(Math.sqrt(e.n / max) * 22)}px" class="w ${pct > 60 ? 'strong' : ''}">${w}<small>→${k} ${pct}%</small></span>`; }).join(' ')}</div>`;
+  } else if (mindTab === 'why') {
+    const t = selected && S.people[selected];
+    if (!t || !t.trace?.length) { box.innerHTML = '<p class="k">Click a person in town, then open this tab: their last 20 choices, who made each one (AI teacher, student, or habit), what else they weighed, and the words they had just heard.</p>'; return; }
+    box.innerHTML = `<p><b>${S.fullName(t)}</b> <span class="k">${S.JOBS[t.job].title}${t.persona ? ' · pushed' : ''}</span></p><table class="why"><tr><th>when</th><th>where</th><th>chose</th><th>by</th><th>also weighed</th><th>heard</th></tr>${t.trace.slice().reverse().map(r => `<tr><td>d${r.day} ${r.clock}</td><td>${r.where}</td><td><b>${r.chose}</b></td><td class="k">${r.by}</td><td class="k">${r.top.slice(1).map(([l, v]) => l + ' ' + v).join(', ')}</td><td class="k">${r.words.join(' ')}</td></tr>`).join('')}</table>`;
+  } else {
+    const H = n.history;
+    box.innerHTML = `<p class="k">Generation ${n.gen} · taught by AI ${n.imitated} times · ${n.rewarded} outcomes learned from · plain brains: ${S.studentMode}</p><canvas id="genChart" width="560" height="160" style="width:100%;height:160px;background:#0006;border-radius:4px"></canvas>
+      <table class="why"><tr><th>gen</th><th>alive</th><th>avg fitness</th><th>best</th><th>agrees with AI</th><th>words</th><th>crimes</th><th>inequality</th></tr>${H.slice(-12).reverse().map(h => `<tr><td>${h.gen}</td><td>${h.alive}/${h.people}</td><td>${h.avgFit}</td><td>${h.bestFit}</td><td>${h.agree == null ? '–' : Math.round(h.agree * 100) + '%'}</td><td>${h.words}</td><td>${h.crimes}</td><td>${h.gini}</td></tr>`).join('')}</table>`;
+    const c = $('genChart'), x = c.getContext('2d'); if (H.length < 2) return;
+    const mx = Math.max(...H.map(h => h.bestFit), 1), line = (vals, col, m) => { x.strokeStyle = col; x.lineWidth = 2; x.beginPath(); vals.forEach((v, i) => { const px = 6 + i / (vals.length - 1) * (c.width - 12), py = c.height - 6 - v / m * (c.height - 12); i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.stroke(); };
+    line(H.map(h => h.avgFit), '#e0b84a', mx); line(H.map(h => h.bestFit), '#8cc47a', mx); if (H.some(h => h.agree != null)) line(H.map(h => h.agree ?? 0), '#c89be8', 1);
+  }
+}
+document.querySelectorAll('[data-mind]').forEach(b => b.onclick = () => { mindTab = b.dataset.mind; drawMind(); });
+$('mindBtn').onclick = () => { $('mind').hidden = false; drawMind(); }; $('mindClose').onclick = () => $('mind').hidden = true; $('sClose').onclick = () => $('settings').hidden = true;
 $('learnMode2').onclick = () => { S.learning = S.learning ? 0 : 1; $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning); drawLore(); };
-function saveSetup() { townSetup.start = $('setStart').value; const ps = $('setPersonas').value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean); townSetup.personas = ps.length ? ps : null; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }
-$('setStart').onchange = saveSetup; $('setPersonas').onchange = saveSetup;
+function saveSetup() { townSetup.aiBodies = $('setBodies').value; if (server) S.aiOnly = townSetup.aiBodies === 'orders'; townSetup.studentMode = $('setBrain').value; townSetup.genDays = +$('setGen').value || 14; S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays; townSetup.start = $('setStart').value; const ps = $('setPersonas').value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean); townSetup.personas = ps.length ? ps : null; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }
+$('setStart').onchange = saveSetup; $('setBrain').onchange = saveSetup; $('setBodies').onchange = saveSetup; $('setGen').onchange = saveSetup; $('setPersonas').onchange = saveSetup;
 $('sSave').onclick = async () => {
   saveSetup();
   if (!server) { $('settings').hidden = true; return; }

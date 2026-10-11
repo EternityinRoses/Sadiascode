@@ -51,6 +51,8 @@ select{background:#0006;color:var(--fg);border:1px solid var(--line);border-radi
 .grid.two{grid-template-columns:1fr 90px;margin-top:10px}
 .grid input,.grid select{min-width:0;background:#0006;color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:3px 6px;font:inherit}
 #sMsg{min-height:1.2em;margin-top:6px}
+.cloud{line-height:1.9}.cloud .w{display:inline-block;margin:0 6px;color:var(--dim)}.cloud .w.strong{color:var(--accent)}.cloud small{font-size:10px;color:var(--dim);margin-left:2px}
+table.why{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}table.why th,table.why td{text-align:left;padding:3px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 .row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 /* JRPG shop */
 #shop .card{border:3px double #c8d0f0;background:linear-gradient(#1a2050,#0c1030);font-family:"Alegreya Sans",sans-serif}
@@ -72,7 +74,7 @@ select{background:#0006;color:var(--fg);border:1px solid var(--line);border-radi
 <div id="ui">
   <div id="top" class="pane">
     <h1>Hollow Town</h1>
-    <button id="gear" title="Settings">⚙ Settings</button>
+    <button id="gear" title="Settings">⚙ Settings</button><button id="mindBtn" title="What the town has learned">🧠 Mind</button>
     <button id="pause" title="Space">❚❚</button>
     <button data-speed="1">1×</button><button data-speed="10">10×</button><button data-speed="60">60×</button><button data-speed="240">240×</button>
     <span id="brainNote">The town runs itself. The mayor's office falls back to its habits when no Claude answers.</span>
@@ -149,6 +151,10 @@ select{background:#0006;color:var(--fg);border:1px solid var(--line);border-radi
   <textarea id="setPersonas" rows="7" style="width:100%;margin-top:4px;background:#0006;color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px;font:inherit;font-size:12px"></textarea>
   <div class="k">Used from the next New town.</div>
   <h3>Training</h3>
+  <div class="grid two"><label for="setBodies">AI bodies</label><select id="setBodies"><option value="orders">Wait for orders (only the LLM moves them)</option><option value="habits">LLM plans, habits fill the gaps</option></select>
+  <label for="setBrain">Plain brains</label><select id="setBrain"><option value="habit">Habits (my hand-made scores)</option><option value="blend">Blend: habits and the student</option><option value="student">Student only (learned)</option></select>
+  <label for="setGen">Days per generation</label><select id="setGen"><option>7</option><option>14</option><option>21</option><option>30</option></select></div>
+  <div class="row"><button id="evolveGo">Evolve non-stop</button><span class="k">Runs town after town at full speed (no AI calls), evolving the student between them. Keep the tab open.</span></div>
   <div class="row" style="align-items:center"><button id="ff1">Run 1 day</button><button id="ff7">Run 7 days</button><button id="newTown">New town</button><span id="ffNote" class="k">Fast, no drawing, plain brains only. A new town keeps what the town mind learned.</span></div>
   <h3>The town mind</h3>
   <div class="row" style="align-items:center"><button id="learnMode2"></button><span class="k">Plain brains lean on what the town has learned.</span></div>
@@ -157,6 +163,11 @@ select{background:#0006;color:var(--fg);border:1px solid var(--line);border-radi
 <div id="offerCard" class="modal" hidden><div class="card">
   <h2>A deal</h2><div id="offerWho"></div>
   <div class="row"><button id="offerYes">Accept</button><button id="offerNo">Refuse</button></div>
+</div></div>
+<div id="mind" class="modal" hidden><div class="card wide" style="width:min(760px,calc(100% - 32px))">
+  <h2>The town's mind</h2>
+  <div class="row"><button data-mind="words" class="on">Words → actions</button><button data-mind="why">Why (selected person)</button><button data-mind="gens">Generations</button><span style="flex:1"></span><button id="mindClose">Close</button></div>
+  <div id="mindBody" style="margin-top:10px;max-height:60vh;overflow:auto"></div>
 </div></div>
 <div id="invite" class="modal" hidden><div class="card">
   <h2>An invitation</h2><div id="inviteWho"></div>

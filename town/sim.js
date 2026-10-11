@@ -392,6 +392,7 @@ function Sim(opts = {}) {
     }
     // soft pushes: a few people are given a persona (only an AI brain reads it)
     { const pool = everyone().filter(p => !p.town && p.kind === 'human' && p.age >= 18 && p.brain !== 'mayor-ai').sort(() => Math.random() - 0.5); (opts.personas || PERSONAS).filter(Boolean).forEach((t, k) => { if (pool[k]) pool[k].persona = t; }); }
+    sim.lore && mutateAll();
     log('town', sim.blank ? `Day 1. ${fullName(mayor)} is mayor. ${living().length} people live in Hollow Town, and the rest of them have nothing yet.` : `Day 1. ${fullName(mayor)} is mayor. ${living().length} people live in Hollow Town.`);
   }
   function place(p, at) { p.x = at.x; p.z = at.z; p.area = areaOf(at); }
@@ -873,6 +874,7 @@ function Sim(opts = {}) {
   function settle(p) {     // score the last choice by how things went since
     const lc = p.lastChoice; if (!lc) return;
     lesson(lc.key, lc.kind, worth(p) - lc.worth, false); p.lastChoice = null;
+    if (lc.x && sim.studentMode !== 'habit') { const r = Math.max(-1, Math.min(1, (worth(p) - lc.worth) / 10)); const n = netOf(); const b = (n.base[lc.kind] ??= 0); n.base[lc.kind] = b * 0.98 + r * 0.02; nudge(lc.x, lc.kind, r - b, 0.02); n.rewarded++; }
     if (sim.onChronicle && Math.random() < 0.2) { const rows = (sim.dataRows ||= []); if (rows.length < 3000) rows.push({ type: 'choice', day: sim.day, sit: lc.key, choice: lc.kind, reward: +(worth(p) - lc.worth).toFixed(1), brain: p.brain }); }
   }
   function loreBias(key, kind) {
@@ -939,16 +941,103 @@ function Sim(opts = {}) {
     if (!rest) return same.sort((a, b) => b.value - a.value)[0];
     return same.find(o => optLabel(o).toLowerCase().includes(rest)) || same.find(o => rest.split(/\s+/).some(w => w.length > 2 && optLabel(o).toLowerCase().includes(w))) || null;
   }
+  // ============================================================ the student ==
+  // A small neural net (one hidden layer) that scores every kind of action from what a person
+  // perceives. It learns three ways: by imitating the teachers (AI-played people's chosen steps),
+  // from how its own choices turn out (reward), and by evolution between towns (each person
+  // carries a slightly mutated copy; the copies that ended richer and alive move the next one).
+  const KINDS = ['work', 'eat', 'drink', 'buy', 'forage', 'fish', 'hunt', 'sleep', 'tavern', 'socialize', 'visit', 'court', 'campaign', 'stand', 'recruit', 'join', 'found', 'pickpocket', 'mug', 'burgle', 'shoprob', 'extort', 'rustle', 'ambush', 'caravan', 'signon', 'lease', 'seekwork', 'apply', 'beg', 'fence', 'purse', 'report', 'bury', 'collect', 'rescue', 'study', 'treat', 'mourn', 'arrest', 'flee', 'beast', 'coup', 'boast', 'avenge', 'tail', 'goto', 'hold', 'assail', 'other'];
+  const KI = Object.fromEntries(KINDS.map((k, i) => [k, i]));
+  const kindIndex = k => KI[k] ?? KI.other;
+  const AREA_GROUP = { square: 0, lane: 0, bakery: 1, store: 1, smithy: 1, tavern: 2, hall: 3, station: 3, healer: 4, chapel: 4, graves: 4, school: 5, fields: 6, ranch: 6, orchard: 6, wood: 7, road: 8, marrow: 8 };
+  const WORD_BUCKETS = 16, NIN = 46 + WORD_BUCKETS, NH = 24, NOUT = KINDS.length;
+  const NPARAM = NH * NIN + NH + NOUT * NH + NOUT;
+  const hashWord = w => { let h = 7; for (const c of w) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % WORD_BUCKETS; };
+  function features(p) {
+    const h = H(), j = JOBS[p.job] || {}, x = new Float32Array(NIN); let i = 0;
+    const put = v => { x[i++] = v; };
+    put(1); put(p.food); put(p.water ?? 1); put(p.rest ?? 1); put(Math.max(0, p.hp) / p.maxhp); put(Math.min(1, (p.nl || 0) / p.maxhp));
+    put(Math.log1p(p.coin) / 5); put(Math.log1p(p.home != null ? HOUSES[p.home].stash : 0) / 6); put(Math.sin(h / 24 * 6.283)); put(Math.cos(h / 24 * 6.283)); put(night() ? 1 : 0);
+    put(p.job === 'none' ? 1 : 0); put(j.guard ? 1 : 0); put(j.owner ? 1 : 0); put(j.payer === 'town' && !j.guard ? 1 : 0); put(j.payer && j.payer !== 'town' ? 1 : 0); put(p.job === 'mercenary' ? 1 : 0); put(p.id === sim.mayorId ? 1 : 0);
+    put(p.gang ? 1 : 0); put(p.gang && sim.gangs[p.gang]?.boss === p.id ? 1 : 0); put(Math.min(1, openRecord(p).length / 3)); put(inShift(p.job, h) ? 1 : 0);
+    put(WEAPONS[p.weapon]?.weak ? 0 : 1); put((ARMOR[p.armor] || ARMOR.none).dr / 5); put(WEAPONS[p.weapon]?.range ? 1 : 0);
+    const g = AREA_GROUP[areaOf(p)] ?? (AREAS[areaOf(p)]?.house ? 9 : 0); for (let k = 0; k < 10; k++) put(k === g ? 1 : 0);
+    let beast = 0, guard = 0, ppl = 0, down = 0;
+    for (const q of living()) { if (q === p || dist2(q, p) > 20) continue; if (!sees(p, q)) continue; ppl++; if (isGuard(q)) guard = 1; if (!conscious(q)) down = 1; }
+    for (const a of Object.values(sim.animals)) if (a.alive && a.monster && dist2(a, p) < 30 && sees(p, a)) beast = Math.max(beast, a.species === 'ogre' ? 1 : 0.5);
+    put(beast); put(guard); put(Math.min(1, ppl / 8)); put(down);
+    put(Object.keys(p.items).some(k => GOODS[k]?.food && p.items[k] > 0) ? 1 : 0); put(p.party ? 1 : 0); put(p.spouse ? 1 : 0);
+    put(sim.election.candidates.includes(p.id) ? 1 : 0); put(((7 - sim.day % 7) % 7) / 7);
+    while (i < 46) put(0);
+    for (const r of (p.heard || [])) if (sim.t - r.t < 30) x[46 + hashWord(r.w)] = 1;
+    return x;
+  }
+  sim.features = features; sim.KINDS = KINDS;
+  function netOf() {
+    const n = sim.lore.net;
+    if (n && n.theta && n.theta.length === NPARAM && n.kinds?.join() === KINDS.join()) { if (!(n.theta instanceof Float32Array)) n.theta = Float32Array.from(n.theta); return n; }
+    const theta = new Float32Array(NPARAM); for (let k = 0; k < NPARAM; k++) theta[k] = (Math.random() * 2 - 1) * 0.15;
+    for (let k = NH * NIN + NH; k < NPARAM; k++) theta[k] *= 0.3;
+    return sim.lore.net = { theta, kinds: KINDS.slice(), gen: 0, imitated: 0, rewarded: 0, agree: 0, asked: 0, history: [], base: {} };
+  }
+  sim.netOf = netOf;
+  function forward(x, noise) {
+    const th = netOf().theta, hid = new Float32Array(NH), out = new Float32Array(NOUT);
+    const w = k => th[k] + (noise ? noise[k] : 0);
+    for (let a = 0; a < NH; a++) { let z = w(NH * NIN + a); for (let b = 0; b < NIN; b++) if (x[b]) z += w(a * NIN + b) * x[b]; hid[a] = Math.tanh(z); }
+    const o2 = NH * NIN + NH;
+    for (let c = 0; c < NOUT; c++) { let z = w(o2 + NOUT * NH + c); for (let a = 0; a < NH; a++) z += w(o2 + c * NH + a) * hid[a]; out[c] = z; }
+    return { hid, out };
+  }
+  // push the chosen kind up (or down, if adv < 0) among the feasible ones: one step of cross-entropy
+  function nudge(x, kind, adv, lr, feasible) {
+    const n = netOf(), th = n.theta, { hid, out } = forward(x);
+    const idx = feasible && feasible.length ? [...new Set(feasible.map(kindIndex))] : KINDS.map((_, i) => i);
+    const ci = kindIndex(kind); if (!idx.includes(ci)) idx.push(ci);
+    let m = -1e9; for (const c of idx) m = Math.max(m, out[c]); let z = 0; const pr = {}; for (const c of idx) { pr[c] = Math.exp(out[c] - m); z += pr[c]; }
+    const o2 = NH * NIN + NH, dh = new Float32Array(NH);
+    for (const c of idx) {
+      const g = ((c === ci ? 1 : 0) - pr[c] / z) * adv * lr;
+      th[o2 + NOUT * NH + c] += g;
+      for (let a = 0; a < NH; a++) { dh[a] += g * th[o2 + c * NH + a]; th[o2 + c * NH + a] += g * hid[a]; }
+    }
+    for (let a = 0; a < NH; a++) { const d = dh[a] * (1 - hid[a] * hid[a]); if (!d) continue; th[NH * NIN + a] += d; for (let b = 0; b < NIN; b++) if (x[b]) th[a * NIN + b] += d * x[b]; }
+  }
+  // a teacher's choice: imitate it, and note whether the student would have chosen the same
+  function teach(p, kind, opts) {
+    const x = features(p), n = netOf(), feas = opts ? opts.map(o => o.kind) : null;
+    const { out } = forward(x); let best = null, bv = -1e9; for (const k of (feas || KINDS)) { const v = out[kindIndex(k)]; if (v > bv) { bv = v; best = k; } }
+    n.asked++; if (best === kind) n.agree++;
+    nudge(x, kind, 1, 0.08, feas); n.imitated++;
+  }
+  sim.teach = teach;
+  sim.studentMode = 'blend';      // 'habit' (the old scripted scores), 'blend', 'student'
+  sim.studentWeight = 0.5;
+  // ---- words a person hears, and what they do next ----------------------------------
+  function heardBy(q, words) { q.heard = (q.heard || []).filter(r => sim.t - r.t < 30).concat(words.map(w => ({ w, t: sim.t }))).slice(-12); }
+  function groundWords(p, kind) {
+    const ws = (p.heard || []).filter(r => sim.t - r.t < 30); if (!ws.length) return;
+    const W = (sim.lore.words ||= {});
+    for (const { w } of ws) { const e = (W[w] ||= { n: 0, acts: {} }); e.n++; e.acts[kind] = (e.acts[kind] || 0) + 1; }
+    p.heard = [];
+  }
+  sim.groundWords = groundWords;
+  function trace(p, by, chosen, scored, key) {
+    (p.trace ||= []).push({ day: sim.day, clock: sim.clock(), by, chose: optLabel(chosen), top: scored.slice(0, 3).map(s => [optLabel(s.o), +s.v.toFixed(1)]), words: (p.heard || []).filter(r => sim.t - r.t < 30).map(r => r.w).slice(-5), where: AREAS[areaOf(p)]?.name || '' });
+    if (p.trace.length > 20) p.trace.shift();
+  }
   function choose(p) {
     settle(p);
     const opts = options(p);
     if (!opts.length) return setTask(p, 'idle', { until: sim.t + 30 });
     // an AI's to-do list comes first: do the next step if it's possible now; give up on a step after two hours
+    if (waitsForOrders(p) && !p.agenda?.length) { setTask(p, 'wait', { until: sim.t + 20 }); askOrders(p, null); return; }
     while (p.agenda?.length) {
       const step = p.agenda[0], o = matchStep(step, opts, p);
       if (o) {
         p.agenda.shift(); const key = situation(p);
         lesson(key, o.kind, null, true);   // a lesson for the plain brains: in this situation, the AI chose this
+        teach(p, o.kind, opts); groundWords(p, o.kind); trace(p, 'teacher (AI)', o, [{ o, v: 0 }], key);
         (sim.dataRows ||= []).push({ type: 'pilot', day: sim.day, sit: key, choice: o.kind, label: optLabel(o), brain: p.brain });
         if (p.town !== 'marrow') p.lastChoice = { key, kind: o.kind, worth: worth(p), t: sim.t };
         p.lastStep = optLabel(o);
@@ -956,14 +1045,21 @@ function Sim(opts = {}) {
         return;
       }
       step.tries = (step.tries || 0) + 1; step.since ??= sim.t;
-      if (sim.t - step.since > 120) { p.agenda.shift(); continue; }
+      if (sim.t - step.since > 120) { p.agenda.shift(); (p.failed ||= []).push(step.do); continue; }
+      if (waitsForOrders(p)) { setTask(p, 'wait', { until: sim.t + 15 }); return; }
       break;
     }
     const key = situation(p), lean = p.brain === 'script' ? sim.learning : 0;
-    const pickOpt = opts.map(o => ({ o, v: o.value + rnd(0, 1.5) + (lean ? loreBias(key, o.kind) * lean : 0) })).sort((a, b) => b.v - a.v)[0].o;
+    const studentOn = p.brain === 'script' && sim.studentMode !== 'habit', x = studentOn ? features(p) : null;
+    const logits = studentOn ? forward(x, p.noise).out : null, w = sim.studentMode === 'student' ? 1 : sim.studentWeight;
+    const scored = opts.map(o => { const habit = o.value + rnd(0, 1.5) + (lean ? loreBias(key, o.kind) * lean : 0); return { o, v: studentOn ? habit * (1 - w) + (logits[kindIndex(o.kind)] * 4 + rnd(0, 0.5)) * w : habit }; }).sort((a, b) => b.v - a.v);
+    const pickOpt = scored[0].o;
+    trace(p, p.brain === 'script' ? (studentOn ? (sim.studentMode === 'student' ? 'student' : 'blend') : 'habit') : 'habit (between AI steps)', pickOpt, scored, key);
+    groundWords(p, pickOpt.kind);
+    p.lastX = x;
     // an AI-played person's choices (steered by their own plan for the day) are examples for the rest
     if (p.brain !== 'script' && p.brain !== 'human' && p.policy) lesson(key, pickOpt.kind, null, true);
-    if (p.town !== 'marrow') p.lastChoice = { key, kind: pickOpt.kind, worth: worth(p), t: sim.t };
+    if (p.town !== 'marrow') p.lastChoice = { key, kind: pickOpt.kind, worth: worth(p), t: sim.t, x: p.lastX };
     startTask(p, pickOpt);
     if (p.task) p.task.value = pickOpt.value;
   }
@@ -990,6 +1086,26 @@ function Sim(opts = {}) {
     p.switched = (p.switched || 0) + 1;
   }
   sim.reconsider = reconsider;
+  // ---- generations ---------------------------------------------------------------
+  sim.genDays = 14; sim.sigma = 0.04;
+  function mutateAll() { for (const p of everyone()) if (p.kind === 'human' && p.brain === 'script' && !p.town) { const nz = new Float32Array(NPARAM); for (let k = 0; k < NPARAM; k++) nz[k] = (Math.random() + Math.random() + Math.random() - 1.5) * 2 * sim.sigma; p.noise = nz; } }
+  sim.mutateAll = mutateAll;
+  // fitness: the most money, and survival (the dead keep a fraction of what they had)
+  const fitness = p => (p.alive ? worth(p) + 40 : (p.deathWorth || 0) * 0.25);
+  function endGeneration() {
+    const n = netOf(), pop = everyone().filter(p => p.kind === 'human' && p.noise && !p.town);
+    if (pop.length >= 4) {
+      const ranked = pop.slice().sort((a, b) => fitness(a) - fitness(b)), N = ranked.length;
+      const lr = 0.6;
+      ranked.forEach((p, r) => { const u = (r / (N - 1)) - 0.5; for (let k = 0; k < NPARAM; k++) n.theta[k] += lr * u * p.noise[k] / N; });
+    }
+    const alive = pop.filter(p => p.alive), fit = pop.map(fitness);
+    const words = Object.entries(sim.lore.words || {}).filter(([, e]) => e.n >= 3).length;
+    const stat = { gen: n.gen + 1, days: sim.day, people: pop.length, alive: alive.length, deaths: sim.rec.deaths, avgFit: +(fit.reduce((a, b) => a + b, 0) / Math.max(1, fit.length)).toFixed(1), bestFit: +Math.max(0, ...fit).toFixed(1), agree: n.asked ? +(n.agree / n.asked).toFixed(2) : null, taught: n.imitated, words, crimes: sim.rec.crimes, gini: snapshot().gini };
+    n.history.push(stat); if (n.history.length > 500) n.history.shift(); n.gen++; n.agree = 0; n.asked = 0;
+    sim.onGeneration?.(stat); return stat;
+  }
+  sim.endGeneration = endGeneration;
   // words: a trigram chain, learned from everything said aloud (the player, the AIs, the lore's own lines)
   function learnWords(text) {
     const w = String(text).toLowerCase().match(/[\w']+|[.!?,]/g); if (!w || w.length < 3) return;
@@ -1052,8 +1168,8 @@ function Sim(opts = {}) {
     return line;
   }
   sim.plainSay = plainSay;
-  sim.exportLore = () => JSON.parse(JSON.stringify(sim.lore));
-  sim.importLore = o => { if (o && o.v === 1 && o.acts) { sim.lore = o; sim.lore.runs = (o.runs || 0) + 1; } };
+  sim.importLore = o => { if (o && o.v === 1 && o.acts) { sim.lore = o; sim.lore.runs = (o.runs || 0) + 1; if (o.net?.theta) o.net.theta = Float32Array.from(o.net.theta); mutateAll(); } };
+  sim.exportLore = () => { const o = JSON.parse(JSON.stringify({ ...sim.lore, net: undefined })); const n = netOf(); o.net = { ...n, theta: Array.from(n.theta, v => +v.toFixed(5)) }; return o; };
   sim.loreSize = () => ({ phrases: Object.values(sim.lore.phrases || {}).reduce((a, l) => a + l.length, 0), situations: Object.keys(sim.lore.acts).length, taught: sim.lore.taught, scored: sim.lore.scored, words: Object.keys(sim.lore.chain).length, runs: sim.lore.runs });
   sim.options = options; sim.choose = choose;
 
@@ -1169,6 +1285,7 @@ function Sim(opts = {}) {
         else log('life', `${boss.name} has no work for ${p.name}.`, [p.id, boss.id]);
         p.task = null; return;
       }
+      case 'wait': { if (sim.t >= tk.until) p.task = null; return; }
       case 'tail': { const L = sim.people[tk.target]; if (!L || !L.alive) { p.task = null; return; } if (dist2(p, L) > 2.2) arrive(p, L, dt, 2.2); else p.yaw = Math.atan2(L.x - p.x, L.z - p.z); return; }
       case 'goto': { if (arrive(p, tk.to, dt)) p.task = null; return; }
       case 'talk': { const w = sim.people[tk.with]; if (w) p.yaw = Math.atan2(w.x - p.x, w.z - p.z); if (w && dist2(w, p) > 6) p.task = null; return; }
@@ -1664,7 +1781,8 @@ function Sim(opts = {}) {
   // ---- death and the graveyard ---------------------------------------------------
   function die(p, killer, how) {
     if (!p.alive) return;
-    if (p.lastChoice && sim.lore) { lesson(p.lastChoice.key, p.lastChoice.kind, -40, false); (sim.dataRows ||= []).push({ type: 'death', day: sim.day, sit: p.lastChoice.key, choice: p.lastChoice.kind, how: how || '' }); p.lastChoice = null; }   // the worst outcome there is
+    if (p.lastChoice && sim.lore) { if (p.lastChoice.x && sim.studentMode !== 'habit') nudge(p.lastChoice.x, p.lastChoice.kind, -1, 0.05); lesson(p.lastChoice.key, p.lastChoice.kind, -40, false); (sim.dataRows ||= []).push({ type: 'death', day: sim.day, sit: p.lastChoice.key, choice: p.lastChoice.kind, how: how || '' }); p.lastChoice = null; }   // the worst outcome there is
+    p.deathWorth = worth(p);
     p.alive = false; p.deadAt = sim.t; p.state = 'dead'; p.task = null; p.dying = false; sim.rec.deaths++;
     sim.bodies.push({ id: p.id, name: fullName(p), x: p.x, z: p.z, coin: p.coin, items: { ...p.items }, weapon: p.weapon, buried: false, killer: killer?.id || null, how });
     p.coin = 0;
@@ -2335,7 +2453,7 @@ function Sim(opts = {}) {
   ].filter(Boolean).join('\n');
   sim.turnFor = (p, kind) => {
     const menu = [...new Set(options(p).map(optLabel))].sort(() => Math.random() - 0.5);
-    const lines = [`PLAN. Here is what is available to you right now: ${menu.join('; ') || 'nothing at this moment'} (more becomes possible as things change).`, facts(p).split('\n').filter(l => !l.startsWith('Rose of the City')).join('\n')];
+    const failed = (p.failed || []).splice(0); const lines = [failed.length ? `These steps couldn't be done: ${failed.join('; ')}.` : '', `PLAN. Here is what is available to you right now: ${menu.join('; ') || 'nothing at this moment'} (more becomes possible as things change).`, facts(p).split('\n').filter(l => !l.startsWith('Rose of the City')).join('\n')];
     if (kind === 'mayor') lines.push(
       `YOUR SEAT OF POWER. You set the sales tax, the daily rent and head tax, every public wage (guards, captain, jailer, clerk, labourers, undertaker, cleric, doctor, teacher, your own), bounties on anyone (or on beasts), a curfew, bail; you hire and fire public workers, pardon prisoners, back a guard for captain, and the treasury is in your hands (you can take from it; if someone sees, it's embezzlement). You command the guard: "orders": [{"guard": "<guard id>" | "all" | "captain", "do": "arrest <id>" (on your own warrant, no evidence needed) | "patrol <place>" | "escort me" | "raid <business>" | "release <id>" | "stand down"}]. Guards carry out orders; some may refuse what they think is unjust, and people who see an arrest without cause remember it. The election is every 7 days; anyone may stand against you.`,
       `Wages now: ${JSON.stringify(sim.wages)}. Bounties: ${JSON.stringify(sim.bounty)}. Curfew: ${sim.curfew}. Bail: ${sim.bail}c. Crimes in the last day: ${sim.events.filter(e => sim.t - e.t < 1440).length}. People with open charges: ${living().filter(q => openRecord(q).length).map(q => `${q.name} (${q.id}) ${openRecord(q).length}`).join(', ') || 'none'}. Guards: ${living().filter(isGuard).map(g => `${g.name} (${g.id}, ${JOBS[g.job].title})`).join('; ') || 'none'}.`,
@@ -2354,6 +2472,7 @@ function Sim(opts = {}) {
   function hearWords(sp, text) {
     // people hearing their own name look round
     const low = String(text).toLowerCase();
+    { const ks = keywords(text); for (const q of living()) if (q !== sp && q.kind === 'human' && q.brain !== 'human' && hears(q, sp)) heardBy(q, ks); }
     for (const q of living()) if (q !== sp && q.kind === 'human' && q.brain !== 'human' && low.includes(q.name.toLowerCase()) && hears(q, sp)) { q.alert = true; if (q.state !== 'sleep') q.yaw = Math.atan2(sp.x - q.x, sp.z - q.z); }
     const words = keywords(text).concat((String(text).toLowerCase().match(/[a-z]+/g) || []).filter(w => w.length <= 3 && !STOP.has(w)));
     for (const an of Object.values(sim.animals)) {
@@ -2425,6 +2544,7 @@ function Sim(opts = {}) {
     // talking stops you where you stand (unless you're in a fight or in jail)
     for (const [x, y] of [[sp, to]]) if (x.brain !== 'human' && conscious(x) && !x.fight && !(x.jailedUntil > 0) && !dec.end) setTask(x, 'talk', { with: y.id, until: sim.t + 20 });
     if (to.brain !== 'human' && conscious(to) && !to.fight && !(to.jailedUntil > 0) && !dec.end) setTask(to, 'talk', { with: sp.id, until: sim.t + 20 });
+    heardBy(to, keywords(text)); if (to.brain !== 'human') to.alert = true;
     if (dec.do) { const step = { do: String(dec.do).slice(0, 80) }; (sp.agenda ||= []).unshift(step); if (!sp.fight && !(sp.jailedUntil > 0)) { sp.task = null; choose(sp); } log('life', sp.agenda[0] !== step ? `${sp.name} goes to ${sp.lastStep}.` : `${sp.name} wants to ${step.do}, but can't right now.`, [sp.id]); }
     if (sp.offerFrom && sp.offerFrom.from === to.id && typeof dec.accept === 'boolean') { const of = sp.offerFrom; sp.offerFrom = null; if (dec.accept && canGive(sp, of.offer.want) && canGive(to, of.offer.give)) settleDeal(to, sp, of.offer); else log('trade', `${sp.name} turns down ${to.name}'s ${of.offer.threat ? 'demand' : 'offer'}.`, [sp.id, to.id]); }
     if (dec.offer && typeof dec.offer === 'object') makeOffer(sp, to, dec.offer);
@@ -2502,6 +2622,7 @@ function Sim(opts = {}) {
     const own = JOBS[p.job]?.owner && sim.business[JOBS[p.job].owner];
     if (own && dec.prices && typeof dec.prices === 'object') for (const [k, v] of Object.entries(dec.prices)) if (k in GOODS && typeof v === 'number') own.mult[k] = clamp(v, 0.5, 4);
     if (kind === 'mayor') sim.applyMayor(p, dec);
+    p.awaiting = null;
     if (Array.isArray(dec.agenda)) { p.agenda = dec.agenda.slice(0, 5).map(x => ({ do: String(typeof x === 'object' ? x.do || x.step || '' : x).slice(0, 80) })).filter(x => x.do); if (p.agenda.length && p.task && !['jail', 'fight', 'flee', 'sleep'].includes(p.task.kind)) p.task = null; }
     if (dec.policy && typeof dec.policy === 'object') { p.policy = {}; for (const [k, v] of Object.entries(dec.policy)) if (typeof v === 'number') p.policy[k] = clamp(v, 0, 3); }
     if (dec.say) log('talk', `${p.name}: "${String(dec.say).slice(0, 200)}"`, [p.id]);
@@ -2518,6 +2639,21 @@ function Sim(opts = {}) {
     if (dec.boss_vote && sim.people[dec.boss_vote]?.alive) p.bossVote = dec.boss_vote;
     if (dec.stand === true) (p.agenda ||= []).unshift({ do: 'stand for mayor' });
   };
+  // ---- AI bodies wait for orders -----------------------------------------------------
+  // With sim.aiOnly on, an AI-played body does only what its LLM said; when it has nothing left to
+  // do, or something happens to it, it stands still and asks.
+  sim.aiOnly = false;
+  function askOrders(p, why) {
+    if (p.awaiting && sim.t - p.awaiting < 60) return;
+    p.awaiting = sim.t;
+    const kind = p.id === sim.mayorId ? 'mayor' : 'plan';
+    const turn = (why ? `WHAT JUST HAPPENED: ${why}\n` : '') + sim.turnFor(p, kind);
+    const q = { id: p.id + '-w' + Math.floor(sim.t), person: p.id, kind, brain: p.brain, prompt: sim.identityFor(p) + '\n' + turn, turn, waiting: true, fallback: () => { p.awaiting = null; } };
+    sim.decisionsPending.push(q); sim.onDecision?.(q);
+  }
+  sim.askOrders = askOrders;
+  const waitsForOrders = p => sim.aiOnly && thinks(p) && p.brain !== 'human';
+  sim.waitsForOrders = waitsForOrders;
   function morning() {
     for (const p of living()) {
       if (p.brain === 'script' || p.brain === 'human') { if (p.id === sim.mayorId && p.brain === 'script') scriptedMayor(p); continue; }
@@ -2546,7 +2682,7 @@ function Sim(opts = {}) {
       if (sim.beastAt && sim.t >= sim.beastAt) { invade(!sim.invaded); sim.invaded = true; sim.beastAt = null; }
       if (h === 18 && sim.day % 7 === 3) guardVote('the weekly vote');
       if (h === 21 && sim.day % 7 === 5) for (const g of Object.values(sim.gangs)) gangVote(g, 'the weekly reckoning');
-      for (const p of living()) if (p.task && (p.agenda?.length && !['jail', 'flee', 'talk', 'tail'].includes(p.task.kind) || !['jail', 'sleep', 'work', 'flee', 'follow', 'caravan', 'fish', 'tail', 'talk'].includes(p.task.kind)) && sim.t - p.task.t0 > 60) p.task = null;   // replan hourly
+      for (const p of living()) if (!waitsForOrders(p) && p.task && (p.agenda?.length && !['jail', 'flee', 'talk', 'tail'].includes(p.task.kind) || !['jail', 'sleep', 'work', 'flee', 'follow', 'caravan', 'fish', 'tail', 'talk'].includes(p.task.kind)) && sim.t - p.task.t0 > 60) p.task = null;   // replan hourly
     }
     for (const p of living()) {
       if (p.kind !== 'human') continue;
@@ -2556,9 +2692,9 @@ function Sim(opts = {}) {
       // thirst wears you down to 1 hp; after that it's days, not hours, before it kills
       if (p.water <= 0) { p.dry = (p.dry || 0) + dtMin; if (p.dry > 1440 && p.hp > 1 && Math.random() < dtMin / 240) p.hp -= 1; if (p.dry > 3 * 1440) { if (p.brain === 'human') { p.hp = -1; p.down = 'out'; p.downUntil = sim.t + 60; p.water = 0.5; p.dry = 0; } else die(p, null, 'thirst'); } } else p.dry = 0;
       // an empty belly takes you off work (a meal break), but doesn't wake you
-      if (p.food < 0.12 && p.brain !== 'human' && conscious(p) && !p.fight && !(p.jailedUntil > 0) && p.task?.kind === 'work' && !(p.cd?.meal > sim.t) && !['bakery', 'tavern', 'farm', 'ranch'].includes(JOBS[p.job].owner || JOBS[p.job].payer)) { cool(p, 'meal', 180); p.task = null; }
+      if (p.food < 0.12 && p.brain !== 'human' && !waitsForOrders(p) && conscious(p) && !p.fight && !(p.jailedUntil > 0) && p.task?.kind === 'work' && !(p.cd?.meal > sim.t) && !['bakery', 'tavern', 'farm', 'ranch'].includes(JOBS[p.job].owner || JOBS[p.job].payer)) { cool(p, 'meal', 180); p.task = null; }
       // a dry throat wakes you and pulls you off work
-      if (p.water < 0.12 && p.brain !== 'human' && conscious(p) && !p.fight && !(p.jailedUntil > 0) && p.task && !['drink', 'flee', 'jail'].includes(p.task.kind) && !p.carriedBy) { if (p.task.kind === 'follow' || p.task.kind === 'caravan' || p.task.kind === 'ambush') { const w = [...SPOTS.wells].sort((a, b) => dist2(p, a) - dist2(p, b))[0]; if (dist2(p, w) > 60) { p.water = 0.5; } else p.task = null; } else p.task = null; }
+      if (p.water < 0.12 && p.brain !== 'human' && !waitsForOrders(p) && conscious(p) && !p.fight && !(p.jailedUntil > 0) && p.task && !['drink', 'flee', 'jail'].includes(p.task.kind) && !p.carriedBy) { if (p.task.kind === 'follow' || p.task.kind === 'caravan' || p.task.kind === 'ambush') { const w = [...SPOTS.wells].sort((a, b) => dist2(p, a) - dist2(p, b))[0]; if (dist2(p, w) > 60) { p.water = 0.5; } else p.task = null; } else p.task = null; }
       if (p.state !== 'sleep') p.rest = Math.max(0, p.rest - dtMin / 60 / 18);
       if (p.state !== 'sleep' && Math.random() < dtMin / 8) p.yaw = (p.yaw || 0) + rnd(-1.6, 1.6);
       if (p.items.finery && Math.random() < dtMin / 120) showWealth(p, 70, 0.05);
@@ -2569,6 +2705,7 @@ function Sim(opts = {}) {
       if (p.fight || p.brain === 'human' || !conscious(p) || p.carriedBy) continue;
       doTask(p, dtMin);
       if (!p.task) choose(p);
+      else if (waitsForOrders(p)) { if (p.alert) { p.alert = false; const m = p.memory.slice(-1)[0]; askOrders(p, m?.text || (m?.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (you ${m.how})` : 'something caught your attention')); } }
       else if (p.alert || sim.t >= (p.nextLook || 0)) { p.nextLook = sim.t + 5 + Math.random() * 3; reconsider(p); }
     }
     // animals: follow their people, eat, sleep

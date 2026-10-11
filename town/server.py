@@ -214,7 +214,7 @@ def think(req):
         if not req.get("player") and time.time() - book.get("chatted", 0) < 60 * float(st.get("chat_every_minutes", 3)):
             return None
         book["chatted"] = time.time()
-    elif req.get("brain") != "mayor-ai" and time.time() - book.get("asked", 0) < 60 * float(st.get("folk_every_minutes", 10)):
+    elif req.get("brain") != "mayor-ai" and time.time() - book.get("asked", 0) < (20 if req.get("waiting") else 60 * float(st.get("folk_every_minutes", 10))):
         return None
     else:
         book["asked"] = time.time()
