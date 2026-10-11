@@ -133,7 +133,7 @@ const ARMOR = {
 const SHIELDS = { none: { name: 'No shield', ac: 0 }, buckler: { name: 'Buckler', ac: 1, price: 8, iron: 1, hours: 2, buckler: true }, lightshield: { name: 'Light shield', ac: 1, price: 6, iron: 1, hours: 2 }, heavyshield: { name: 'Heavy shield', ac: 2, price: 12, iron: 2, hours: 4 } };
 const GOODS = {
   iron: { name: 'Iron bar', price: 2 }, arrows: { name: 'Arrows (10)', price: 1, shop: 'smithy', bundle: 10 }, bolts: { name: 'Bolts (10)', price: 1, shop: 'smithy', bundle: 10 }, bullets: { name: 'Sling bullets (10)', price: 1, shop: 'smithy', bundle: 10 }, javelins: { name: 'Javelins (3)', price: 2, shop: 'smithy', bundle: 3 },
-  bearpelt: { name: 'Bear pelt', price: 12 }, wolfpelt: { name: 'Wolf pelt', price: 4 }, ogretooth: { name: 'Ogre tusk', price: 15 },
+  bearpelt: { name: 'Bear pelt', price: 12 }, wolfpelt: { name: 'Wolf pelt', price: 4 }, ogretooth: { name: 'Ogre tusk', price: 15 }, trollhide: { name: 'Troll hide', price: 25 },
   bread: { name: 'Loaf of bread', price: 1, food: 0.5, shop: 'bakery' }, pie: { name: 'Meat pie', price: 3, food: 0.8, shop: 'bakery' },
   ale: { name: 'Mug of ale', price: 2, shop: 'tavern', mood: 0.1, water: 0.4 }, meal: { name: 'Stew and bread', price: 2, food: 0.6, shop: 'tavern' },
   grain: { name: 'Sack of grain', price: 2, shop: 'farm' }, barley: { name: 'Sack of barley', price: 2, shop: 'farm' },
@@ -215,6 +215,38 @@ const CLASSES = {
   rogue:    { hd: 6, bab: l => Math.floor(l * 3 / 4), skills: 6 },
   aristocrat: { hd: 8, bab: l => Math.floor(l * 3 / 4), skills: 4 },
 };
+// Levelling up (Rose's reward): XP, and levels 2-5 taken in the 3.5e player classes, each chosen by the person
+const PC = {
+  barbarian: { hd: 12, bab: l => l, fort: true, skills: ['intimidate', 'listen'], blurb: 'd12 hp, full attack; rages in a fight (+2 to hit and damage, -2 AC), once a day (twice from level 4)' },
+  bard:      { hd: 6, bab: l => Math.floor(l * 3 / 4), fort: false, skills: ['diplomacy', 'bluff'], blurb: 'inspire courage: everyone on your side +1 to hit and damage while you stand' },
+  cleric:    { hd: 8, bab: l => Math.floor(l * 3 / 4), fort: true, skills: ['heal', 'diplomacy'], blurb: 'cure light wounds (1d8 + level) on the hurt or dying on your side, 1 + level a day' },
+  druid:     { hd: 8, bab: l => Math.floor(l * 3 / 4), fort: true, skills: ['heal', 'spot'], blurb: 'a wolf companion that fights beside you; cure light wounds, 1 + level a day' },
+  fighter:   { hd: 10, bab: l => l, fort: true, skills: ['intimidate'], blurb: 'd10 hp, full attack; a bonus feat at fighter levels 1, 2 and 4' },
+  monk:      { hd: 8, bab: l => Math.floor(l * 3 / 4), fort: true, skills: ['listen', 'sneak'], blurb: 'deadly bare hands (1d6, 1d8 from monk 4, lethal or not as you like); AC + wisdom without armour' },
+  paladin:   { hd: 10, bab: l => l, fort: true, skills: ['diplomacy', 'heal'], blurb: 'd10 hp, full attack; smite once a fight (+cha to hit, +level damage); lay on hands; immune to disease from paladin 3' },
+  ranger:    { hd: 8, bab: l => l, fort: true, skills: ['spot', 'listen', 'hide'], blurb: 'full attack; +2 damage against beasts; +1 to hit with bows and slings from ranger 2' },
+  rogue:     { hd: 6, bab: l => Math.floor(l * 3 / 4), fort: false, skills: ['sleight', 'hide', 'sneak', 'openlock'], blurb: 'sneak attack +1d6 (2d6 at rogue 3, 3d6 at 5) on a foe caught flat-footed or flanked' },
+  sorcerer:  { hd: 4, bab: l => Math.floor(l / 2), fort: false, skills: ['bluff'], blurb: 'magic missile (never misses, 1d4+1 a missile), 3 + level a day; scorching ray (4d6 fire) from sorcerer 4' },
+  wizard:    { hd: 4, bab: l => Math.floor(l / 2), fort: false, skills: ['spot'], blurb: 'magic missile, 2 + level a day; scorching ray (4d6 fire) from wizard 3' },
+};
+const XP_AT = [0, 0, 500, 1500, 3000, 5000], MAX_LEVEL = 5;
+const SKILL_ABIL = { bluff: 'cha', diplomacy: 'cha', sense: 'wis', intimidate: 'cha', hide: 'dex', sneak: 'dex', sleight: 'dex', spot: 'wis', listen: 'wis', heal: 'wis', openlock: 'dex', escape: 'dex' };
+const FEATS = {
+  'Power Attack':          { req: p => p.st.str >= 13, blurb: 'melee, lethal: -2 to hit, +2 damage (+4 two-handed)' },
+  'Cleave':                { req: p => p.feats?.includes('Power Attack'), blurb: 'drop a foe and swing at another beside you' },
+  'Weapon Focus':          { req: p => babOf(p) >= 1, blurb: '+1 to hit' },
+  'Weapon Specialization': { req: p => clvl(p, 'fighter') >= 4, blurb: '+2 damage (fighter 4)' },
+  'Improved Initiative':   { req: () => true, blurb: '+4 initiative' },
+  'Dodge':                 { req: p => p.st.dex >= 13, blurb: '+1 AC' },
+  'Toughness':             { req: () => true, blurb: '+3 hp' },
+  'Great Fortitude':       { req: () => true, blurb: '+2 Fortitude (sickness)' },
+  'Point Blank Shot':      { req: () => true, blurb: '+1 to hit and damage shooting within 9 m' },
+  'Alertness':             { req: () => true, blurb: '+2 spot and listen' },
+  'Persuasive':            { req: () => true, blurb: '+2 bluff and intimidate' },
+  'Negotiator':            { req: () => true, blurb: '+2 diplomacy and sense motive' },
+  'Stealthy':              { req: () => true, blurb: '+2 hide and move silently' },
+  'Self-Sufficient':       { req: () => true, blurb: '+2 heal' },
+};
 function rollStats(bias = {}) {
   const s = {};
   for (const k of ['str', 'dex', 'con', 'int', 'wis', 'cha']) { const r = [d(6), d(6), d(6), d(6)].sort((a, b) => a - b).slice(1).reduce((a, b) => a + b, 0); s[k] = clamp(r + (bias[k] || 0), 3, 18); }
@@ -265,8 +297,12 @@ function attracted(a, b) {
   return same ? 0 : 1;
 }
 const shieldOf = p => { const sh = SHIELDS[p.shield || 'none'] || SHIELDS.none; return WEAPONS[p.weapon]?.hands === 2 && !sh.buckler ? SHIELDS.none : sh; };
-const acOf = p => 10 + (ARMOR[p.armor] || ARMOR.none).ac + shieldOf(p).ac + Math.min(mod(p.st.dex), (ARMOR[p.armor] || ARMOR.none).maxDex) + (p.defending ? 4 : 0) - (p.charged ? 2 : 0) - (p.flatfooted ? Math.max(0, mod(p.st.dex)) : 0);
-const babOf = p => CLASSES[p.cls].bab(p.level);
+const acOf = p => 10 + (p.feats?.includes('Dodge') ? 1 : 0) + ((!p.armor || p.armor === 'none') && clvl(p, 'monk') ? Math.max(0, mod(p.st.wis)) + (clvl(p, 'monk') >= 5 ? 1 : 0) : 0) - (p.rage && p.rage === p.fight ? 2 : 0) + (ARMOR[p.armor] || ARMOR.none).ac + shieldOf(p).ac + Math.min(mod(p.st.dex), (ARMOR[p.armor] || ARMOR.none).maxDex) + (p.defending ? 4 : 0) - (p.charged ? 2 : 0) - (p.flatfooted ? Math.max(0, mod(p.st.dex)) : 0);
+const classesOf = p => p.classes || { [p.cls]: p.level || 1 };
+const clvl = (p, k) => (p.kind !== 'human' ? 0 : p.classes ? p.classes[k] || 0 : p.cls === k ? p.level || 1 : 0);
+const hasFeat = (p, k) => !!p.feats?.includes(k);
+const classLine = p => Object.entries(classesOf(p)).map(([k, n]) => k + ' ' + n).join(', ');
+const babOf = p => Object.entries(classesOf(p)).reduce((t, [k, n]) => t + ((PC[k] || CLASSES[k])?.bab(n) || 0), 0);
 const conscious = p => p.alive && !p.down && !p.dying && p.hp > 0;   // one health bar (LoH's rule): bruising comes off it too
 const free = p => conscious(p) && !(p.jailedUntil > 0);
 
@@ -330,7 +366,7 @@ function Sim(opts = {}) {
     const name = g => { let n; for (let i = 0; i < 50; i++) { n = pick(NAMES[g === 'nb' ? 'n' : g]); if (!used.has(n)) break; } used.add(n); return n; };
     const add = o => { const p = makePerson(sim, { ...o, name: name(o.gender) }); sim.people[p.id] = p; sim.peopleAdded = (sim.peopleAdded || 0) + 1; return p; };
     const g = () => pick(['m', 'f']);
-    const mayor = add({ gender: pick(['m', 'f', 'nb']), cls: 'aristocrat', level: 2, job: 'none', coin: 30, focus: ['diplomacy', 'bluff', 'sense'], brain: 'mayor-ai', tags: ['ai-mayor'] });
+    const mayor = add({ gender: pick(['m', 'f', 'nb']), cls: 'aristocrat', level: 1, job: 'none', coin: 30, focus: ['diplomacy', 'bluff', 'sense'], brain: 'mayor-ai', tags: ['ai-mayor'] });
     sim.mayorId = null;   /* Rose: the office starts empty; day 1 is campaigning */
     const guards = [['m', 'captain', 3], ['m', 'guard', 2], ['f', 'guard', 1], ['m', 'nightguard', 1], ['f', 'nightguard', 1], ['m', 'jailer', 1]]
       .map(([gd, job, lvl]) => add({ gender: gd, cls: 'warrior', level: lvl, job, weapon: job === 'captain' ? 'longsword' : pick(['club', 'shortsword', 'sap']), armor: job === 'captain' ? 'chain' : 'leather', coin: irnd(4, 12), focus: ['intimidate', 'spot', 'sense'], bias: { str: 1, con: 1 } }));
@@ -428,20 +464,28 @@ function Sim(opts = {}) {
     bear:     { name: 'Bear', hp: 30, ac: 13, atk: 6, bite: [1, 8], dmgBonus: 4, speed: 12, meat: 10, pelt: 'bearpelt', attackName: 'claws', from: 21, pack: [1, 1], label: 'a bear', dr: 1 },
     direwolf: { name: 'Dire wolf', hp: 38, ac: 14, atk: 7, bite: [1, 8], dmgBonus: 6, speed: 15, meat: 6, pelt: 'wolfpelt', from: 28, pack: [1, 3], label: 'dire wolves', dr: 1 },
     ogre:     { name: 'Ogre', hp: 29, ac: 16, atk: 8, bite: [2, 8], dmgBonus: 7, speed: 9, meat: 0, pelt: 'ogretooth', attackName: 'greatclub', from: 35, pack: [1, 2], label: 'wild ogres', dr: 2 },
+    troll:    { name: 'Troll', hp: 63, ac: 16, atk: 9, bite: [1, 6], dmgBonus: 6, speed: 9, meat: 0, pelt: 'trollhide', attackName: 'claws', from: 999, pack: [1, 1], label: 'a troll', regen: 5, multi: 1 },   // two claws a turn; heals 5 a round unless burned
   };
+  const BEAST_CR = { wolf: 1, boar: 2, bear: 3, direwolf: 3, ogre: 3, troll: 5 };
   let beastSeq = 0;
   function spawnBeast(kind, at) {
     const b = BEASTS[kind], id = kind + 'x' + (++beastSeq);
-    const an = sim.animals[id] = { id, kind: 'animal', species: kind, name: b.name, temper: 'hostile', monster: true, alive: true, hp: b.hp, maxhp: b.hp, nl: 0, ac: b.ac, atk: b.atk, bite: b.bite, dmgBonus: b.dmgBonus, dr: b.dr || 0, speed: b.speed, meat: b.meat, pelt: b.pelt, attackName: b.attackName, x: 0, z: 0, yaw: Math.PI / 2, state: 'prowl', stateT: 0, full: 0.3, bond: {}, skills: { spot: 4, listen: 4 }, items: {} };
+    const an = sim.animals[id] = { id, kind: 'animal', species: kind, name: b.name, temper: 'hostile', monster: true, alive: true, hp: b.hp, maxhp: b.hp, nl: 0, ac: b.ac, atk: b.atk, bite: b.bite, dmgBonus: b.dmgBonus, dr: b.dr || 0, regen: b.regen || 0, multi: b.multi || 0, cr: BEAST_CR[kind] || 1, speed: b.speed, meat: b.meat, pelt: b.pelt, attackName: b.attackName, x: 0, z: 0, yaw: Math.PI / 2, state: 'prowl', stateT: 0, full: 0.3, bond: {}, skills: { spot: 4, listen: 4 }, items: {} };
     place(an, P(at.x + rnd(-2, 2), at.z + rnd(-3, 3))); return an;
   }
   function invade(first) {
     const day = sim.day + 20, pool = first ? ['bear'] : Object.keys(BEASTS).filter(k => BEASTS[k].from <= day && (k !== 'ogre' || day >= 35));
-    // the last night of every generation (day 3, 6, ...) brings an ogre, sometimes two (Rose)
-    const finale = !first && sim.day % (sim.genDays || 3) === 0;
-    const kind = finale ? 'ogre' : pick(pool.length ? pool : ['bear']), b = BEASTS[kind], n = first ? 1 : finale ? (Math.random() < 0.35 ? 2 : 1) : irnd(b.pack[0], b.pack[1] + Math.floor((day - 21) / 14));
+    // the last night of every generation brings a troll and two bears (Rose)
+    const finale = !first && sim.day % (sim.genDays || 7) === 0;
+    const kind = pick(pool.length ? pool : ['bear']), b = BEASTS[kind], n = first ? 1 : irnd(b.pack[0], b.pack[1] + Math.floor((day - 21) / 14));
     const at = pick([P(-104, rnd(-15, 15)), P(-104, rnd(-15, 15)), P(-66, -48), P(-66, 48)]);
-    const got = []; for (let i = 0; i < n; i++) got.push(spawnBeast(kind, at));
+    const got = [];
+    if (finale) {
+      got.push(spawnBeast('troll', at)); for (let i = 0; i < 2; i++) got.push(spawnBeast('bear', P(at.x + rnd(-4, 4), at.z + rnd(-4, 4))));
+      sim.beastsSeen = (sim.beastsSeen || 0) + got.length; sim.nextInvasion = day + irnd(3, 6);
+      log('death', 'The last night: a troll and two bears come out of the Wildwood, heading for town!', got.map(a => a.id)); return;
+    }
+    for (let i = 0; i < n; i++) got.push(spawnBeast(kind, at));
     sim.beastsSeen = (sim.beastsSeen || 0) + n;
     log('death', `${first ? 'Something big' : n > 1 ? n + ' beasts' : 'A beast'} ${n > 1 ? 'come' : 'comes'} out of the Wildwood: ${n > 1 ? n + ' ' + ({ wolf: 'wolves', boar: 'wild boar', bear: 'bears', direwolf: 'dire wolves', ogre: 'ogres' }[kind]) : b.name.toLowerCase()}, heading for town!`, got.map(a => a.id));
     sim.nextInvasion = day + irnd(3, 6);
@@ -1315,7 +1359,7 @@ function Sim(opts = {}) {
   sim.aEndGeneration = aEndGeneration;
   sim.animalMinds = true;
   // ---- generations ---------------------------------------------------------------
-  sim.genDays = 3; sim.sigma = 0.04;
+  sim.genDays = 7; sim.sigma = 0.04;   /* Rose: generations are a week now */
   sim.firstElection = 2; sim.electionEvery = 1;
   const isElectionDay = d => d >= sim.firstElection && (d - sim.firstElection) % sim.electionEvery === 0;
   const nextElectionDay = (pastNoon = H() >= 12) => { let d = sim.day + (pastNoon && isElectionDay(sim.day) ? 1 : 0); while (!isElectionDay(d)) d++; return d; };
@@ -1344,7 +1388,7 @@ function Sim(opts = {}) {
       for (const b of sim.bodies) { const k = b.killer && sim.animals[b.killer] ? 'beasts' : b.killer ? 'people' : /starv/.test(b.how || '') ? 'starvation' : Object.values(DISEASES).some(D => D.name.toLowerCase() === b.how) ? 'disease' : 'other'; cause[k]++; }
       const dead = Object.entries(cause).filter(([, n]) => n).map(([k, n]) => `${n} by ${k}`).join(', ') || 'none';
       const lines = [`Generation ${stat.gen} (${sim.day - 1} days): ${lived.length} of ${ppl.length} lived. Richest: ${ranked.slice(0, 3).map(p => role(p) + ' ~' + Math.round(trueWorth(p)) + 'c').join('; ') || 'nobody'}. Poorest: ${ranked.slice(-2).map(role).join('; ') || 'nobody'}. Deaths: ${dead}. ${sim.rec.arrests} arrests for ${sim.rec.crimes} crimes.`];
-      if (cause.beasts) lines.push('Beasts came out of the Wildwood every night at 22:00 and hunted people by scent, even asleep in their houses; on the last night of a generation it is an ogre.');
+      if (cause.beasts) lines.push('Beasts came out of the Wildwood every night at 22:00 and hunted people by scent, even asleep in their houses; on the last night of a generation it is a troll and two bears.');
       const gl = sim.genLog || [], top = (arr, k, n = 3) => { const c = {}; for (const x of arr) if (x[k]) c[x[k]] = (c[x[k]] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, n).map(([w, m]) => w + ' ' + m).join(', '); };
       const nights = {}; for (const d of gl) if (d.t === 'death' && d.killer && d.killer !== 'a person') { const key = (d.hr < 6 ? d.day - 1 : d.day) + '|' + d.killer; (nights[key] ||= []).push(d); }
       for (const [key, ds] of Object.entries(nights)) { const [day, who] = key.split('|'); lines.push(`Night of day ${day}: ${/^[aeiou]/i.test(who) ? 'an' : 'a'} ${who} killed ${ds.length} (${top(ds, 'who')}). Where they were caught: ${top(ds, 'where')}. What they were doing: ${top(ds, 'doing')}.`); }
@@ -2111,6 +2155,98 @@ function Sim(opts = {}) {
   }
   sim.jail = jail;
 
+  // ---- experience and levels (Rose) ----------------------------------------------
+  // XP: beasts (600 x CR, shared by everyone on the winning side, a quarter more to whoever lands the blow),
+  // fights won against people (100 a level beaten), and 100 for every night lived through. Levels at 500 / 1500 / 3000 / 5000.
+  const jobGroup = p => isGuard(p) ? 'guard' : JOBS[p.job]?.owner ? 'owner' : JOBS[p.job]?.payer === 'town' ? 'public' : p.underworld ? 'underworld' : p.job === 'none' ? 'jobless' : 'hand';
+  function gainXP(p, n, why) {
+    if (!p || p.kind !== 'human' || !p.alive || p.town || !(n > 0)) return;
+    p.xp = (p.xp || 0) + Math.round(n); checkLevel(p);
+  }
+  sim.gainXP = gainXP;
+  function checkLevel(p) {
+    if (p.levelReady || (p.level || 1) >= MAX_LEVEL || (p.xp || 0) < XP_AT[(p.level || 1) + 1]) return;
+    p.levelReady = true; p.levelReadyAt = sim.t;
+    log('life', `${p.id === 'player' ? 'You have' : p.name + ' has'} earned level ${p.level + 1}.`, [p.id]);
+    if (!thinks(p)) autoLevel(p);
+  }
+  function featSlots(p, cls) { return (!p.feats ? 1 : 0) + (p.level + 1 === 3 ? 1 : 0) + (cls === 'fighter' && [1, 2, 4].includes(clvl(p, 'fighter') + 1) ? 1 : 0); }
+  const normFeat = w0 => { const w = String(w0 || '').toLowerCase().trim(); if (!w) return null; const ks = Object.keys(FEATS); return ks.find(k => k.toLowerCase() === w) || ks.find(k => w.includes(k.toLowerCase())) || ks.find(k => k.toLowerCase().includes(w)) || null; };
+  function applyFeat(p, k) {
+    if (k === 'Toughness') { p.maxhp += 3; p.hp += 3; }
+    const sk = { 'Alertness': ['spot', 'listen'], 'Persuasive': ['bluff', 'intimidate'], 'Negotiator': ['diplomacy', 'sense'], 'Stealthy': ['hide', 'sneak'], 'Self-Sufficient': ['heal'] }[k];
+    if (sk) for (const x of sk) p.skills[x] = (p.skills[x] || 0) + 2;
+  }
+  function pickClass(p) {
+    const cs = classesOf(p), have = Object.keys(cs).filter(k => PC[k] && !(k === 'rogue' && p.cls === 'rogue' && cs.rogue === 1 && !p.classes));
+    if (have.length && Math.random() < 0.8) return have.sort((a, b) => cs[b] - cs[a])[0];   // mostly stay with the class they started
+    const taught = sim.lore?.classPicks?.[jobGroup(p)];   // copy what the AI folk in the same line of work chose
+    if (taught && Math.random() < 0.6) { const best = Object.entries(taught).sort((a, b) => b[1] - a[1])[0]; if (best && PC[best[0]]) return best[0]; }
+    const j = p.job, st = p.st;
+    if (isGuard(p) || j === 'mercenary') return p.traits.honesty > 0.8 && st.cha >= 12 ? 'paladin' : p.traits.aggression > 0.65 ? 'barbarian' : 'fighter';
+    if (j === 'cleric' || j === 'doctor') return 'cleric';
+    if (p.underworld || p.cls === 'rogue') return 'rogue';
+    if (['farmer', 'farmhand', 'rancher', 'ranchhand'].includes(j)) return st.wis >= st.dex ? 'druid' : 'ranger';
+    if (['teacher', 'clerk', 'innkeep', 'server'].includes(j)) return st.cha >= st.int ? 'bard' : 'wizard';
+    const best = Object.entries(st).sort((a, b) => b[1] - a[1])[0][0];
+    return { str: p.traits.aggression > 0.6 ? 'barbarian' : 'fighter', dex: Math.random() < 0.5 ? 'rogue' : 'ranger', con: 'barbarian', int: 'wizard', wis: pick(['cleric', 'druid', 'monk']), cha: pick(['sorcerer', 'bard', 'paladin']) }[best] || 'fighter';
+  }
+  function pickFeat(p, cls) {
+    const ok = k => FEATS[k] && !p.feats.includes(k) && FEATS[k].req(p);
+    const taught = sim.lore?.featPicks?.[cls];
+    if (taught && Math.random() < 0.5) { const best = Object.entries(taught).filter(([k]) => ok(k)).sort((a, b) => b[1] - a[1])[0]; if (best) return best[0]; }
+    const pref = { fighter: ['Weapon Focus', 'Power Attack', 'Weapon Specialization', 'Cleave', 'Toughness', 'Dodge', 'Improved Initiative'], barbarian: ['Power Attack', 'Toughness', 'Cleave', 'Weapon Focus'], paladin: ['Weapon Focus', 'Toughness', 'Power Attack'], ranger: ['Point Blank Shot', 'Weapon Focus', 'Alertness', 'Toughness'], rogue: ['Improved Initiative', 'Dodge', 'Stealthy', 'Weapon Focus'], monk: ['Dodge', 'Improved Initiative', 'Toughness'], cleric: ['Toughness', 'Self-Sufficient', 'Great Fortitude'], druid: ['Toughness', 'Self-Sufficient', 'Great Fortitude'], bard: ['Negotiator', 'Persuasive', 'Toughness'], sorcerer: ['Toughness', 'Improved Initiative'], wizard: ['Toughness', 'Improved Initiative'] }[cls] || [];
+    return [...pref, 'Toughness', 'Alertness', 'Improved Initiative', 'Great Fortitude'].find(ok) || Object.keys(FEATS).find(ok) || null;
+  }
+  function restDaily(p) {
+    const cl = clvl(p, 'cleric') + clvl(p, 'druid'), sor = clvl(p, 'sorcerer'), wiz = clvl(p, 'wizard'), pal = clvl(p, 'paladin'), bar = clvl(p, 'barbarian');
+    p.cures = cl ? 1 + cl : 0;
+    p.missiles = (sor ? 3 + sor : 0) + (wiz ? 2 + wiz : 0);
+    p.rays = (sor >= 4 ? 1 : 0) + (wiz >= 3 ? 1 : 0) + (wiz >= 5 ? 1 : 0);
+    p.layPool = pal ? Math.max(1, mod(p.st.cha)) * pal : 0;
+    p.ragesLeft = bar ? 1 + (bar >= 4 ? 1 : 0) : 0;
+  }
+  function companion(p) {
+    const id = 'comp' + p.id; if (sim.animals[id]?.alive) return;
+    const an = sim.animals[id] = { id, kind: 'animal', species: 'dog', name: p.name + "'s wolf", temper: 'aggressive', owner: p.id, alive: true, hp: 13, maxhp: 13, nl: 0, ac: 14, atk: 3, bite: [1, 6], dmgBonus: 1, x: 0, z: 0, yaw: 0, state: 'idle', stateT: 0, full: 0.8, bond: { [p.id]: 1 }, skills: { spot: 4, listen: 4 }, items: {}, companion: true };
+    place(an, P(p.x + 1, p.z)); log('life', `A wolf comes out of the Wildwood and stays at ${p.name}'s side: an animal companion.`, [p.id]);
+  }
+  function levelUp(p, cls, featWant, chosen) {
+    if (!p.levelReady || !PC[cls]) return false;
+    const cs = { ...classesOf(p) }; cs[cls] = (cs[cls] || 0) + 1;
+    let slots = featSlots(p, cls);
+    p.classes = cs; p.level = (p.level || 1) + 1;
+    const g = Math.max(1, Math.floor(PC[cls].hd / 2) + 1 + mod(p.st.con)); p.maxhp += g; p.hp += g;
+    for (const k of Object.keys(p.skills)) if (p.skills[k] - mod(p.st[SKILL_ABIL[k]] || 10) > 0 || PC[cls].skills.includes(k)) p.skills[k]++;   // a rank in what they're good at and in the class's own skills
+    p.feats ||= [];
+    const want = (Array.isArray(featWant) ? featWant : featWant ? [featWant] : []).map(normFeat).filter(Boolean), got = [];
+    while (slots-- > 0) {
+      const k = want.find(x => !p.feats.includes(x) && FEATS[x].req(p)) || pickFeat(p, cls); if (!k) break;
+      const i = want.indexOf(k); if (i >= 0) want.splice(i, 1);
+      p.feats.push(k); applyFeat(p, k); got.push(k);
+      if (chosen) { const t = ((sim.lore.featPicks ||= {})[cls] ||= {}); t[k] = (t[k] || 0) + 1; }
+    }
+    if (chosen) { const t = ((sim.lore.classPicks ||= {})[jobGroup(p)] ||= {}); t[cls] = (t[cls] || 0) + 1; }
+    if (cls === 'druid' && cs.druid === 1) companion(p);
+    restDaily(p);
+    p.levelReady = false;
+    log('life', `${p.id === 'player' ? 'You reach' : fullName(p) + ' reaches'} level ${p.level}: ${cls} ${cs[cls]}${got.length ? ' (feat: ' + got.join(', ') + ')' : ''}.`, [p.id]);
+    remember(p, { text: `I reached level ${p.level} as a ${cls}${got.length ? ' and learned ' + got.join(', ') : ''}` });
+    checkLevel(p);
+    return true;
+  }
+  sim.levelUp = levelUp;
+  const autoLevel = p => levelUp(p, pickClass(p), null, false);
+  function levelText(p) {
+    const res = [p.cures ? p.cures + ' cure light wounds' : '', p.missiles ? p.missiles + ' magic missiles' : '', p.rays ? p.rays + ' scorching rays' : '', p.layPool ? p.layPool + ' hp of lay on hands' : '', p.ragesLeft ? p.ragesLeft + ' rage' + (p.ragesLeft > 1 ? 's' : '') : ''].filter(Boolean);
+    return ` Level ${p.level || 1} (${classLine(p)}), ${p.xp || 0} XP${(p.level || 1) < MAX_LEVEL ? ', level ' + ((p.level || 1) + 1) + ' at ' + XP_AT[(p.level || 1) + 1] : ' (the top)'}.${p.feats?.length ? ' Feats: ' + p.feats.join(', ') + '.' : ''}${res.length ? ' Left today: ' + res.join(', ') + '.' : ''}`;
+  }
+  function levelPrompt(p) {
+    const base = featSlots(p, 'x'), fb = [1, 2, 4].includes(clvl(p, 'fighter') + 1);
+    return `LEVEL UP! You've earned level ${p.level + 1}. Choose the class you take it in: add "level_class":"<class>" to your reply. You are ${classLine(p)} now. Classes: ${Object.entries(PC).map(([k, c]) => k + ' (' + c.blurb + ')').join('; ')}.` +
+      (base || fb ? ` This level gives you ${base ? base + ' feat' + (base > 1 ? 's' : '') : 'no feat'}${fb ? (base ? ', and one more' : ', but one') + ' if you take it as a fighter' : ''}: add "feat":"<name>"${base + (fb ? 1 : 0) > 1 ? ' or a list' : ''}. Feats you can take: ${Object.entries(FEATS).filter(([k, ft]) => !p.feats?.includes(k) && ft.req(p)).map(([k, ft]) => k + ' (' + ft.blurb + ')').join('; ')}.` : '');
+  }
+  sim.classLine = classLine; sim.XP_AT = XP_AT; sim.PC = PC; sim.FEATS = FEATS;
   // ---- death and the graveyard ---------------------------------------------------
   function die(p, killer, how) {
     if (!p.alive) return;
@@ -2241,8 +2377,9 @@ function Sim(opts = {}) {
   const careTaker = where => living().find(q => q.job === (where === 'chapel' ? 'cleric' : 'doctor') && free(q) && areaOf(q) === where && q.task?.kind === 'work');
   function inCare(where) { sim.care ||= {}; return (sim.care[where] = (sim.care[where] || []).filter(e => e.until > sim.t && sim.people[e.id]?.alive)); }
   sim.careTaker = careTaker; sim.inCare = inCare;
-  const fortSave = p => d(20) + mod(p.st.con) + (p.cls === 'warrior' ? 2 + Math.floor((p.level || 1) / 2) : Math.floor((p.level || 1) / 3));
+  const fortSave = p => d(20) + mod(p.st.con) + (p.feats?.includes('Great Fortitude') ? 2 : 0) + Object.entries(classesOf(p)).reduce((t, [k, n]) => t + (k === 'warrior' || PC[k]?.fort ? 2 + Math.floor(n / 2) : Math.floor(n / 3)), 0);
   function expose(p, key, why) {
+    if (clvl(p, 'paladin') >= 3) return;   // divine health
     if (!p || !p.alive || p.kind !== 'human' || p.sick || !DISEASES[key]) return false;
     if (fortSave(p) >= DISEASES[key].dc) return false;
     const D = DISEASES[key];
@@ -2408,7 +2545,8 @@ function Sim(opts = {}) {
     if (p.fightStyle?.blows && p.brain !== 'human') mode = p.fightStyle.blows;
     if (f.sides.has(p.id)) return;
     f.sides.set(p.id, side); f.mode.set(p.id, mode);
-    p.init = d(20) + mod(p.kind === 'human' ? p.st.dex : 2) + (p.kind === 'animal' ? 2 : 0);
+    p.init = d(20) + mod(p.kind === 'human' ? p.st.dex : 2) + (p.kind === 'animal' ? 2 : 0) + (p.feats?.includes('Improved Initiative') ? 4 : 0);
+    if (p.kind === 'human' && p.ragesLeft > 0 && clvl(p, 'barbarian') && p.rage !== f.id) { p.ragesLeft--; p.rage = f.id; f.log.push(`${p.name} flies into a rage!`); log('fight', `${p.name} flies into a rage!`, [p.id]); }
     p.fight = f.id; p.task = null; p.state = 'fight'; p.flatfooted = f.round === 1;
     f.order.push(p.id); f.order.sort((x, y) => (body(y).init || 0) - (body(x).init || 0));
   }
@@ -2418,22 +2556,45 @@ function Sim(opts = {}) {
   const threatened = (f, p) => foesOf(f, p).filter(q => dist2(q, p) <= 2.1 && (q.kind === 'animal' || WEAPONS[q.weapon].melee && q.weapon !== 'fists' || q.weapon === 'fists' && false));
   sim.foesOf = foesOf;
 
+  const flanked = (f, a, t) => f.order.some(id => { const q = body(id); return q && q !== a && q.alive && conscious(q) && f.sides.get(q.id) === f.sides.get(a.id) && dist2(q, t) <= 2.1; });
+  const inspire = (f, a) => f.order.some(id => { const q = body(id); return q && q.kind === 'human' && q.alive && conscious(q) && clvl(q, 'bard') && f.sides.get(q.id) === f.sides.get(a.id); }) ? 1 : 0;
+  const weaponOf = a => a.weapon === 'fists' && clvl(a, 'monk') ? { ...WEAPONS.fists, name: 'Unarmed strike', dmg: clvl(a, 'monk') >= 4 ? [1, 8] : [1, 6], weak: false, monk: true } : WEAPONS[a.weapon];
+  // one swing, then: a troll's second claw, or a Cleave into the next foe
   function attack(f, a, t, o = {}) {
-    const w = a.kind === 'animal' ? { name: a.attackName || 'bite', dmg: a.bite, crit: [20, 2], melee: true } : WEAPONS[a.weapon];
+    attack1(f, a, t, o);
+    if (a.kind === 'animal' && a.multi && !o.extra) for (let i = 0; i < a.multi; i++) if (t.alive && conscious(t) && f.sides.has(t.id)) attack1(f, a, t, { ...o, extra: true });
+    if (a.kind === 'human' && !o.cleave && hasFeat(a, 'Cleave') && !WEAPONS[a.weapon]?.range && !conscious(t) && a.cleaveAt !== f.id + ':' + f.round) { const t2 = foesOf(f, a).find(q => dist2(q, a) <= 2.1); if (t2) { a.cleaveAt = f.id + ':' + f.round; logF(f, `${a.name} cleaves on into ${t2.name}!`); attack1(f, a, t2, { ...o, cleave: true }); } }
+  }
+  function attack1(f, a, t, o = {}) {
+    const w = a.kind === 'animal' ? { name: a.attackName || 'bite', dmg: a.bite, crit: [20, 2], melee: true } : weaponOf(a);
     const mode = o.mode || f.mode.get(a.id) || 'lethal';
     const ranged = !!w.range;
     if (ranged && w.ammo) { if (!(a.items[w.ammo] > 0)) return logF(f, `${a.name} has nothing left to shoot.`); if (w.reload && a.unloaded) return logF(f, `${a.name}'s crossbow isn't loaded.`); a.items[w.ammo]--; if (w.reload) a.unloaded = true; }
     if (!ranged && dist2(a, t) > 2.1) return logF(f, `${a.name} can't reach ${t.name}.`);
     let bonus = (a.kind === 'animal' ? (a.atk ?? 2) : babOf(a) + (ranged ? mod(a.st.dex) : mod(a.st.str))) + (w.enh || 0);
     if (o.charge) bonus += 2;
+    let extraDmg = 0; const notes = [];
+    if (a.kind === 'human') {
+      const close = ranged && dist2(a, t) < 9;
+      if (hasFeat(a, 'Weapon Focus')) bonus += 1;
+      if (a.rage === f.id) { bonus += 2; extraDmg += 2; }
+      const insp = inspire(f, a); bonus += insp; extraDmg += insp;
+      if (close && hasFeat(a, 'Point Blank Shot')) { bonus += 1; extraDmg += 1; }
+      if (ranged && clvl(a, 'ranger') >= 2) bonus += 1;
+      if (!ranged && mode === 'lethal' && hasFeat(a, 'Power Attack')) { bonus -= 2; extraDmg += w.hands === 2 ? 4 : 2; }
+      if (hasFeat(a, 'Weapon Specialization')) extraDmg += 2;
+      if (t.kind === 'animal' && t.monster && clvl(a, 'ranger')) extraDmg += 2;
+      if (clvl(a, 'paladin') && !(a.smote ||= {})[f.id] && (t.monster || mode === 'lethal')) { a.smote[f.id] = 1; bonus += Math.max(0, mod(a.st.cha)); extraDmg += clvl(a, 'paladin'); notes.push('smite'); }
+      const rg = clvl(a, 'rogue'); if (rg && (t.flatfooted || !ranged && flanked(f, a, t))) { extraDmg += roll(Math.ceil(rg / 2), 6); notes.push('sneak attack'); }
+    }
     if (ranged) { const inc = Math.floor(dist2(a, t) / w.range); bonus -= inc * 2; if (threatened(f, a).length) provoke(f, a); }
     const wantNL = mode === 'nonlethal';
-    if (wantNL !== !!w.nonlethal) bonus -= 4;    // a lethal weapon pulled for nonlethal, or fists going for blood
+    if (wantNL !== !!w.nonlethal && !w.monk) bonus -= 4;    // a lethal weapon pulled for nonlethal, or fists going for blood
     const ac = t.kind === 'animal' ? t.ac : acOf(t);
     const r = d(20), total = r + bonus, helpless = !conscious(t);
     if (r !== 20 && (r === 1 || total < ac) && !helpless) return logF(f, `${a.name} attacks ${t.name} with ${w.name.toLowerCase()} and misses (${total} vs AC ${ac}).`);
     const strB = a.kind === 'animal' ? (a.dmgBonus || 0) : ranged ? (w.thrown ? mod(a.st.str) : 0) : Math.floor(mod(a.st.str) * (w.hands === 2 && mod(a.st.str) > 0 ? 1.5 : 1));
-    let dmg = roll(w.dmg[0], w.dmg[1]) + strB + (w.enh || 0);
+    let dmg = roll(w.dmg[0], w.dmg[1]) + strB + (w.enh || 0) + extraDmg;
     let crit = false;
     if (r >= w.crit[0]) { const c = d(20) + bonus; if (c >= ac) { crit = true; for (let i = 1; i < w.crit[1]; i++) dmg += roll(w.dmg[0], w.dmg[1]) + strB; } }
     dmg = Math.max(1, dmg);
@@ -2443,7 +2604,7 @@ function Sim(opts = {}) {
     if (dmg <= 0) return logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()}, but the ${(ARMOR[t.armor] || ARMOR.none).name.toLowerCase()} takes it all (${total} vs AC ${ac}).`);
     hurt(t, dmg, wantNL, a);
     if (a.kind === 'animal' && t.kind === 'human' && t.alive && Math.random() < 0.3) expose(t, ({ bear: 'redache', boar: 'redache', direwolf: 'chills', ogre: 'demon' })[a.species] || 'filth', 'a ' + String(a.name).toLowerCase() + ' bite');
-    logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()} for ${dmg}${soaked ? ` (${soaked} soaked by armour)` : ''}${wantNL ? ' nonlethal' : ''}${crit ? ' (critical!)' : ''} (${total} vs AC ${ac}). ${status(t)}`);
+    logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()} for ${dmg}${soaked ? ` (${soaked} soaked by armour)` : ''}${wantNL ? ' nonlethal' : ''}${crit ? ' (critical!)' : ''}${notes.length ? ' (' + notes.join(', ') + ')' : ''} (${total} vs AC ${ac}). ${status(t)}`);
   }
   sim.attack = attack;
   function hurt(t, dmg, nonlethal, by) {
@@ -2455,6 +2616,7 @@ function Sim(opts = {}) {
       if (t.hp <= 0) {
         t.alive = false; t.state = 'dead';
         if (t.monster && by && by.kind === 'human') {
+          { const total = 600 * (t.cr || 1), fx = sim.fights.find(f => f.sides.has(by.id)), share = fx ? fx.order.map(body).filter(q => q && q.kind === 'human' && q.alive && fx.sides.get(q.id) === fx.sides.get(by.id)) : [by]; for (const q of share) gainXP(q, Math.floor(total / Math.max(1, share.length)) + (q === by ? Math.floor(total / 4) : 0), 'the ' + t.name.toLowerCase()); }
           by.stats.beasts = (by.stats.beasts || 0) + 1; if (t.pelt) by.items[t.pelt] = (by.items[t.pelt] || 0) + 1;
           const bounty = Math.min(sim.treasury, sim.bounty.beasts ?? 8); if (bounty > 0) pay('town', by, bounty, 'beast bounty');
           log('death', `${by.id === 'player' ? 'You' : fullName(by)} ${by.id === 'player' ? 'kill' : 'kills'} the ${t.name.toLowerCase()}!${bounty ? ` The town pays ${bounty}c.` : ''}`, [by.id]);
@@ -2563,6 +2725,24 @@ function Sim(opts = {}) {
       q.task = null;
     }
   }
+  function healUp(q, h) { q.hp = Math.min(q.maxhp, q.hp + h); if (q.hp > 0) { q.dying = false; if (q.down) { q.down = null; q.downUntil = 0; } } }
+  function castTurn(f, p, foes) {
+    const side = f.sides.get(p.id), mates = f.order.map(body).filter(q => q && q.kind === 'human' && q.alive && f.sides.get(q.id) === side);
+    const hurtMate = mates.filter(q => q.dying || q.hp / q.maxhp < 0.5).sort((a, b) => a.hp / a.maxhp - b.hp / b.maxhp)[0];
+    if (hurtMate && p.cures > 0) { p.cures--; const h = d(8) + Math.min(5, clvl(p, 'cleric') + clvl(p, 'druid')); healUp(hurtMate, h); logF(f, `${p.name} casts cure light wounds on ${hurtMate === p ? 'themself' : hurtMate.name}: +${h} hp. ${status(hurtMate)}`); return true; }
+    if (hurtMate && p.layPool > 0 && (hurtMate === p || dist2(hurtMate, p) < 2.5)) { const h = Math.min(p.layPool, hurtMate.maxhp - hurtMate.hp); if (h > 0) { p.layPool -= h; healUp(hurtMate, h); logF(f, `${p.name} lays hands on ${hurtMate === p ? 'themself' : hurtMate.name}: +${h} hp.`); return true; } }
+    if ((p.missiles > 0 || p.rays > 0) && foes.length) {
+      const t = foes.filter(q => dist2(q, p) < 30 && (q.monster || f.mode.get(p.id) === 'lethal')).sort((a, b) => (b.monster ? 1 : 0) - (a.monster ? 1 : 0) || dist2(a, p) - dist2(b, p))[0]; if (!t) return false;
+      const cl = clvl(p, 'sorcerer') + clvl(p, 'wizard');
+      if (p.rays > 0 && (t.monster || t.hp > 12)) {
+        p.rays--; const touch = t.kind === 'animal' ? 10 + Math.floor((t.ac - 10) / 3) : 10 + Math.max(0, mod(t.st.dex)), r = d(20) + babOf(p) + mod(p.st.dex);
+        if (r !== 20 && r < touch) { logF(f, `${p.name}'s scorching ray misses ${t.name} (${r} vs touch AC ${touch}).`); return true; }
+        const dmg = roll(4, 6); t.burnedRound = f.round; hurt(t, dmg, false, p); logF(f, `${p.name}'s scorching ray burns ${t.name} for ${dmg} fire${t.regen ? ' (it stops healing)' : ''}. ${status(t)}`); return true;
+      }
+      if (p.missiles > 0) { p.missiles--; const n = Math.min(3, 1 + Math.floor((cl - 1) / 2)); let dmg = 0; for (let i = 0; i < n; i++) dmg += d(4) + 1; hurt(t, dmg, false, p); logF(f, `${p.name} casts magic missile at ${t.name}: ${n} missile${n > 1 ? 's' : ''} for ${dmg}. ${status(t)}`); return true; }
+    }
+    return false;
+  }
   function npcTurn(f, p) {
     const acts = legalActions(f, p), mode = f.mode.get(p.id), foes = foesOf(f, p), tr = p.traits || { aggression: 0.7, greed: 0, honesty: 1, caution: 0.2 };
     const hpFrac = p.kind === 'animal' ? p.hp / p.maxhp : (p.hp - p.nl) / p.maxhp;
@@ -2577,6 +2757,7 @@ function Sim(opts = {}) {
     const rob = acts.find(a => a.id === 'rob' && body(a.target).coin > 0);
     if (rob && tr.greed > 0.6 && tr.honesty < 0.5) return act(f, p, rob);
     if (p.kind === 'human' && !p.shoutedIn?.[f.id] && acts.some(a => a.id === 'shout') && (p.fightStyle?.shout ?? (Math.random() < 0.3 + tr.caution * 0.5 - tr.aggression * 0.3)) && (f.why !== 'arrest' && f.why !== 'resisting arrest') && !isGuard(p) && hpFrac < 0.9) { (p.shoutedIn ||= {})[f.id] = 1; act(f, p, acts.find(a => a.id === 'shout')); }
+    if (p.kind === 'human' && castTurn(f, p, foes)) return;
     const rl = acts.find(a => a.id === 'reload'); if (rl && !acts.some(a => a.id === 'attack')) return act(f, p, rl);
     const atk = acts.filter(a => a.id === 'attack').sort((x, y) => (body(x.target).hp - body(x.target).nl) - (body(y.target).hp - body(y.target).nl))[0];
     if (atk) { if (p.turnLeft.move && Math.random() < 0.15 && acts.find(a => a.id === 'demoralize')) act(f, p, acts.find(a => a.id === 'demoralize' && a.target === atk.target) || atk); return act(f, p, atk); }
@@ -2598,7 +2779,7 @@ function Sim(opts = {}) {
     return checkEnd(f);
   };
   sim.playerDone = f => { const p = body(f.waiting); f.waiting = null; if (p) p.turnLeft = null; f.turn++; checkEnd(f); };
-  function bleed(f) { for (const id of f.order) { const q = body(id); if (q && q.alive && q.dying) { if (d(10) === 1) { q.dying = false; q.down = 'out'; q.downUntil = sim.t + 240; logF(f, `${q.name} stabilizes.`); } else { q.hp--; if (q.hp <= -10) die(q, body(q.lastHurtBy), 'bled out'); } } } }
+  function bleed(f) { for (const id of f.order) { const q = body(id); if (q && q.alive && q.regen && q.hp > 0 && q.hp < q.maxhp && !(q.burnedRound >= f.round - 1)) q.hp = Math.min(q.maxhp, q.hp + q.regen); if (q && q.alive && q.dying) { if (d(10) === 1) { q.dying = false; q.down = 'out'; q.downUntil = sim.t + 240; logF(f, `${q.name} stabilizes.`); } else { q.hp--; if (q.hp <= -10) die(q, body(q.lastHurtBy), 'bled out'); } } } }
   function checkEnd(f) {
     const sides = new Set(f.order.map(body).filter(q => q && q.alive && conscious(q) && !q.surrendered && (q.fled || 0) < 2 && (q.kind === 'human' || q.temper !== 'passive')).map(q => f.sides.get(q.id)));
     if (f.order.map(body).some(q => q?.game && q.alive && (q.fled || 0) >= 2)) { for (const q of f.order.map(body)) if (q?.game && q.alive && (q.fled || 0) >= 2) { log('fight', `The ${q.species} gets away.`, []); q.fled = 0; } }
@@ -2620,6 +2801,7 @@ function Sim(opts = {}) {
     const winners = f.order.map(body).filter(q => q && q.alive && f.sides.get(q.id) === winnerSide && conscious(q));
     const fought = new Set(f.order);
     const losers = f.order.map(body).filter(q => q && q.alive && f.sides.get(q.id) !== winnerSide);
+    { const hw = winners.filter(q => q.kind === 'human'), hl = losers.filter(q => q.kind === 'human'); if (hw.length && hl.length) { const total = 100 * hl.reduce((t, q) => t + (q.level || 1), 0); for (const q of hw) gainXP(q, Math.floor(total / hw.length), 'a fight'); for (const q of hl) gainXP(q, 25, 'a beating'); } }
     for (const id of f.order) { const q = body(id); if (!q) continue; q.fight = null; q.state = 'idle'; q.surrendered = false; q.fled = 0; q.defending = false; q.foes = null; q.task = null; }
     log('fight', `The fight ${winners.length ? 'ends: ' + winners.map(w => w.name).join(', ') + ' stand' + (winners.length === 1 ? 's' : '') : 'breaks up'}.`, f.order);
     // a guard who wins with nonlethal blows takes the losers to jail
@@ -2889,7 +3071,7 @@ function Sim(opts = {}) {
     const g = p.gang && sim.gangs[p.gang];
     return [
       `You: ${p.name} ${p.surname} (id ${p.id}), ${p.age}, ${p.gender === 'nb' ? 'nonbinary' : p.gender === 'm' ? 'man' : 'woman'}. Health ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${p.nl} bruising)` : ''}${sickText(p)}. ${p.food < 0.3 ? 'Hungry.' : 'Fed.'}${(p.water ?? 1) < 0.3 ? ' Thirsty.' : ''} Purse ${p.coin}c${p.home != null ? `, savings at home ${HOUSES[p.home].stash}c (you live at ${AREAS[HOUSES[p.home].id].name})` : ''}. Carrying ${WEAPONS[p.weapon].name.toLowerCase()} (${WEAPONS[p.weapon].dmg[0]}d${WEAPONS[p.weapon].dmg[1]}${WEAPONS[p.weapon].range ? ', ranged' : ''}), ${(ARMOR[p.armor] || ARMOR.none).name.toLowerCase()} (AC ${acOf(p)}${(ARMOR[p.armor] || ARMOR.none).dr ? ', soaks ' + ARMOR[p.armor].dr : ''})${p.shield && p.shield !== 'none' ? ', ' + SHIELDS[p.shield].name.toLowerCase() : ''}; pack: ${Object.entries(p.items).filter(([, n]) => n > 0).map(([k, n]) => n + ' ' + k).join(', ') || 'empty'}.`,
-      `What you're good at: ${Object.entries(p.skills).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => k + ' +' + v).join(', ')}; attack +${babOf(p) + Math.max(mod(p.st.str), mod(p.st.dex))}.`,
+      `What you're good at: ${Object.entries(p.skills).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => k + ' +' + v).join(', ')}; attack +${babOf(p) + Math.max(mod(p.st.str), mod(p.st.dex))}.${levelText(p)}`,
       `Job: ${JOBS[p.job].title}${p.id === sim.mayorId ? ' (mayor)' : ''}${p.rank ? ', ' + p.rank : ''}.${inUnderworld(p) ? ` You are in the underworld${p.underworld?.role ? ' (' + (SEEDY_ROLES[p.underworld.role] || p.underworld.role) + ')' : p.onPayroll ? ' (on the take)' : ''}.` : ''}${p.spouse ? ' Married to ' + sim.people[p.spouse]?.name + '.' : ''}${g ? ` In ${g.name}${g.boss === p.id ? ' (boss)' : ''}.` : ''}${openRecord(p).length ? ` The guard has ${openRecord(p).length} charge(s) on you.` : ''}${p.jailedUntil > 0 ? ' You are in a jail cell.' : ''}`,
       `Now: day ${sim.day}, ${sim.clock()}${night() ? ' (night)' : ''}, at ${AREAS[areaOf(p)]?.name || 'the road'}. You can see: ${inView(p) || 'nobody'}.`,
       short ? '' : `Prices: ${['bread', 'meal', 'turnip', 'meat', 'eggs', 'ale'].map(k => `${k} ${priceOf(GOODS[k].shop || 'store', k)}c`).join(', ')}; at the smithy: ${Object.entries(sim.business.smithy.stock).filter(([k, n]) => n > 0 && GOODS[k] && k !== 'iron').map(([k]) => `${k} ${priceOf('smithy', k)}c`).join(', ') || 'nothing'}.`,
@@ -2918,6 +3100,7 @@ function Sim(opts = {}) {
   sim.turnFor = (p, kind) => {
     const menu = [...new Set(options(p).map(optLabel))].sort(() => Math.random() - 0.5);
     const failed = (p.failed || []).splice(0); const lines = [failed.length ? `These steps couldn't be done: ${failed.join('; ')}.` : '', `PLAN. Here is what is available to you right now: ${menu.join('; ') || 'nothing at this moment'} (more becomes possible as things change).`, facts(p).split('\n').filter(l => !l.startsWith('Rose of the City')).join('\n')];
+    if (p.levelReady) lines.push(levelPrompt(p));
     if (kind === 'mayor') lines.push(
       `YOUR SEAT OF POWER. You set the sales tax, the daily rent and head tax, every public wage (guards, captain, jailer, clerk, labourers, undertaker, cleric, doctor, teacher, your own), bounties on anyone (or on beasts), a curfew, bail; you hire and fire public workers, pardon prisoners, back a guard for captain, and the treasury is in your hands (you can take from it; if someone sees, it's embezzlement). You command the guard: "orders": [{"guard": "<guard id>" | "all" | "captain", "do": "arrest <id>" (on your own warrant, no evidence needed) | "patrol <place>" | "go to <place or address>" (rush there now, e.g. "go to 3 Wick Lane") | "escort me" | "raid <business>" | "release <id>" | "stand down"}]. Guards carry out orders; some may refuse what they think is unjust, and people who see an arrest without cause remember it. The election is ${sim.electionEvery === 1 ? 'every day' : 'every ' + sim.electionEvery + ' days'} at noon (from day ${sim.firstElection}); anyone may stand against you.`,
       `Wages now: ${JSON.stringify(sim.wages)}. Bounties: ${JSON.stringify(sim.bounty)}. Curfew: ${sim.curfew}. Bail: ${sim.bail}c. Crimes in the last day: ${sim.events.filter(e => sim.t - e.t < 1440).length}. People with open charges: ${living().filter(q => openRecord(q).length).map(q => `${q.name} (${q.id}) ${openRecord(q).length}`).join(', ') || 'none'}. Guards: ${living().filter(isGuard).map(g => `${g.name} (${g.id}, ${JOBS[g.job].title})`).join('; ') || 'none'}.`,
@@ -3089,6 +3272,7 @@ function Sim(opts = {}) {
     const own = JOBS[p.job]?.owner && sim.business[JOBS[p.job].owner];
     if (own && dec.prices && typeof dec.prices === 'object') for (const [k, v] of Object.entries(dec.prices)) if (k in GOODS && typeof v === 'number') own.mult[k] = clamp(v, 0.5, 4);
     if (kind === 'mayor') sim.applyMayor(p, dec);
+    if (dec.level_class && p.levelReady) levelUp(p, String(dec.level_class).toLowerCase().replace(/[^a-z]/g, ''), dec.feat, true);
     p.awaiting = null;
     if (Array.isArray(dec.agenda)) { p.agenda = dec.agenda.slice(0, 5).map(x => ({ do: String(typeof x === 'object' ? x.do || x.step || '' : x).slice(0, 80) })).filter(x => x.do); if (p.agenda.length && p.task && !['jail', 'fight', 'flee', 'sleep'].includes(p.task.kind)) p.task = null; }
     if (dec.policy && typeof dec.policy === 'object') { p.policy = {}; for (const [k, v] of Object.entries(dec.policy)) if (typeof v === 'number') p.policy[k] = clamp(v, 0, 3); }
@@ -3146,6 +3330,8 @@ function Sim(opts = {}) {
       const h = hourNow % 24;
       payWages(h);
       if (h === 7) morning();
+      if (h === 6) for (const p of living()) if (p.kind === 'human' && !p.town) { gainXP(p, 100, 'the night'); restDaily(p); }
+      for (const p of living()) if (p.levelReady && sim.t - (p.levelReadyAt || 0) > 720) autoLevel(p);
       if (h === 19) { const m = sim.people[sim.mayorId]; if (m && m.alive && m.brain !== 'script' && m.brain !== 'human') { const q = { id: m.id + '-e' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.decisionFor(m, 'mayor'), turn: sim.turnFor(m, 'mayor'), fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }
       if (h === 0) { const m = sim.people[sim.mayorId]; if (m && m.alive && m.brain !== 'script' && m.brain !== 'human') { const turn = `WHAT JUST HAPPENED: Midnight. The day's books are closed: the treasury holds ${Math.round(sim.treasury)}c. Set the taxes for the new day (tax_rate, rent, head_tax), and anything else you want.\n` + sim.turnFor(m, 'mayor'); const q = { id: m.id + '-tax' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.identityFor(m) + '\n' + turn, turn, must: true, fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }   /* Rose: the mayor sets taxes every night at 12 */
       if (h === 12 && sim.election.due) runElection();
