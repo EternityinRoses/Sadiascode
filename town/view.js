@@ -416,7 +416,7 @@ function runGeneration() {
     if (!S.genOver()) return setTimeout(chunk, 0);
     ffLeft = 0;
     const st = S.endGeneration(); saveLore();
-    $('ffNote').textContent = `Generation ${st.gen} done (${st.won ? 'WON: the town made it to noon on day ' + S.winDay() : st.failed ? 'FAILED: ' + st.failed.n + ' died on day ' + st.failed.day : 'lost'}): average fitness ${st.avgFit}, best ${st.bestFit}. Next town…`;
+    $('ffNote').textContent = `Generation ${st.gen} done (${st.won ? 'WON: the town made it to noon on day ' + S.winDay() : st.failed ? 'FAILED: ' + st.failed.n + ' dead by day ' + st.failed.day : 'lost'}): average fitness ${st.avgFit}, best ${st.bestFit}. Next town…`;
     setTimeout(() => { if (evolving()) location.reload(); }, 900);
   };
   chunk();
@@ -597,7 +597,7 @@ function loop() {
   controls.target.add(delta); camera.position.add(delta); controls.update();
   panelAcc += dt; if (panelAcc > 0.5) { panelAcc = 0; drawPanel(); drawCouncil(); drawLore(); }
   // the generation ends after its last day: everyone learns (plain brains evolve, AI brains get the town's memory), and a new town starts
-  if (!genEnding && !evolving() && !(ffLeft > 0) && S.genOver()) { /* Rose: the win is the community alive at noon on day 8; the generation ends then, or sooner if everyone in town is dead */ genEnding = true; paused = true; drawSpeed(); const days = S.day; const st = S.endGeneration(); saveLore(); note(st.failed ? `${st.failed.n} of Hollow Town's people died on day ${st.failed.day}, more than ${S.MAX_DEATHS} in one day: the town FAILS. Generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...` : S.townDead() ? `Everyone in Hollow Town is dead after ${days} days: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...` : `${st.won ? 'The town WINS: ' : ''}it is noon on day ${S.winDay()} and ${S.living().filter(p => p.kind === 'human' && !p.town).length} are still standing: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...`); setTimeout(() => location.reload(), 5000); }
+  if (!genEnding && !evolving() && !(ffLeft > 0) && S.genOver()) { /* Rose: the win is the community alive at noon on day 8; the generation ends then, or sooner if everyone in town is dead */ genEnding = true; paused = true; drawSpeed(); const days = S.day; const st = S.endGeneration(); saveLore(); note(st.failed ? `${st.failed.n} dead in Hollow Town by day ${st.failed.day}: the town FAILS. Generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...` : S.townDead() ? `Everyone in Hollow Town is dead after ${days} days: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...` : `${st.won ? 'The town WINS: ' : ''}it is noon on day ${S.winDay()} and ${S.living().filter(p => p.kind === 'human' && !p.town).length} are still standing: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...`); setTimeout(() => location.reload(), 5000); }
   // context buttons
   const where = S.areaOf(me);
   $('cShop').hidden = !(S.business[where] && S.shopOpen(where)); $('cWork').hidden = !['bakery', 'store', 'smithy', 'tavern', 'fields', 'ranch'].includes(where);

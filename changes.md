@@ -230,3 +230,7 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - In fights: 'Give <name> a healing draught' to an adjacent fallen ally (full round, provokes); NPCs do it when not hard pressed.
 - The infirmary mends twice as fast with a doctor in (SRD long-term care).
 - Smoke: .backups/smoke_heal.mjs.
+
+## 2026-10-11 07:07 Hollow Town: the fail is the ticker's 5 dead; spell slots audited
+- Rose: "as soon as the ticker says 5 dead it's a fail that causes reset". The fail state is now the ticker's own count (sim.rec.deaths, every death it shows) reaching 5, at once; the warning comes at 4. Prompts show 'Deaths so far: N (the 5th death fails the whole town)'.
+- Spell slots and items: casts and items were already spent and checked (cures, magic missiles, scorching rays, lay on hands, rages; draughts, alchemist's fire, healer's kit uses, arrows, bolts, bullets, stones), with the day's spells back at dawn. Fixed: a level-up refilled the whole day's spells (now it adds only the new level's); cure light wounds in a fight healed allies anywhere (it's a touch: now self or adjacent); 'drink' now checks for a draught itself.
