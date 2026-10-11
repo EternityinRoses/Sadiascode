@@ -1482,8 +1482,12 @@ function Sim(opts = {}) {
   // THE WIN (Rose): the community wins when anyone in it is still alive at noon on day 8 (the day after the generation's week)
   const winDay = () => (sim.genDays || 7) + 1;
   sim.winDay = winDay;
-  sim.genWon = () => sim.day >= winDay() && H() >= 12 && everyone().some(p => p.kind === 'human' && !p.town && p.id !== 'player' && p.alive);
-  sim.genOver = () => sim.townDead() || sim.day > winDay() || (sim.day >= winDay() && H() >= 12);
+  // THE FAIL (Rose): more than 4 of the townsfolk dead on one day (midnight to midnight) and the town has failed, at once
+  sim.MAX_DEATHS = 4;
+  const deathsOn = d => (sim.deathsByDay || {})[d] || 0;
+  sim.deathsOn = deathsOn;
+  sim.genWon = () => !sim.failed && sim.day >= winDay() && H() >= 12 && everyone().some(p => p.kind === 'human' && !p.town && p.id !== 'player' && p.alive);
+  sim.genOver = () => !!sim.failed || sim.townDead() || sim.day > winDay() || (sim.day >= winDay() && H() >= 12);
   function endGeneration() {
     const n = netOf(), pop = everyone().filter(p => p.kind === 'human' && p.noise && !p.town);
     if (pop.length >= 4) {
@@ -1494,7 +1498,7 @@ function Sim(opts = {}) {
     learnPicks(everyone().filter(p => p.kind === 'human' && !p.town && p.id !== 'player' && (p.picks?.length || p.featPicks?.length)));
     const alive = pop.filter(p => p.alive), fit = pop.map(fitness);
     const words = Object.entries(sim.lore.words || {}).filter(([, e]) => e.n >= 3).length;
-    const stat = { gen: n.gen + 1, won: sim.genWon(), days: sim.day, people: pop.length, alive: alive.length, deaths: sim.rec.deaths, avgFit: +(fit.reduce((a, b) => a + b, 0) / Math.max(1, fit.length)).toFixed(1), bestFit: +Math.max(0, ...fit).toFixed(1), agree: n.asked ? +(n.agree / n.asked).toFixed(2) : null, taught: n.imitated, words, crimes: sim.rec.crimes, gini: snapshot().gini };
+    const stat = { gen: n.gen + 1, won: sim.genWon(), failed: sim.failed ? { ...sim.failed } : null, days: sim.day, people: pop.length, alive: alive.length, deaths: sim.rec.deaths, avgFit: +(fit.reduce((a, b) => a + b, 0) / Math.max(1, fit.length)).toFixed(1), bestFit: +Math.max(0, ...fit).toFixed(1), agree: n.asked ? +(n.agree / n.asked).toFixed(2) : null, taught: n.imitated, words, crimes: sim.rec.crimes, gini: snapshot().gini };
     n.history.push(stat); if (n.history.length > 500) n.history.shift(); n.gen++; n.agree = 0; n.asked = 0;
     stat.animals = aEndGeneration();
     try { stat.score = scoreboard(); } catch (e) {}
@@ -1505,7 +1509,7 @@ function Sim(opts = {}) {
       const cause = { beasts: 0, people: 0, starvation: 0, disease: 0, other: 0 };
       for (const b of sim.bodies) { const k = b.killer && sim.animals[b.killer] ? 'beasts' : b.killer ? 'people' : /starv/.test(b.how || '') ? 'starvation' : Object.values(DISEASES).some(D => D.name.toLowerCase() === b.how) ? 'disease' : 'other'; cause[k]++; }
       const dead = Object.entries(cause).filter(([, n]) => n).map(([k, n]) => `${n} by ${k}`).join(', ') || 'none';
-      const lines = [`Generation ${stat.gen} (${sim.day - 1} days): ${stat.won ? 'THE TOWN WON: it made it to noon on day ' + winDay() + '.' : 'THE TOWN LOST: it did not make it to noon on day ' + winDay() + '.'} ${lived.length} of ${ppl.length} lived. Richest: ${ranked.slice(0, 3).map(p => role(p) + ' ~' + money(trueWorth(p) * 10)).join('; ') || 'nobody'}. Poorest: ${ranked.slice(-2).map(role).join('; ') || 'nobody'}. Deaths: ${dead}. ${sim.rec.arrests} arrests for ${sim.rec.crimes} crimes.`];
+      const lines = [`Generation ${stat.gen} (${sim.day - 1} days): ${stat.won ? 'THE TOWN WON: it made it to noon on day ' + winDay() + ' without losing more than ' + sim.MAX_DEATHS + ' in a day.' : stat.failed ? 'THE TOWN FAILED: ' + stat.failed.n + ' died on day ' + stat.failed.day + ' (more than ' + sim.MAX_DEATHS + ' in one day).' : 'THE TOWN LOST: it did not make it to noon on day ' + winDay() + '.'} ${lived.length} of ${ppl.length} lived. Richest: ${ranked.slice(0, 3).map(p => role(p) + ' ~' + money(trueWorth(p) * 10)).join('; ') || 'nobody'}. Poorest: ${ranked.slice(-2).map(role).join('; ') || 'nobody'}. Deaths: ${dead}. ${sim.rec.arrests} arrests for ${sim.rec.crimes} crimes.`];
       if (cause.beasts) lines.push('Beasts came out of the Wildwood every night at 22:00 and hunted people by scent, even asleep in their houses; on the last night of a generation it is a troll and two bears.');
       const gl = sim.genLog || [], top = (arr, k, n = 3) => { const c = {}; for (const x of arr) if (x[k]) c[x[k]] = (c[x[k]] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, n).map(([w, m]) => w + ' ' + m).join(', '); };
       const nights = {}; for (const d of gl) if (d.t === 'death' && d.killer && d.killer !== 'a person') { const key = (d.hr < 6 ? d.day - 1 : d.day) + '|' + d.killer; (nights[key] ||= []).push(d); }
@@ -2850,6 +2854,11 @@ function Sim(opts = {}) {
     } catch (e) {}
     if (p.lastChoice && sim.lore) { if (p.lastChoice.x && sim.studentMode !== 'habit') nudge(p.lastChoice.x, p.lastChoice.kind, -1, 0.05); lesson(p.lastChoice.key, p.lastChoice.kind, -40, false); dataRow({ type: 'death', day: sim.day, sit: p.lastChoice.key, choice: p.lastChoice.kind, how: how || '', role: roleOf(p), x: (p.lastChoice.x || p.lastChoice.rx) ? Array.from(p.lastChoice.x || p.lastChoice.rx, r2) : undefined }); p.lastChoice = null; }   // the worst outcome there is
     p.deathWorth = worth(p);
+    if (p.kind === 'human' && !p.town && p.id !== 'player') {
+      const n = ((sim.deathsByDay ||= {})[sim.day] = (sim.deathsByDay[sim.day] || 0) + 1);
+      if (n > sim.MAX_DEATHS && !sim.failed) { sim.failed = { day: sim.day, n, hr: Math.floor(H()) }; log('death', `${n} of Hollow Town's people have died today, day ${sim.day}: more than ${sim.MAX_DEATHS} in one day. THE TOWN HAS FAILED.`, [p.id]); }
+      else if (n === sim.MAX_DEATHS && !sim.failed) { log('death', `${n} dead today: one more death before midnight and Hollow Town fails.`, [p.id]); for (const q of living()) if (q !== p && q.kind === 'human' && q.alive && !q.town) remember(q, { text: `${n} of us have died today (day ${sim.day}). One more before midnight and the whole town fails.`, big: true }); }
+    }
     p.alive = false; p.deadAt = sim.t; p.state = 'dead'; p.task = null; p.dying = false; sim.rec.deaths++;
     for (const hs of HOUSES) if (hs.owner === p.id) { const sp = p.spouse && sim.people[p.spouse]; hs.owner = sp && sp.alive ? sp.id : null; }
     const worn = {}; for (const k of [p.weapon !== 'fists' && p.weapon, p.armor && p.armor !== 'none' && p.armor, p.shield && p.shield !== 'none' && p.shield]) if (k) worn[k] = (worn[k] || 0) + 1;
@@ -4164,6 +4173,7 @@ function Sim(opts = {}) {
       short ? '' : `Prices: ${['bread', 'meal', 'turnip', 'meat', 'eggs', 'ale'].map(k => `${k} ${money(priceOf(GOODS[k].shop || 'store', k))}`).join(', ')}; at the smithy: ${Object.entries(sim.business.smithy.stock).filter(([k, n]) => n > 0 && GOODS[k] && k !== 'iron').map(([k]) => `${k} ${money(priceOf('smithy', k))}`).join(', ') || 'nothing'}.`,
       short ? '' : `Town: mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${money(sim.rent)} a day. Businesses: ${Object.values(sim.business).map(b => `${b.id} ${b.owner ? 'run by ' + sim.people[b.owner]?.name : 'unclaimed (lease at the hall, ' + money(LEASE[b.id] || 20) + ' a day)'}`).join(', ')}.${Object.keys(sim.bounty).some(id => id !== 'beasts' && sim.people[id]?.alive) ? ' Bounty board (bring them to the Guard station, knocked out and carried, for the coin): ' + Object.entries(sim.bounty).filter(([id]) => id !== 'beasts' && sim.people[id]?.alive).map(([id, c]) => `${sim.people[id].id === 'player' ? 'Rose of the City' : sim.people[id].name} (${id}) ${money(c)}${sim.bountyWhy?.[id] ? ' for ' + sim.bountyWhy[id] : ''}`).join(', ') + '.' : ''}`,
       discountNews(p),
+      `Deaths in town today: ${deathsOn(sim.day)} (more than ${sim.MAX_DEATHS} in one day and the whole town fails).`,
       electionNews(p), rankNews(p),
       (() => { const say = m => m.text || (m.ev ? memText(m) : m.grave ? `${m.name} buried in plot ${m.grave}` : ''), big = p.memory.filter(m => m.big).slice(-(short ? 5 : 10)), small = p.memory.filter(m => !m.big && !m.heard).slice(-(short ? 4 : 7)), heard = p.memory.filter(m => m.heard && !m.big).slice(-(short ? 1 : 2));
         return (big.length ? `What matters that you know (deaths, warnings): ${big.map(m => say(m).replace(/\.$/, '')).filter(Boolean).join('; ')}.\n` : '') + `What has happened to you lately: ${small.map(say).filter(Boolean).join('; ') || 'nothing notable'}.` + (heard.length ? ` Overheard: ${heard.map(say).join('; ')}.` : ''); })(),
@@ -4177,7 +4187,7 @@ function Sim(opts = {}) {
   // Each AI-played person is its own instance: a fixed identity (the same every time, so it can be
   // cached), and then a running thread of turns that only that person ever sees.
   sim.identityFor = p => [
-    `The win condition for all of Hollow Town: the community wins if anyone in it is still alive at noon (12:00) on day ${winDay()}. Beasts come every night at 22:00, and on the last night a troll and two bears. If everyone dies, everyone loses, however rich they were.`,
+    `The win condition for all of Hollow Town: the community wins if anyone in it is still alive at noon (12:00) on day ${winDay()}. The fail state: if more than ${sim.MAX_DEATHS} of the townsfolk die on any one day (midnight to midnight), the whole town fails at once. It is up to all of you, together, to make sure that doesn't happen. Beasts come every night at 22:00, and on the last night a troll and two bears. If everyone dies, everyone loses, however rich they were.`,
     p.brain === 'mayor-ai' ? `You are an AI in a lifesim. You operate within a civilization as a living autonomous being with agency. Winning, for you, means holding power (and staying alive: death is permanent).` : INTRO + ` You start with nothing.`,
     `Here is what commands you have access to: ${COMMANDS.join('; ')}.`,
     'Money is D&D coin: copper (cp), silver (sp), gold (gp) and platinum (pp); 10 cp = 1 sp, 10 sp = 1 gp, 10 gp = 1 pp. Prices are the book prices: bread 2 cp, a mug of ale 4 cp, a hired hand earns 1-3 sp a day, a dagger is 2 gp, a longsword 15 gp, chainmail 150 gp. Any amount you put in a command can name its coin ("5 sp", "2 gp"); a bare number in a JSON reply is copper pieces.',
