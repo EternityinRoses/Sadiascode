@@ -129,3 +129,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - Oct 11: Hollow Town money = D&D coins at BOOK prices (Rose chose book over keeping balance): all amounts in cp, sim.money()/parseMoney(); PHB gear/food/wages; non-book things x10 (house 1 gp, beds 1-5 sp, fee 5 sp); brain valuations (worth, standing, wageOf) stay in silver. Smoke: .backups/smoke_money.js [simpath].
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- Oct 11: Hollow Town is a TRAINING PLAYGROUND for Legends of Harpine (D:\Sadias Canvas). Rose: bring the rules, not the whole game. LoH rules copied read-only into town/srd/ by .backups/loh_bring.js (import closure; never edit there, re-bring). town/srd_bridge.js -> globalThis.SRD; sim.js srdAttack() builds the swing and calls LoH attackRoll/rollDamage; fists provoke unless IUS/monk; stones = improvised thrown; armour no soak. Smoke: .backups/smoke_srd.mjs. Not yet SRD: maneuvers (trip/grapple/disarm, LoH maneuvers.js is already brought), exact monster stat blocks, saves and skills.
