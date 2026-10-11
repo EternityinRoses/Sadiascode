@@ -209,3 +209,22 @@ a flat number ("x weapon does x damage").
 - **AI.** The prompt tells each AI their blood, parents, dark sight, traits and
   flaws. At first level it lists what their blood offers (with text), plus the
   names of the other feats they qualify for. They answer `"feats": [...]`.
+
+## 12. No hints: the town learns on its own
+
+Nothing tells the townsfolk what is coming any more. They have to see it for themselves or remember it.
+
+- **Prompt.** The line "Beasts come every night at 22:00, and on the last night a
+  troll and two bears" is gone. The goal (win at noon on the last day; 6 deaths
+  fails the town) stays.
+- **Town memory.** End-of-generation summaries now hold only what was recorded
+  (who died, to what, where, what they were doing, what killed what). The
+  written-in conclusions are gone: "hunted people by scent, even asleep in their
+  houses", "the ones who rested at the Infirmary mostly lived", "food and coin for
+  it mattered". Old `lore.json` files have those sentences stripped when loaded.
+- **Tool texts** describe what the tool does, not what's coming: barricade
+  ("anyone getting in must batter it down"), alarm bell, Alarm spell ("anything
+  wild"), militia, the homeless note, defences, leatherworker.
+- **Plain brains.** The day-one wood bonus ("the town knows the beasts come at
+  22:00") and the smith's default fear are gone. Both now depend on beasts
+  actually having been seen.
