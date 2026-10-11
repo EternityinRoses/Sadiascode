@@ -57,6 +57,8 @@ for (const [id, r] of Object.entries(S.AREAS)) {
 }
 // furniture, so each place reads as what it is
 for (const h of S.HOUSES) box(1.9, 0.35, 0.95, 0x4a3a2a, h.bed.x, 0.18, h.bed.z);
+for (let i = 0; i < 6; i++) box(0.9, 0.3, 1.9, 0x5a4a38, -63.5 + (i % 3) * 3, 0.15, i < 3 ? 9.5 : 13.5);   // shelter cots
+box(2.4, 0.9, 1.4, 0x2a1e16, 38, 0.45, -3); box(0.4, 0.5, 0.4, 0xffb040, 38, 1.15, -3).material.emissive = new THREE.Color(0x603000);   // the Cellar table and its lamp
 box(3, 1.4, 1.2, 0x6a5444, -12, 0.7, -22.5); const oven = box(1.2, 0.5, 0.2, 0xff7a2a, -12, 0.5, -21.8); oven.material.emissive = new THREE.Color(0xff5010);
 box(1.2, 0.9, 0.8, 0x3a3a40, 0, 0.45, -21); box(2, 1, 0.8, 0x2a2420, 2.5, 0.5, -23);
 box(4, 1, 0.8, 0x6e5030, 10, 0.5, -17.5);
@@ -299,6 +301,8 @@ $('cWait').onclick = () => { for (let i = 0; i < 120; i++) S.step(0.5); note('Yo
 $('cMode').onclick = () => { me.prefMode = me.prefMode === 'nonlethal' ? 'lethal' : 'nonlethal'; drawPanel(); };
 $('cReport').onclick = () => { if (!selected) return note('Select who you want to report, then press Report at the station desk.'); note(S.playerDo('report', null, { about: selected })); };
 $('say').onsubmit = e => { e.preventDefault(); const t = $('sayText').value.trim(); if (!t) return; $('sayText').value = ''; { const w = /^(wake|ring|sleep|stay (?:awake|up))\b(.*)$/i.exec(t); if (w) { const k = w[1].toLowerCase(); note(S.playerDo(k === 'wake' ? 'wake' : k === 'ring' ? 'ring' : k === 'sleep' ? 'sleep' : 'stayup', k === 'wake' ? selected : null, { text: w[2] })); drawPanel(); return; } }
+  { const g = /^(?:give|donate)\s+(.+)$/i.exec(t); if (g) { const nm = g[1].toLowerCase(); const who = Object.values(S.people).find(q => q.alive && q.id !== 'player' && new RegExp('\\b' + q.name.toLowerCase() + '\\b').test(nm)); const tid = who ? who.id : selected; note(tid ? S.playerDo('give', tid, { text: nm }) : 'Pick someone first (click them) or name them.'); drawPanel(); return; } }
+  if (/^(busk|sing|perform)\b/i.test(t)) { note(S.playerDo('busk', null, {})); drawPanel(); return; }
   { const m = /^class\s+([a-z]+)/i.exec(t); if (m) { note(S.playerDo('class', null, { cls: m[1].toLowerCase() })); drawPanel(); return; } } note(S.playerDo('say', null, { text: t, to: selected, whisper: $('whisper')?.checked })); };
 
 // ------------------------------------------------------------------ shop --

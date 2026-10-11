@@ -252,3 +252,10 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - Orders: the captain posts guards anywhere ("orders" in the plan); the underworld boss sends the crew (crew_orders: post / go / escort / stand). Prompts show alarm state, guards, crew.
 - Sleep any time ("sleep [N hours]", also for Rose's own character; walking off wakes you) or "stay awake [N hours]". The hours count from reaching bed.
 - Rest: 8 hours of sleep (a gap of 2h+ resets it) restores spell slots and heals HP by level. The dawn reset and daily heal are gone, so night shifts sleep by day. Smoke: .backups/smoke_watch.mjs.
+
+## 2026-10-11 08:39 Hollow Town: giving, shelter, busking, the Cellar, building from day one
+- Giving: "give <name> <amount | item>" / "donate <amount> to <name>": any sum (1 cp, a silver, 2 gp) or something carried (weapons get equipped if better). Plain brains with spare coin and low greed give a few coppers to the poor near them. Rose's say box: give/donate <name> <what>.
+- The shelter (new building at the end of Wick Lane by the Schoolhouse): a cot for 1 sp a night (to the treasury), counts as a roof for the vagrancy law. Homeless sleepers go there if they can pay, else the fields.
+- The Cellar (behind the Drowned Lantern, door from the tavern): the underworld's den, free for the boss and crew to sleep in.
+- Busking: "busk" in the Market square; listeners may toss coins (d20 + Cha + half Diplomacy, generosity, liking). Plain homeless/jobless folk with little coin busk.
+- Day one: chopping wood, buying arms and the smith's extra armour no longer wait for a beast sighting (everyone knows they come at 22:00). Bug fix: reconsider kept restarting a craft from zero (its option kind differs), and needs/shifts wiped half-done work; progress now keeps (p.craftProg). Barricades now get built on day one. Smoke: .backups/smoke_shelter.mjs.
