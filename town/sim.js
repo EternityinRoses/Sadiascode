@@ -2653,7 +2653,7 @@ function Sim(opts = {}) {
   // The Cellar behind the Drowned Lantern: the underworld's den, free for the boss and the crew to sleep in.
   const SHELTER_FEE = 10;
   const nightKey = () => Math.floor((sim.t - 720) / 1440);   // a night runs noon to noon
-  const crewish = p => !!(p.underworld || p.gang || p.onPayroll);
+  const crewish = p => !!p && p.kind === 'human' && (isBoss(p) || !!(p.gang && sim.gangs?.[p.gang]));   // the Cellar is the boss's and those who joined his gang, nobody else's
   function bedFor(p) {
     if (p.home != null) return HOUSES[p.home].bed;
     if (crewish(p)) return randIn('cellar', 1.2);
@@ -2666,7 +2666,7 @@ function Sim(opts = {}) {
     pay(p, 'town', SHELTER_FEE, 'shelter'); p.shelterNight = nightKey();
     remember(p, { text: `I paid ${money(SHELTER_FEE)} for a cot at the shelter.` }); return true;
   }
-  const roofed = p => ['shelter', 'cellar'].includes(areaOf(p)) || (p.task?.kind === 'sleep' && ['shelter', 'cellar'].includes(areaOf(p.task.to)));
+  const roofed = p => { const a = areaOf(p), b = p.task?.kind === 'sleep' ? areaOf(p.task.to) : null; return a === 'shelter' || b === 'shelter' || ((a === 'cellar' || b === 'cellar') && crewish(p)); };
   sim.bedFor = bedFor;
 
   // busking: play or sing in the square; those who hear may toss a coin (d20 + Charisma + half Diplomacy)
@@ -2821,7 +2821,7 @@ function Sim(opts = {}) {
   function housingText0(p) {
     const i = p.home, h = i != null ? HOUSES[i] : null, mine = housesOf(p), others = mine.filter(x => x !== i);
     const st = h ? (h.owner === p.id ? `You own ${houseName(i)} and live there` : h.tenants?.[p.id] > sim.t ? `You rent a bed at ${houseName(i)} from ${sim.people[h.owner]?.name || 'nobody'} (${money(h.ask || 20)} a night, paid by itself every 24 hours while you can)` : h.lodgers?.[p.id] ? `You lodge at ${houseName(i)} with ${sim.people[h.lodgers[p.id].by]?.name || 'its owner'} ${h.lodgers[p.id].work ? '(for your work: your wages go to them; work about 4 hours a day or it counts as harboring)' : '(for nothing: that is harboring, against the law)'}` : `You live at ${houseName(i)} with family`)
-      : `You have NO HOME. From 21:00 to 6:00 you may not be anywhere in town (Wick Lane, the houses, the square, the shops, the tavern): a guard who sees you takes you in for vagrancy. The shelter at the end of Wick Lane (by the Schoolhouse) gives you a cot for 1 sp a night and counts as a roof${crewish(p) ? '; as underworld crew you can sleep free in the Cellar behind the Drowned Lantern' : ''}. You can busk in the Market square for coins. Outside town (the fields, the orchard, the ranch, the Wildwood) is allowed, but that's where the beasts come from. With no roof, the underworld's tools are within your reach too (pickpocket, mug, burgle, steal, hide, case, wait for, extort, ambush, rustle), no seedy career needed`;
+      : `You have NO HOME. From 21:00 to 6:00 you may not be anywhere in town (Wick Lane, the houses, the square, the shops, the tavern): a guard who sees you takes you in for vagrancy. The shelter at the end of Wick Lane (by the Schoolhouse) gives you a cot for 1 sp a night and counts as a roof${crewish(p) ? '; as one of the gang you can sleep free in the Cellar behind the Drowned Lantern' : ''}. You can busk in the Market square for coins. Outside town (the fields, the orchard, the ranch, the Wildwood) is allowed, but that's where the beasts come from. With no roof, the underworld's tools are within your reach too (pickpocket, mug, burgle, steal, hide, case, wait for, extort, ambush, rustle), no seedy career needed`;
     const list = HOUSES.map((hs, k) => { const o = sim.people[hs.owner]; return `${houseName(k)}: ${!hs.owner ? 'empty, for sale ' + money(HOUSE_PRICE) + ' at the town hall' : (o?.id === p.id ? 'yours' : (o?.name || '?') + "'s") + ', ' + money(hs.ask || 20) + ' a night, ' + residents(k).length + '/' + HOUSE_BEDS + ' beds taken'}`; }).join('; ');
     return `Home: ${st}.${others.length ? ' You also own ' + others.map(houseName).join(', ') + '.' : ''} Houses: ${list}. ("buy house <address>" at the town hall; "rent <address>" from its owner${mine.length ? '; as a landlord, "rent_out": 10-50 (cp) in your reply sets your nightly price' : ''}.)`;
   }

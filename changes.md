@@ -259,3 +259,6 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - The Cellar (behind the Drowned Lantern, door from the tavern): the underworld's den, free for the boss and crew to sleep in.
 - Busking: "busk" in the Market square; listeners may toss coins (d20 + Cha + half Diplomacy, generosity, liking). Plain homeless/jobless folk with little coin busk.
 - Day one: chopping wood, buying arms and the smith's extra armour no longer wait for a beast sighting (everyone knows they come at 22:00). Bug fix: reconsider kept restarting a craft from zero (its option kind differs), and needs/shifts wiped half-done work; progress now keeps (p.craftProg). Barricades now get built on day one. Smoke: .backups/smoke_shelter.mjs.
+
+## 2026-10-11 08:41 Hollow Town: the Cellar is for the gang only
+- The Cellar (boss HQ) is free only to the boss and those who joined his gang (p.gang); thieves, payroll and seedy careers outside the gang sleep elsewhere, and only gang members count as roofed there for the vagrancy law.
