@@ -245,3 +245,10 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 ## 2026-10-11 07:58 Hollow Town: money pools; OpenRouter key message
 - Money pools (Rose: "allow them to pool their money"): anyone starts one ("pool <n> <item> for <the guards | the militia | everyone | us | a name>") and anyone chips in ("chip in <amount> to <item>"). When the pot covers one at the shop's price (less its discount for everyone) it's bought and handed out (weapons/armour to the worst equipped, the rest evenly; what the shop lacks is made overnight); when filled, leftovers go back by share. Prompts list open pools with progress; the chippers remember what it bought. Plain brains: each morning a loyal one with savings starts a pool for a draught for everyone if none is open, and the loyal, not-too-greedy chip in from purse and savings. Smoke: .backups/smoke_pool.mjs.
 - OpenRouter key: the save works (tested through the real handler: saves, forgets, refuses other origins). The failure was the town server not yet restarted after the update (404); the page now says so, or names the address problem (403).
+
+## 2026-10-11 08:17 Hollow Town: wake, alarm bell, orders, sleep any time, 8h rest
+- Wake: "wake <name>" / "wake the neighbours" rouses sleepers nearby. Plain folk who see a beast in town at night wake those near them.
+- Alarm bell in the square ("ring the alarm"): walks to the bell, wakes the whole town; guards and militia muster at the beast, the cautious nearby flee. Night guards/militia who see a beast go ring it.
+- Orders: the captain posts guards anywhere ("orders" in the plan); the underworld boss sends the crew (crew_orders: post / go / escort / stand). Prompts show alarm state, guards, crew.
+- Sleep any time ("sleep [N hours]", also for Rose's own character; walking off wakes you) or "stay awake [N hours]". The hours count from reaching bed.
+- Rest: 8 hours of sleep (a gap of 2h+ resets it) restores spell slots and heals HP by level. The dawn reset and daily heal are gone, so night shifts sleep by day. Smoke: .backups/smoke_watch.mjs.

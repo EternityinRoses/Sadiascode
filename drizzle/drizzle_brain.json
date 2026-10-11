@@ -1,0 +1,53 @@
+{
+ "name": "Raindrop",
+ "likes": [],
+ "hates": [],
+ "facts": [],
+ "taught": {},
+ "chain": {
+  "^ my": [
+   "name",
+   "name",
+   "name"
+  ],
+  "my name": [
+   "isn't",
+   "isn't",
+   "isnt"
+  ],
+  "name isn't": [
+   "shake",
+   "raindrop"
+  ],
+  "isn't shake": [
+   "though"
+  ],
+  "shake though": [
+   "$"
+  ],
+  "isn't raindrop": [
+   "$"
+  ],
+  "name isnt": [
+   "that"
+  ],
+  "isnt that": [
+   "$"
+  ],
+  "^ stop": [
+   "calling"
+  ],
+  "stop calling": [
+   "me"
+  ],
+  "calling me": [
+   "raindrop"
+  ],
+  "me raindrop": [
+   "$"
+  ]
+ },
+ "mood": 0.5,
+ "talks": 11,
+ "born": "Oct 10 2026"
+}

@@ -1881,6 +1881,7 @@ function Sim(opts = {}) {
       }
       case 'sleep': {
         if (!arrive(p, tk.to, dt)) return;
+        if (!tk.abed) { tk.abed = true; tk.until = sim.t + (tk.hours || 9) * 60; }   // the hours count from the pillow, not the walk home
         p.state = 'sleep'; p.rest = Math.min(1, p.rest + dt / 420);
         if (!(p.lastSleepT >= sim.t - 120)) p.sleptMin = 0; p.lastSleepT = sim.t; p.sleptMin = (p.sleptMin || 0) + dt;
         if (p.sleptMin >= 480) { p.sleptMin = 0; restDaily(p); if (!p.dying && p.hp < p.maxhp) p.hp = Math.min(p.maxhp, p.hp + Math.max(1, p.level || 1)); remember(p, { text: `I slept the night through: my strength${p.slotMax?.cures || p.slotMax?.missiles ? ' and my spells' : ''} came back.` }); }
@@ -4675,6 +4676,7 @@ function Sim(opts = {}) {
       if (p.jailedUntil > 0 && p.agenda?.length && /^(escape|break)/.test(p.agenda[0].do)) { p.agenda.shift(); tryEscape(p, true); }
       if (p.jailedUntil > 0) { if (sim.t >= p.jailedUntil) { p.jailedUntil = 0; p.task = null; place(p, SPOTS.desk); log('law', `${fullName(p)} is released from jail.`, [p.id]); } else { if (p.brain !== 'human' && night() && Math.random() < dtMin / 600) tryEscape(p); continue; } }
       if (p.brain === 'human' && JOBS[p.job]?.from != null && inShift(p.job, H()) && areaOf(p) === JOBS[p.job].place && conscious(p) && !p.fight) p.worked = (p.worked || 0) + dtMin;
+      if (p.brain === 'human' && p.task?.kind === 'sleep' && conscious(p) && !p.fight && !p.carriedBy) { doTask(p, dtMin); if (!p.task && p.state === 'sleep') p.state = 'idle'; continue; }   // you can sleep too
       if (p.fight || p.brain === 'human' || !conscious(p) || p.carriedBy) continue;
       doTask(p, dtMin);
       if (!p.task) choose(p);
@@ -4734,6 +4736,7 @@ function Sim(opts = {}) {
     if (kind === 'wake') return wakeNear(me, t && t.kind === 'human' ? t : null, 15, extra.why);
     if (kind === 'ring') return ringAlarm(me);
     if (kind === 'stayup') { const hh = parseFloat(String(extra.text || '').match(/\d+(\.\d+)?/)?.[0]); me.stayUpUntil = sim.t + (hh > 0 ? Math.min(24, hh) : 8) * 60; if (me.task?.kind === 'sleep') me.task = null; if (me.state === 'sleep') me.state = 'idle'; return 'You stay awake.'; }
+    if (kind === 'sleep') { if (!free(me) || me.fight) return 'You can\'t sleep right now.'; const hh = parseFloat(String(extra.text || '').match(/\d+(\.\d+)?/)?.[0]); startTask(me, { kind: 'sleep', hours: hh > 0 ? Math.min(12, hh) : null }); return me.home != null ? 'You head to bed.' : 'You find a spot to lie down.'; }
     if (kind === 'pool') return startPool(me, extra.text || '');
     if (kind === 'chipin') return chipIn(me, extra.text || '', extra.amount);
     if (kind === 'class') { const c = String(extra.cls || '').toLowerCase(); if (!PC[c]) return `No such class. Classes: ${Object.keys(PC).join(', ')}.`; if (me.firstPick) { me.firstPick = false; setFirstClass(me, c, extra.feat, true); return `You are a level 1 ${c} now.`; } if (me.levelReady) return levelUp(me, c, extra.feat, true) ? `You take level ${me.level} as a ${c}.` : "That class won't do."; return 'You have no level to choose right now.'; }

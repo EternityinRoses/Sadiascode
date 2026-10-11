@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Hollow Room</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#0d0b09;font-family:Georgia,serif;color:#e6d3ad}
+#ui{position:fixed;inset:0;pointer-events:none}
+.lbl{position:absolute;transform:translate(-50%,-100%);font-size:12px;color:#d9c79f;text-shadow:0 0 3px #000;white-space:nowrap}
+.lbl small{color:#9a8a6c}
+.bub{position:absolute;transform:translate(-50%,-100%);background:#f3e7cfee;color:#2a2016;padding:5px 9px;border-radius:10px;font-size:13px;max-width:220px;text-align:center;box-shadow:0 2px 6px #0008}
+.bub.boost{outline:2px solid #6cc6ff}.bub.learned{outline:2px solid #9fe07a}.bub.remix{outline:2px dashed #e0b84a}
+.panel{position:fixed;background:#16120ecc;border:1px solid #4a3e30;border-radius:8px;padding:10px;font-size:13px;pointer-events:auto}
+#info{left:10px;top:10px;width:250px}
+#boostp{right:10px;top:10px;width:230px}
+#log{left:10px;bottom:60px;width:470px;height:180px;overflow:auto;font-size:12px;font-family:Consolas,monospace}
+#say{position:fixed;left:10px;bottom:10px;display:flex;gap:6px;pointer-events:auto}
+input,select,button{background:#221d18;color:#e6d3ad;border:1px solid #4a3e30;border-radius:5px;padding:6px;font-size:13px}
+button{cursor:pointer;background:#5a4630}
+.bar{height:6px;background:#2a231c;border-radius:3px;margin:2px 0 6px}.bar i{display:block;height:100%;border-radius:3px}
+h3{margin:0 0 6px;color:#c9a46a;font-size:15px}
+.k{color:#8c7c60}.base{color:#d8cbb3}.learned{color:#9fe07a}.boost{color:#6cc6ff}.remix{color:#e0b84a}.sig{color:#d77}.know{color:#c9a0e8}
+#hud{right:10px;bottom:10px;width:230px}
+#hp{display:block;margin-bottom:6px;color:#f0a0a8}
+#hud button{margin:2px 2px 0 0}
+#forget{background:#5a2a2a}
+</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+</head><body>
+<div id="ui"></div>
+<div id="info" class="panel"><h3>Hollow Room</h3><div id="sel">Click someone to study them.<br><br><span class="k">WASD walk · F attack · G steal · B bear<br>Click to select · drag to orbit · scroll to zoom</span></div></div>
+<div id="boostp" class="panel"><h3>Boost</h3>
+ <select id="bmode"><option value="off">off (learns slowly)</option><option value="ollama">Ollama</option><option value="anthropic">Anthropic API</option></select>
+ <input id="bmodel" placeholder="model (blank = default)" style="width:205px;margin-top:6px">
+ <input id="bkey" type="password" placeholder="API key (memory only)" style="width:205px;margin-top:6px;display:none">
+ <div style="margin-top:6px">rate <input id="brate" type="range" min="0" max="1" step="0.05" value="0.3" style="width:120px;vertical-align:middle"> <span id="bratev">30%</span></div>
+ <button id="bapply" style="margin-top:6px">Apply</button> <span id="bstat" class="k"></span>
+ <div class="k" style="margin-top:6px;font-size:11px"><span class="base">■</span> own <span class="learned">■</span> learned <span class="remix">■</span> remix <span class="boost">■</span> boosted</div>
+</div>
+<div id="hud" class="panel"><span id="hp">…</span>
+ <button id="bearbtn" title="B">🐻 Release the bear</button>
+ <button id="forget" title="wipe everything they learned">Forget all</button>
+ <div class="k" style="margin-top:6px;font-size:11px"><span class="know">■</span> news/gossip <span class="sig">■</span> signals</div>
+</div>
+<div id="log" class="panel"></div>
+<form id="say"><input id="pname" value="Rose" style="width:70px"><input id="ptext" placeholder="say something to who you clicked..." style="width:330px" autocomplete="off"><button>Say</button></form>
+<script type="module" src="/room.js"></script>
+</body></html>

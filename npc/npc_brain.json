@@ -1,0 +1,211 @@
+{
+ "nb": {
+  "greet": {
+   "docs": 7,
+   "words": {
+    "hello": 1,
+    "hi": 1,
+    "there": 1,
+    "hey": 1,
+    "good": 1,
+    "evening": 2,
+    "greetings": 1,
+    "hail": 1,
+    "innkeeper": 1
+   },
+   "total": 10
+  },
+  "trade": {
+   "docs": 7,
+   "words": {
+    "what": 1,
+    "do": 2,
+    "you": 2,
+    "sell": 1,
+    "how": 1,
+    "much": 1,
+    "for": 1,
+    "ale": 1,
+    "i": 3,
+    "want": 1,
+    "to": 1,
+    "buy": 1,
+    "food": 1,
+    "can": 1,
+    "get": 1,
+    "a": 1,
+    "room": 1,
+    "price": 1,
+    "of": 1,
+    "bread": 1,
+    "have": 1,
+    "potions": 1,
+    "need": 1,
+    "supplies": 1
+   },
+   "total": 28
+  },
+  "rumor": {
+   "docs": 9,
+   "words": {
+    "any": 2,
+    "news": 1,
+    "heard": 1,
+    "rumors": 1,
+    "what": 4,
+    "is": 2,
+    "happening": 1,
+    "around": 1,
+    "here": 1,
+    "anything": 1,
+    "strange": 1,
+    "lately": 1,
+    "tell": 2,
+    "me": 2,
+    "gossip": 1,
+    "about": 2,
+    "the": 2,
+    "fog": 1,
+    "town": 1,
+    "that": 1,
+    "sound": 1,
+    "do": 1,
+    "people": 1,
+    "say": 1
+   },
+   "total": 33
+  },
+  "quest": {
+   "docs": 6,
+   "words": {
+    "do": 1,
+    "you": 2,
+    "have": 1,
+    "work": 1,
+    "any": 2,
+    "jobs": 1,
+    "for": 1,
+    "me": 1,
+    "i": 2,
+    "need": 2,
+    "coin": 1,
+    "is": 1,
+    "there": 1,
+    "a": 1,
+    "task": 1,
+    "can": 1,
+    "help": 1,
+    "with": 1,
+    "something": 1,
+    "got": 1,
+    "quests": 1,
+    "anything": 1,
+    "done": 1
+   },
+   "total": 27
+  },
+  "threat": {
+   "docs": 6,
+   "words": {
+    "give": 1,
+    "me": 1,
+    "your": 1,
+    "money": 1,
+    "i": 2,
+    "will": 1,
+    "kill": 1,
+    "you": 2,
+    "hand": 1,
+    "it": 1,
+    "over": 1,
+    "or": 1,
+    "else": 1,
+    "draw": 1,
+    "my": 1,
+    "sword": 1,
+    "are": 1,
+    "going": 1,
+    "to": 1,
+    "die": 1,
+    "shut": 1,
+    "up": 1,
+    "old": 1,
+    "woman": 1
+   },
+   "total": 26
+  },
+  "bye": {
+   "docs": 6,
+   "words": {
+    "goodbye": 1,
+    "farewell": 1,
+    "see": 1,
+    "you": 1,
+    "later": 1,
+    "i": 1,
+    "must": 1,
+    "go": 1,
+    "bye": 1,
+    "until": 1,
+    "next": 1,
+    "time": 1
+   },
+   "total": 12
+  },
+  "self": {
+   "docs": 6,
+   "words": {
+    "who": 1,
+    "are": 3,
+    "you": 4,
+    "what": 2,
+    "is": 1,
+    "your": 1,
+    "name": 1,
+    "how": 1,
+    "long": 1,
+    "have": 1,
+    "been": 1,
+    "here": 1,
+    "tell": 1,
+    "me": 1,
+    "about": 1,
+    "yourself": 1,
+    "human": 1
+   },
+   "total": 23
+  }
+ },
+ "players": {
+  "Rose": {
+   "visits": 1,
+   "topics": {
+    "who's": 1,
+    "here": 1
+   },
+   "phrases": [
+    "Who's all here?"
+   ],
+   "mood": 0.0,
+   "times": {
+    "afternoon": 1
+   },
+   "first": 1791655722.7213829,
+   "last": 1791655722.7213829,
+   "last_mood": 0,
+   "lowercase": 0.0,
+   "shouty": 0.0
+  }
+ },
+ "chain": {
+  "^ who's": [
+   "all"
+  ],
+  "who's all": [
+   "here"
+  ],
+  "all here": [
+   "$"
+  ]
+ }
+}

@@ -1,0 +1,2 @@
+town\view.js:565:  $('cStudy').hidden = where !== 'school'; $('cStand').hidden = where !== 'hall'; $('cReport').hidden = where !== 'station'; $('cEscape').hidden = !(me.jailedUntil ;
+town\index.html:108:      <button id="cStand" hidden>Stand for mayor</button><button id="cReport" hidden>Report someone</button><button id="cEscape" hidden>Escape</button><button id="cEat">Eat</button>

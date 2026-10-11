@@ -216,6 +216,7 @@ function movePlayer(dtReal) {
   const r = new THREE.Vector3(-f.z, 0, f.x), dir = new THREE.Vector3();
   if (keys.w) dir.add(f); if (keys.s) dir.sub(f); if (keys.d) dir.add(r); if (keys.a) dir.sub(r);
   const step = 3.2 * dtReal;
+  if (dir.lengthSq() > 0 && me.task?.kind === 'sleep') { me.task = null; if (me.state === 'sleep') me.state = 'idle'; }   // walking off wakes you
   if (dir.lengthSq() > 0) { dir.normalize(); const n = { x: me.x + dir.x * step, z: me.z + dir.z * step }; if (S.walkable(n)) { me.x = n.x; me.z = n.z; } else if (S.walkable({ x: n.x, z: me.z })) me.x = n.x; else if (S.walkable({ x: me.x, z: n.z })) me.z = n.z; me.yaw = Math.atan2(dir.x, dir.z); me.area = S.areaOf(me) || me.area; }
   else if (me.goal) { if (S.stepToward(me, me.goal, 3.2, dtReal)) me.goal = null; }
   if (me.carrying) { const c = S.people[me.carrying]; if (c && c.alive && !S.conscious(c)) S.carry(me, c); else me.carrying = null; }
@@ -297,7 +298,7 @@ $('cBurgle').onclick = () => note(S.playerDo('burgle')); $('cLoot').onclick = ()
 $('cWait').onclick = () => { for (let i = 0; i < 120; i++) S.step(0.5); note('You wait an hour.'); };
 $('cMode').onclick = () => { me.prefMode = me.prefMode === 'nonlethal' ? 'lethal' : 'nonlethal'; drawPanel(); };
 $('cReport').onclick = () => { if (!selected) return note('Select who you want to report, then press Report at the station desk.'); note(S.playerDo('report', null, { about: selected })); };
-$('say').onsubmit = e => { e.preventDefault(); const t = $('sayText').value.trim(); if (!t) return; $('sayText').value = ''; { const w = /^(wake|ring|stay (?:awake|up))\b(.*)$/i.exec(t); if (w) { const k = w[1].toLowerCase(); note(S.playerDo(k === 'wake' ? 'wake' : k === 'ring' ? 'ring' : 'stayup', k === 'wake' ? selected : null, { text: w[2] })); drawPanel(); return; } }
+$('say').onsubmit = e => { e.preventDefault(); const t = $('sayText').value.trim(); if (!t) return; $('sayText').value = ''; { const w = /^(wake|ring|sleep|stay (?:awake|up))\b(.*)$/i.exec(t); if (w) { const k = w[1].toLowerCase(); note(S.playerDo(k === 'wake' ? 'wake' : k === 'ring' ? 'ring' : k === 'sleep' ? 'sleep' : 'stayup', k === 'wake' ? selected : null, { text: w[2] })); drawPanel(); return; } }
   { const m = /^class\s+([a-z]+)/i.exec(t); if (m) { note(S.playerDo('class', null, { cls: m[1].toLowerCase() })); drawPanel(); return; } } note(S.playerDo('say', null, { text: t, to: selected, whisper: $('whisper')?.checked })); };
 
 // ------------------------------------------------------------------ shop --

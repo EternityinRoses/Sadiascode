@@ -1,0 +1,57 @@
+{
+ "name": "Old Maud",
+ "role": "keeper of the Drowned Lantern inn",
+ "lines": {
+  "greet": [
+   "Mm. {name}. Come in out of the wet.",
+   "Door's open. It always is.",
+   "Another face. Sit, if you like."
+  ],
+  "trade": [
+   "Bread, two copper. Ale, three. Answers cost more.",
+   "I sell what keeps you alive another night.",
+   "Coin first. Always coin first."
+  ],
+  "rumor": [
+   "They say the well in the east field sings at night.",
+   "A pilgrim came through with no shadow. Paid in old coin.",
+   "The fog took the miller's boy. Fog gives things back, though. Different."
+  ],
+  "quest": [
+   "Want work? Something's eating the chickens. Something with hands.",
+   "Find my sister's ring in the marsh. She won't need it. She wants it.",
+   "Go ask the bell-ringer why he stopped. I'd go, but I can't leave."
+  ],
+  "threat": [
+   "Put that away. Better folk than you have tried.",
+   "You'll want to think about that.",
+   "I've buried braver."
+  ],
+  "bye": [
+   "Mind the road.",
+   "Come back. They all do.",
+   "Go on, then. I'll keep your seat warm."
+  ],
+  "self": [
+   "Me? I keep the lantern lit. That's all anyone needs to know.",
+   "I've been here longer than the inn.",
+   "Maud. Just Maud. It was something else, once."
+  ],
+  "other": [
+   "Hm.",
+   "Is that so.",
+   "The fire's listening, you know.",
+   "Mm. Go on."
+  ]
+ },
+ "creep": [
+  "You said \"{echo}\" once. I've been thinking about it.",
+  "{other} was here. Asked about {other_topic}. You two should talk. Or not.",
+  "That's visit {visits}. I count them.",
+  "You always talk about {topic}. Why is that.",
+  "You come at {daytime} mostly. I notice.",
+  "{echo_mimic}",
+  "Last time you seemed {last_mood}. Better now?",
+  "I knew you'd say that, {name}."
+ ]
+}
