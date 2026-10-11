@@ -440,9 +440,13 @@ function Sim(opts = {}) {
   // a beast hunts: the nearest person or animal it can see, otherwise toward the houses
   function prowl(an, dtMin) {
     if (an.hp < an.maxhp * 0.3) { an.goal = P(-125, rnd(-20, 20)); stepToward(an, an.goal, 1.6, dtMin); if (areaOf(an) === 'wood' && Math.random() < dtMin / 30) { an.alive = false; an.left = true; log('life', `The wounded ${an.name.toLowerCase()} slinks back into the Wildwood.`, [an.id]); } return; }
-    const prey = [...living().filter(q => q.kind === 'human' && conscious(q) && q.jailedUntil <= 0), ...Object.values(sim.animals).filter(a => a.alive && !a.monster && (a.livestock || a.owner))].filter(q => dist2(q, an) < 26 && sees(an, q)).sort((a, b) => dist2(a, an) - dist2(b, an))[0];
+    // a beast out of the Wildwood hunts people by scent (60 m, through doors and walls: it comes in after you);
+    // only when nobody's within reach of its nose does it go for the penned animals and dogs it can see (Rose)
+    const SCENT = 60;
+    const prey = living().filter(q => q.kind === 'human' && conscious(q) && !(q.jailedUntil > 0) && !q.carriedBy && dist2(q, an) < SCENT).sort((a, b) => dist2(a, an) - dist2(b, an))[0]
+      || Object.values(sim.animals).filter(a => a.alive && !a.monster && (a.livestock || a.owner) && dist2(a, an) < 26 && sees(an, a)).sort((a, b) => dist2(a, an) - dist2(b, an))[0];
     if (prey) {
-      if (dist2(prey, an) > 2) { stepToward(an, prey, 1.8, dtMin); return; }
+      if (dist2(prey, an) > 2) { if (!an.scented && prey.kind === 'human') { an.scented = true; log('fight', `The ${an.name.toLowerCase()} catches a scent and heads into town!`, [an.id]); } stepToward(an, prey, 1.8, dtMin); return; }
       if (prey.livestock) {      // penned beasts can't get away: a bite now and then until it's down
         if (sim.t < (an.nextBite || 0)) return; an.nextBite = sim.t + 1;
         if (d(20) + an.atk >= prey.ac) { prey.hp -= roll(an.bite[0], an.bite[1]) + an.dmgBonus; if (prey.hp <= 0) { prey.alive = false; prey.state = 'dead'; log('death', `The ${an.name.toLowerCase()} kills a ${prey.species} at the ranch.`, [an.id]); an.full = Math.min(1, an.full + 0.3); } }
@@ -450,7 +454,7 @@ function Sim(opts = {}) {
       }
       startFight(an, prey, { mode: 'lethal', why: 'a beast attacks' }); return;
     }
-    if (!an.goal || dist2(an, an.goal) < 2 || Math.random() < dtMin / 90) an.goal = randIn(pick(['lane', 'square', 'fields', 'ranch', 'lane']), 2);
+    if (!an.goal || dist2(an, an.goal) < 2 || Math.random() < dtMin / 90) an.goal = randIn(pick(['lane', 'square', 'lane', 'square', 'ranch']), 2);   // with no scent: into town, where people are
     stepToward(an, an.goal, 1.2, dtMin);
   }
   sim.BEASTS = BEASTS;
@@ -3074,6 +3078,7 @@ function Sim(opts = {}) {
       if (!an.alive || an.fight) continue;
       an.full = Math.max(0, an.full - dtMin / 60 / 10);
       const own = sim.people[an.owner];
+      if (an.monster) { prowl(an, dtMin); continue; }   // beasts of the Wildwood hunt; the learned animal mind (wander, graze...) is for pets, game and stock
       if (sim.animalMinds) {
         if (!an.noise) aMutate(an);
         if (an.monster && an.hp < an.maxhp * 0.3 && !an.act) an.act = 'flee';
