@@ -1526,6 +1526,13 @@ function Sim(opts = {}) {
       for (const [key, ds] of Object.entries(nights)) { const [day, who] = key.split('|'); lines.push(`Night of day ${day}: ${/^[aeiou]/i.test(who) ? 'an' : 'a'} ${who} killed ${ds.length} (${top(ds, 'who')}). Where they were caught: ${top(ds, 'where')}. What they were doing: ${top(ds, 'doing')}.`); }
       const byPeople = gl.filter(d => d.t === 'death' && d.killer === 'a person'); if (byPeople.length) lines.push(`Killed by people: ${byPeople.length} (${top(byPeople, 'who')}).`);
       const votes = gl.filter(v => v.t === 'vote'); if (votes.length) lines.push('Elections: ' + votes.map(v => `day ${v.day} with sales tax ${Math.round(v.tax * 100)}% and rent ${money(v.rent)}, ${v.kept ? 'the mayor kept office' : 'the mayor was voted out'} (${v.tally})`).join('; ') + '.');
+      { const saves = gl.filter(x => x.t === 'save'), kills = gl.filter(x => x.t === 'beast'), nights = gl.filter(x => x.t === 'night');
+        if (saves.length) lines.push(`Small wins: ${saves.length} lives saved from dying (by ${top(saves, 'how')}; most often by ${top(saves, 'by', 2)}).`);
+        if (kills.length) lines.push(`Beasts killed: ${kills.length} (${top(kills, 'beast')}), by ${top(kills, 'by', 3)}, with ${top(kills, 'weapon', 3)}.`);
+        if (nights.length) { const by = {}; for (const x of nights) { const b = (by[x.where] ||= [0, 0]); b[0] += x.lived ? 1 : 0; b[1]++; } const rows = Object.entries(by).filter(([, b]) => b[1] >= 2).map(([w, b]) => [w, b[0], b[1], b[0] / b[1]]); const safe = rows.filter(r => r[3] >= 0.99).sort((a, b) => b[2] - a[2]).slice(0, 3), bad = rows.filter(r => r[3] < 0.99).sort((a, b) => a[3] - b[3]).slice(0, 3);
+          if (safe.length || bad.length) lines.push(`Where people were at 23:00 on the beast nights and who saw the dawn: ${[...safe, ...bad].map(r => `${r[0]} ${r[1]}/${r[2]} lived`).join('; ')}.`); }
+        const dk = {}; for (const x of nights) { const b = (dk[x.doing] ||= [0, 0]); b[0] += x.lived ? 1 : 0; b[1]++; } const dRows = Object.entries(dk).filter(([, b]) => b[1] >= 3).sort((a, b) => b[1][0] / b[1][1] - a[1][0] / a[1][1]);
+        if (dRows.length >= 2) lines.push(`What they were doing then: ${dRows.slice(0, 4).map(([k, b]) => `${k} ${b[0]}/${b[1]} lived`).join('; ')}.`); }
       if (cause.disease) lines.push('Sickness killed people; the ones who rested at the Infirmary with the doctor in mostly lived.');
       if (cause.starvation) lines.push('People starved: food and coin for it mattered.');
       sim.lore.wisdom = [...(sim.lore.wisdom || []), lines.join(' ')].slice(-6); sim.genLog = [];
@@ -3084,11 +3091,16 @@ function Sim(opts = {}) {
   // HEALING THE FALLEN where they lie: a cure light wounds (1d8 + caster level, up to +5), lay on hands, or a healing
   // draught (1d8+1) poured down the throat. Any healing stops the bleeding (SRD; LoH healedOf), and 1 hp or more stands
   // them up. True when the patient is on their feet again.
+  // a small win, for the generation's memory: who did it (by their place in town) and how
+  const winRole = p => p.id === sim.mayorId ? 'the mayor' : p.militia ? 'the militia' : p.job === 'none' ? 'jobless folk' : (JOBS[p.job]?.title || 'townsfolk').toLowerCase() + 's';
+  function win(t, p, o = {}) { if (!p || p.kind !== 'human') return; (sim.genLog ||= []).push({ t, day: sim.day, by: winRole(p), ...o }); }
   function healAt(p, q) {
+    const how = p.cures > 0 ? 'a cure spell' : p.layPool > 0 ? 'lay on hands' : 'a healing draught';
     if (p.cures > 0) { p.cures--; const h = d(8) + Math.min(5, clvl(p, 'cleric') + clvl(p, 'druid')); healUp(q, h); log('life', `${p.name} casts cure light wounds on ${q.name} (+${h} hp)${q.hp > 0 ? ' and they get back up' : '; the bleeding stops'}.`, [p.id, q.id]); }
     else if (p.layPool > 0) { const h = Math.min(p.layPool, Math.max(1, 1 - q.hp + 4)); p.layPool -= h; healUp(q, h); log('life', `${p.name} lays hands on ${q.name} (+${h} hp)${q.hp > 0 ? ' and they get back up' : ''}.`, [p.id, q.id]); }
     else if (p.items?.cure > 0) { p.items.cure--; const h = roll(1, 8) + 1; healUp(q, h); log('life', `${p.name} pours a healing draught down ${q.name}'s throat (+${h} hp)${q.hp > 0 ? ' and they get back up' : '; the bleeding stops'}.`, [p.id, q.id]); }
     else return false;
+    win('save', p, { how });
     remember(q, { text: `${p.name} saved my life when I lay dying.`, big: true }); bump(q, p, 'like', 0.4); bump(q, p, 'trust', 0.3);
     return q.hp > 0 && !q.down;
   }
@@ -3098,7 +3110,7 @@ function Sim(opts = {}) {
     if (!p.task.carrying) {
       if (dist2(p, q) > 1.4) { arrive(p, q, dt, 2.0); return; }
       if (q.dying || q.hp <= 0) { if (healAt(p, q)) { p.task = null; return; } }
-      if (q.dying) { const kit = p.items?.healkit > 0 ? 2 : 0; if (kit) p.items.healkit--; const r = d(20) + p.skills.heal + kit; if (r >= 15) { q.dying = false; q.down = 'out'; q.downUntil = sim.t + 120; log('life', `${p.name} stabilizes ${q.name}.`, [p.id, q.id]); } else return; }
+      if (q.dying) { const kit = p.items?.healkit > 0 ? 2 : 0; if (kit) p.items.healkit--; const r = d(20) + p.skills.heal + kit; if (r >= 15) { q.dying = false; q.down = 'out'; q.downUntil = sim.t + 120; log('life', `${p.name} stabilizes ${q.name}.`, [p.id, q.id]); win('save', p, { how: 'first aid' }); } else return; }
       p.task.carrying = q.id; log('life', `${p.name} carries ${q.name} to the infirmary.`, [p.id, q.id]);
     }
     const bed = SPOTS.beds.find(b => !living().some(o => o !== q && dist2(o, b) < 0.5)) || SPOTS.beds[0];
@@ -3709,6 +3721,7 @@ function Sim(opts = {}) {
         t.alive = false; t.state = 'dead';
         if (t.monster && by && by.kind === 'human') {
           { const total = 600 * (t.cr || 1), fx = sim.fights.find(f => f.sides.has(by.id)), share = fx ? fx.order.map(body).filter(q => q && q.kind === 'human' && q.alive && fx.sides.get(q.id) === fx.sides.get(by.id)) : [by]; for (const q of share) gainXP(q, Math.floor(total / Math.max(1, share.length)) + (q === by ? Math.floor(total / 4) : 0), 'the ' + t.name.toLowerCase()); }
+          win('beast', by, { beast: String(t.name).toLowerCase(), weapon: (WEAPONS[by.weapon]?.name || 'bare hands').toLowerCase() });
           by.stats.beasts = (by.stats.beasts || 0) + 1; if (t.pelt) by.items[t.pelt] = (by.items[t.pelt] || 0) + 1;
           const bounty = Math.min(sim.treasury, sim.bounty.beasts ?? 80); if (bounty > 0) pay('town', by, bounty, 'beast bounty');
           log('death', `${by.id === 'player' ? 'You' : fullName(by)} ${by.id === 'player' ? 'kill' : 'kills'} the ${t.name.toLowerCase()}!${bounty ? ` The town pays ${money(bounty)}.` : ''}`, [by.id]);
@@ -3787,7 +3800,7 @@ function Sim(opts = {}) {
     if (lohAct(f, p, a, t, spend)) return lohAfter(f, p, a);
     switch (a.id) {
       case 'attack': attack(f, p, t); spend('standard'); break;
-      case 'feed': { if (threatened(f, p).length) provoke(f, p); if (conscious(p) && p.items.cure > 0 && t.alive) { p.items.cure--; const h = roll(1, 8) + 1; healUp(t, h); logF(f, `${p.name} gives ${t.name} a healing draught: +${h} hp. ${status(t) || t.name + ' is back up.'}`); remember(t, { text: `${p.name} saved my life in a fight.`, big: true }); } spend('full'); break; }
+      case 'feed': { if (threatened(f, p).length) provoke(f, p); if (conscious(p) && p.items.cure > 0 && t.alive) { p.items.cure--; const h = roll(1, 8) + 1; healUp(t, h); logF(f, `${p.name} gives ${t.name} a healing draught: +${h} hp. ${status(t) || t.name + ' is back up.'}`); remember(t, { text: `${p.name} saved my life in a fight.`, big: true }); win('save', p, { how: 'a healing draught in a fight' }); } spend('full'); break; }
       case 'firebomb': lohSaw(f, p, 'ranged', t); firebomb(f, p, t); spend('standard'); break;
       case 'throw': if (p.items.stones > 0) { p.items.stones--; attack(f, p, t, { stone: true }); } spend('standard'); break;
       case 'reload': p.unloaded = false; logF(f, `${p.name} reloads.`); spend(a.cost); break;
@@ -3799,7 +3812,7 @@ function Sim(opts = {}) {
       case 'demoralize': { const r = d(20) + p.skills.intimidate, dc = 10 + t.level + mod(t.st.wis); if (r >= dc) { t.shaken = (f.round + 2); logF(f, `${p.name} intimidates ${t.name}: shaken (−2) (${r} vs ${dc}).`); } else logF(f, `${t.name} isn't impressed by ${p.name} (${r} vs ${dc}).`); spend('standard'); break; }
       case 'feint': { if (srdOn()) { feintAt(f, p, t); spend('standard'); break; } const r = d(20) + p.skills.bluff, dc = d(20) + t.skills.sense + babOf(t); if (r >= dc) { t.flatfooted = true; logF(f, `${p.name} feints; ${t.name} is caught flat-footed (${r} vs ${dc}).`); } else logF(f, `${t.name} sees through ${p.name}'s feint.`); spend('standard'); break; }
       case 'drink': { if (!(p.items.cure > 0)) { logF(f, `${p.name} has no draught left.`); break; } if (threatened(f, p).length) provoke(f, p); p.items.cure--; const h = roll(1, 8) + 1; if (srdOn()) { const m = globalThis.SRD.mendOf({ now: p.hp, max: p.maxhp, grey: p.nl || 0 }, h); p.hp = m.now; p.nl = Math.max(0, (p.nl || 0) - m.lifted); } else p.hp = Math.min(p.maxhp, p.hp + h); if (p.hp > 0) p.disabled = false; logF(f, `${p.name} drinks a draught (+${h} hp).`); spend('standard'); break; }
-      case 'stabilize': { const kit = p.items?.healkit > 0 ? 2 : 0; if (kit) p.items.healkit--; const r = d(20) + p.skills.heal + kit; if (r >= 15) { t.dying = false; t.down = 'out'; t.downUntil = sim.t + 120; logF(f, `${p.name} stabilizes ${t.name}.`); } else logF(f, `${p.name} fails to stop ${t.name}'s bleeding.`); spend('standard'); break; }
+      case 'stabilize': { const kit = p.items?.healkit > 0 ? 2 : 0; if (kit) p.items.healkit--; const r = d(20) + p.skills.heal + kit; if (r >= 15) { t.dying = false; t.down = 'out'; t.downUntil = sim.t + 120; logF(f, `${p.name} stabilizes ${t.name}.`); win('save', p, { how: 'first aid' }); } else logF(f, `${p.name} fails to stop ${t.name}'s bleeding.`); spend('standard'); break; }
       case 'coup': { logF(f, p.monster ? `The ${p.name.toLowerCase()} falls on ${t.name} where they lie.` : `${p.name} delivers a coup de grace to ${t.name}.`); const w = p.kind === 'animal' ? { dmg: p.bite, crit: [20, 2] } : WEAPONS[p.weapon], dmg = roll(w.dmg[0], w.dmg[1]) * w.crit[1] + (p.kind === 'animal' ? (p.dmgBonus || 0) : mod(p.st.str)) * w.crit[1]; const save = d(20) + mod(t.st?.con ?? 10) + 1; if (t.brain === 'human') { t.hp = Math.min(t.hp, 0); t.down = 'out'; t.downUntil = sim.t + 240; logF(f, `${t.name} is left for dead.`); } else if (dmg >= t.hp + 10 || save < 10 + dmg) die(t, p, p.monster ? 'savaged' : 'coup de grace'); else hurt(t, dmg, false, p); spend('full'); break; }
       case 'rob': { const n = t.coin; pay(t, p, n); p.stats.stolen += n; deed('theft', p, t, t, { victimKnows: false }); logF(f, `${p.name} empties ${t.name}'s purse (${money(n)}).`); spend('standard'); break; }
       case 'run': { const foe = foesOf(f, p)[0]; if (threatened(f, p).length) provoke(f, p); if (foe) moveAway(p, foe, SPEED(p) * 4); p.fled = (p.fled || 0) + 1; logF(f, `${p.name} runs!`); spend('full'); break; }
@@ -4474,6 +4487,8 @@ function Sim(opts = {}) {
       if (h === 7) morning();
       housingHour(h);
       { const pelts = (sim.business.store.stock.wolfpelt || 0) + (sim.business.store.stock.bearpelt || 0) + (sim.business.store.stock.trollhide || 0), lw = living().some(q => q.job === 'leatherworker'); for (const p of living()) if (p.kind === 'human' && p.job === 'none' && !p.town && !thinks(p) && p.brain !== 'human' && conscious(p) && (Object.keys(TAN).some(k => p.items[k] > 0) || pelts >= 2 && !lw && p.coin >= 5) && Math.random() < 0.15) { p.job = 'leatherworker'; log('life', `${fullName(p)} sets up as a leatherworker.`, [p.id]); break; } }
+      if (h === 23) sim.nightWatch = living().filter(p => p.kind === 'human' && !p.town && p.id !== 'player').map(p => { const a = AREAS[areaOf(p)]; return { id: p.id, where: a?.house ? 'their house on Wick Lane' : (a?.name || 'the road'), doing: p.state === 'sleep' ? 'asleep' : p.fight ? 'fighting' : p.task?.kind || p.state || 'idle', guard: isGuard(p) }; });
+      if (h === 6 && sim.nightWatch) { for (const w of sim.nightWatch) (sim.genLog ||= []).push({ t: 'night', day: sim.day - 1, where: w.where, doing: w.doing, lived: !!sim.people[w.id]?.alive }); sim.nightWatch = null; }
       if (h === 6) for (const p of living()) if (p.kind === 'human' && !p.town) { gainXP(p, 100, 'the night'); restDaily(p); }
       for (const p of living()) if (p.levelReady && sim.t - (p.levelReadyAt || 0) > 720) autoLevel(p);
       for (const p of living()) if (p.firstPick && p.brain !== 'human' && sim.t - (p.firstPickAt || 0) > 720) p.firstPick = false;

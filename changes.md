@@ -238,3 +238,6 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 ## 2026-10-11 07:13 Hollow Town: OpenRouter brains
 - New provider 'openrouter' for the mayor and the townsfolk (Settings > Brains). Its key is typed into Settings (OpenRouter API key: Save key / Forget); the town server keeps it in town/openrouter.key (gitignored, never served, never sent back to the page; or OPENROUTER_API_KEY). The page only learns whether one is saved.
 - Default model anthropic/claude-haiku-5.5:batch (listed first; the model list is OpenRouter's, Anthropic models first). Calls go to openrouter.ai/api/v1/chat/completions with the fixed identity cache-marked for Anthropic models, effort passed as reasoning effort, a longer timeout for :batch variants, and the spending cap fed by OpenRouter's own reported cost.
+
+## 2026-10-11 07:22 Hollow Town: small wins in the town's memory
+- The generation summary every AI reads (sim.lore.wisdom, last 6 generations) told only what went wrong. It now also says what went right: lives saved (how, and by whom), beasts killed (which, by whom, with what), where people were at 23:00 on each beast night and how many saw the dawn (by place, and by what they were doing). Logged as genLog 'save' / 'beast' / 'night' entries.
