@@ -1086,6 +1086,90 @@ function Sim(opts = {}) {
     p.switched = (p.switched || 0) + 1;
   }
   sim.reconsider = reconsider;
+  // ======================================================= animal minds ==
+  // Every species has its own small net: what it senses -> what it does. Nobody tells a dog to
+  // follow its owner or a hen to run: they learn from what happens (food, being hurt, a bond, dying)
+  // and evolve between towns. No LLM: animals don't talk, though pets hear words.
+  const A_ACTS = ['wander', 'graze', 'follow', 'approach', 'flee', 'attack', 'stay', 'home', 'beg'];
+  const A_IN = 26, A_H = 12, A_OUT = A_ACTS.length, A_NP = A_H * A_IN + A_H + A_OUT * A_H + A_OUT;
+  const homeOf = an => an.livestock ? 'ranch' : an.game || an.monster || !an.owner && an.species === 'fox' ? 'wood' : an.species === 'goat' ? 'fields' : (sim.people[an.owner] && areaOf(sim.people[an.owner])) || areaOf(an) || 'square';
+  function aNet(sp) {
+    const A = (sim.lore.animals ||= {});
+    const n = A[sp]; if (n && n.theta?.length === A_NP) { if (!(n.theta instanceof Float32Array)) n.theta = Float32Array.from(n.theta); return n; }
+    const theta = new Float32Array(A_NP); for (let k = 0; k < A_NP; k++) theta[k] = (Math.random() * 2 - 1) * 0.2;
+    return A[sp] = { theta, gen: 0, base: 0, history: [] };
+  }
+  sim.aNet = aNet; sim.A_ACTS = A_ACTS;
+  function aFeatures(an) {
+    const x = new Float32Array(A_IN), h = H(), own = sim.people[an.owner]; let i = 0; const put = v => { x[i++] = v; };
+    put(1); put(an.full); put(Math.max(0, an.hp) / an.maxhp); put(night() ? 1 : 0); put(Math.sin(h / 24 * 6.283)); put(Math.cos(h / 24 * 6.283));
+    put(own && own.alive ? Math.min(1, dist2(an, own) / 30) : 1); put(own?.fight ? 1 : 0); put(own && own.alive ? 1 : 0);
+    let near = null, nd = 99; for (const q of living()) { if (q.kind !== 'human' || !conscious(q)) continue; const d = dist2(q, an); if (d < nd && d < 25 && sameSpace(q, an)) { nd = d; near = q; } }
+    put(near ? 1 - nd / 25 : 0); put(near && !WEAPONS[near.weapon]?.weak ? 1 : 0); put(near && an.hurtBy === near.id ? 1 : 0); put(near ? Math.min(1, an.bond?.[near.id] || 0) : 0); put(near && Object.keys(near.items).some(k => GOODS[k]?.food && near.items[k] > 0) ? 1 : 0);
+    let threat = 0, prey = 0; for (const a of Object.values(sim.animals)) { if (!a.alive || a === an || dist2(a, an) > 20) continue; if (a.monster && !an.monster) threat = 1; if (an.monster && (a.livestock || a.owner)) prey = 1; }
+    if (an.monster && near) prey = 1;
+    put(threat); put(prey); put(areaOf(an) === homeOf(an) ? 1 : 0); put(an.hurtAt && sim.t - an.hurtAt < 10 ? 1 : 0);
+    for (const r of (an.recent || [])) if (sim.t - r.t < 3) x[18 + hashWord(r.w) % 8] = 1;
+    return x;
+  }
+  function aForward(sp, x, noise) {
+    const th = aNet(sp).theta, w = k => th[k] + (noise ? noise[k] : 0), hid = new Float32Array(A_H), out = new Float32Array(A_OUT), o2 = A_H * A_IN + A_H;
+    for (let a = 0; a < A_H; a++) { let z = w(A_H * A_IN + a); for (let b = 0; b < A_IN; b++) if (x[b]) z += w(a * A_IN + b) * x[b]; hid[a] = Math.tanh(z); }
+    for (let c = 0; c < A_OUT; c++) { let z = w(o2 + A_OUT * A_H + c); for (let a = 0; a < A_H; a++) z += w(o2 + c * A_H + a) * hid[a]; out[c] = z; }
+    return { hid, out };
+  }
+  function aNudge(sp, x, act, adv, lr) {
+    const th = aNet(sp).theta, { hid, out } = aForward(sp, x), o2 = A_H * A_IN + A_H, ci = A_ACTS.indexOf(act);
+    let m = -1e9; for (const v of out) m = Math.max(m, v); let z = 0; const pr = out.map(v => { const e = Math.exp(v - m); z += e; return e; });
+    const dh = new Float32Array(A_H);
+    for (let c = 0; c < A_OUT; c++) { const g = ((c === ci ? 1 : 0) - pr[c] / z) * adv * lr; th[o2 + A_OUT * A_H + c] += g; for (let a = 0; a < A_H; a++) { dh[a] += g * th[o2 + c * A_H + a]; th[o2 + c * A_H + a] += g * hid[a]; } }
+    for (let a = 0; a < A_H; a++) { const d = dh[a] * (1 - hid[a] * hid[a]); if (!d) continue; th[A_H * A_IN + a] += d; for (let b = 0; b < A_IN; b++) if (x[b]) th[a * A_IN + b] += d * x[b]; }
+  }
+  const aWorth = an => an.full + Math.max(0, an.hp) / an.maxhp * 2 + (an.owner ? (an.bond?.[an.owner] || 0) * 2 : 0) + (an.kills || 0);
+  function aDecide(an) {
+    const sp = an.species, x = aFeatures(an);
+    if (an.last) { const r = Math.max(-1, Math.min(1, aWorth(an) - an.last.worth)), n = aNet(sp); n.base = n.base * 0.98 + r * 0.02; aNudge(sp, an.last.x, an.last.act, r - n.base, 0.03); }
+    const out = aForward(sp, x, an.noise).out;
+    let best = 0, bv = -1e9; for (let c = 0; c < A_OUT; c++) { const v = out[c] + rnd(0, 0.3); if (v > bv) { bv = v; best = c; } }
+    an.act = A_ACTS[best]; an.last = { x, act: an.act, worth: aWorth(an) }; an.nextThink = sim.t + 5 + Math.random() * 3; an.goal = null;
+    (an.trace ||= []).push({ day: sim.day, clock: sim.clock(), by: 'animal mind', chose: an.act, top: [], words: (an.recent || []).map(r => r.w).slice(-3), where: AREAS[areaOf(an)]?.name || '' }); if (an.trace.length > 20) an.trace.shift();
+  }
+  function aDo(an, dtMin) {
+    const own = sim.people[an.owner], home = homeOf(an), spd = an.species === 'rabbit' || an.species === 'dog' || an.species === 'wolf' ? 1.6 : an.livestock ? 0.6 : 1.1;
+    const nearHuman = () => { if (an.tgtAt && sim.t - an.tgtAt < 2 && an.tgt?.alive) return an.tgt; an.tgtAt = sim.t; return an.tgt = living().filter(q => q.kind === 'human' && conscious(q) && dist2(q, an) < 25 && sameSpace(q, an)).sort((a, b) => dist2(a, an) - dist2(b, an))[0]; };
+    switch (an.act) {
+      case 'wander': if (!an.goal || dist2(an, an.goal) < 1) an.goal = randIn(areaOf(an) && AREAS[areaOf(an)] && !AREAS[areaOf(an)].indoor ? areaOf(an) : home, 2); stepToward(an, an.goal, spd * 0.6, dtMin); break;
+      case 'graze': if (['fields', 'ranch', 'wood', 'orchard'].includes(areaOf(an)) && !an.monster) an.full = Math.min(1, an.full + dtMin / 120); break;
+      case 'follow': if (own && own.alive) { if (dist2(an, own) > 2.2) stepToward(an, own, spd, dtMin); } else an.act = 'wander'; break;
+      case 'approach': case 'beg': { const q = nearHuman(); if (q && dist2(q, an) > 1.8) stepToward(an, q, spd * 0.8, dtMin); else if (q && an.act === 'beg' && (an.bond?.[q.id] || 0) > 0.2 && Math.random() < dtMin / 30) { const k = Object.keys(q.items).find(k => GOODS[k]?.food && q.items[k] > 0); if (k && q.brain !== 'human') { q.items[k]--; an.full = Math.min(1, an.full + 0.25); an.bond[q.id] = Math.min(an.maxBond ?? 1, (an.bond[q.id] || 0) + 0.03); log('life', `${q.name} tosses ${an.name} a scrap.`, [q.id, an.id]); } } break; }
+      case 'flee': { const t = an.fleeAt && sim.t - an.fleeAt < 2 ? an.fleeFrom : (an.fleeAt = sim.t, an.fleeFrom = [...Object.values(sim.animals).filter(a => a.alive && a.monster && a !== an), ...living().filter(q => q.kind === 'human' && conscious(q) && (an.hurtBy === q.id || an.monster))].filter(q => dist2(q, an) < 18).sort((a, b) => dist2(a, an) - dist2(b, an))[0]);
+        if (t && t.alive) { const dx = an.x - t.x, dz = an.z - t.z, l = Math.hypot(dx, dz) || 1; stepToward(an, P(an.x + dx / l * 4, an.z + dz / l * 4), spd * 1.4, dtMin); } else stepToward(an, an.goal ||= randIn(home, 2), spd, dtMin);
+        if (an.monster && areaOf(an) === 'wood' && an.hp < an.maxhp * 0.6 && Math.random() < dtMin / 30) { an.alive = false; an.left = true; log('life', `The ${an.name.toLowerCase()} slinks back into the Wildwood.`, [an.id]); }
+        break; }
+      case 'attack': {
+        if (an.monster) { prowl(an, dtMin); break; }
+        const t = an.hurtBy && sim.people[an.hurtBy]?.alive ? sim.people[an.hurtBy] : own && own.fight ? [...(sim.fights.find(f => f.sides.has(own.id))?.sides.keys() || [])].map(body).find(q => q && q.alive && q !== own && q !== an) : null;
+        if (t && dist2(t, an) < 15) { if (dist2(t, an) > 1.8) stepToward(an, t, spd * 1.3, dtMin); else startFight(an, t, { mode: 'lethal', why: `${an.name} attacks` }); } else an.act = 'stay';
+        break; }
+      case 'home': if (!an.goal || areaOf(an.goal) !== home) an.goal = randIn(home, 2); stepToward(an, an.goal, spd, dtMin); break;
+      case 'stay': default: break;
+    }
+  }
+  // animals evolve with the town's generations: each carries a mutation of its species' net
+  function aMutate(an) { const nz = new Float32Array(A_NP); for (let k = 0; k < A_NP; k++) nz[k] = (Math.random() + Math.random() + Math.random() - 1.5) * 2 * 0.05; an.noise = nz; }
+  sim.aMutate = aMutate;
+  function aEndGeneration() {
+    const bySp = {}; for (const an of Object.values(sim.animals)) if (an.noise) (bySp[an.species] ||= []).push(an);
+    const out = {};
+    for (const [sp, pop] of Object.entries(bySp)) {
+      const n = aNet(sp), fit = an => (an.alive ? 1 + aWorth(an) : 0) + (an.kills || 0) * 0.5;
+      if (pop.length >= 3) { const ranked = pop.slice().sort((a, b) => fit(a) - fit(b)), N = ranked.length; ranked.forEach((an, r) => { const u = r / (N - 1) - 0.5; for (let k = 0; k < A_NP; k++) n.theta[k] += 0.6 * u * an.noise[k] / N; }); }
+      n.gen++; const st = { gen: n.gen, n: pop.length, alive: pop.filter(a => a.alive).length, fit: +(pop.reduce((a, an) => a + fit(an), 0) / pop.length).toFixed(2) }; n.history.push(st); if (n.history.length > 200) n.history.shift(); out[sp] = st;
+    }
+    return out;
+  }
+  sim.aEndGeneration = aEndGeneration;
+  sim.animalMinds = true;
   // ---- generations ---------------------------------------------------------------
   sim.genDays = 14; sim.sigma = 0.04;
   function mutateAll() { for (const p of everyone()) if (p.kind === 'human' && p.brain === 'script' && !p.town) { const nz = new Float32Array(NPARAM); for (let k = 0; k < NPARAM; k++) nz[k] = (Math.random() + Math.random() + Math.random() - 1.5) * 2 * sim.sigma; p.noise = nz; } }
@@ -1103,6 +1187,7 @@ function Sim(opts = {}) {
     const words = Object.entries(sim.lore.words || {}).filter(([, e]) => e.n >= 3).length;
     const stat = { gen: n.gen + 1, days: sim.day, people: pop.length, alive: alive.length, deaths: sim.rec.deaths, avgFit: +(fit.reduce((a, b) => a + b, 0) / Math.max(1, fit.length)).toFixed(1), bestFit: +Math.max(0, ...fit).toFixed(1), agree: n.asked ? +(n.agree / n.asked).toFixed(2) : null, taught: n.imitated, words, crimes: sim.rec.crimes, gini: snapshot().gini };
     n.history.push(stat); if (n.history.length > 500) n.history.shift(); n.gen++; n.agree = 0; n.asked = 0;
+    stat.animals = aEndGeneration();
     sim.onGeneration?.(stat); return stat;
   }
   sim.endGeneration = endGeneration;
@@ -1169,7 +1254,7 @@ function Sim(opts = {}) {
   }
   sim.plainSay = plainSay;
   sim.importLore = o => { if (o && o.v === 1 && o.acts) { sim.lore = o; sim.lore.runs = (o.runs || 0) + 1; if (o.net?.theta) o.net.theta = Float32Array.from(o.net.theta); mutateAll(); } };
-  sim.exportLore = () => { const o = JSON.parse(JSON.stringify({ ...sim.lore, net: undefined })); const n = netOf(); o.net = { ...n, theta: Array.from(n.theta, v => +v.toFixed(5)) }; return o; };
+  sim.exportLore = () => { const o = JSON.parse(JSON.stringify({ ...sim.lore, net: undefined, animals: undefined })); o.animals = Object.fromEntries(Object.entries(sim.lore.animals || {}).map(([k, n]) => [k, { ...n, theta: Array.from(n.theta, v => +v.toFixed(5)) }])); const n = netOf(); o.net = { ...n, theta: Array.from(n.theta, v => +v.toFixed(5)) }; return o; };
   sim.loreSize = () => ({ phrases: Object.values(sim.lore.phrases || {}).reduce((a, l) => a + l.length, 0), situations: Object.keys(sim.lore.acts).length, taught: sim.lore.taught, scored: sim.lore.scored, words: Object.keys(sim.lore.chain).length, runs: sim.lore.runs });
   sim.options = options; sim.choose = choose;
 
@@ -2015,7 +2100,9 @@ function Sim(opts = {}) {
   function hurt(t, dmg, nonlethal, by) {
     if (t.kind === 'animal') {
       if (!t.alive) return;
-      t.hp -= dmg;
+      t.hp -= dmg; t.hurtAt = sim.t; if (by) t.hurtBy = by.id;
+      if (t.hp <= 0 && t.last && sim.animalMinds) aNudge(t.species, t.last.x, t.last.act, -1, 0.05);
+      if (t.hp <= 0 && by?.monster) by.kills = (by.kills || 0) + 1;
       if (t.hp <= 0) {
         t.alive = false; t.state = 'dead';
         if (t.monster && by && by.kind === 'human') {
@@ -2035,6 +2122,7 @@ function Sim(opts = {}) {
     }
     if (nonlethal) t.nl += dmg; else t.hp -= dmg;
     t.lastHurtBy = by?.id;
+    if (t.hp <= -10 && by?.monster) by.kills = (by.kills || 0) + 1;
     if (t.hp <= -10) { if (t.brain === 'human') { t.hp = 0; t.down = 'out'; t.downUntil = sim.t + 30; } else die(t, by, 'killed in a fight'); }
     else if (t.hp <= 0) { if (t.brain === 'human') { t.down = 'out'; t.downUntil = sim.t + 30; } else { t.dying = t.hp < 0; t.down = 'dying'; } }
     else if (t.nl >= t.hp) { t.down = 'out'; t.downUntil = sim.t + 30 + t.nl * 6; }
@@ -2713,12 +2801,21 @@ function Sim(opts = {}) {
       if (!an.alive || an.fight) continue;
       an.full = Math.max(0, an.full - dtMin / 60 / 10);
       const own = sim.people[an.owner];
-      if (an.monster) { prowl(an, dtMin); continue; }
-      if (an.livestock) { if (Math.random() < dtMin / 40) an.goal = randIn('ranch', 3); if (an.goal) stepToward(an, an.goal, 0.5, dtMin); continue; }
+      if (sim.animalMinds) {
+        if (!an.noise) aMutate(an);
+        if (an.monster && an.hp < an.maxhp * 0.3 && !an.act) an.act = 'flee';
+        if (sim.t >= (an.nextThink || 0) || an.hurtAt && sim.t - an.hurtAt < 0.6 && an.lastHurtSeen !== an.hurtAt) { an.lastHurtSeen = an.hurtAt; aDecide(an); }
+        aDo(an, dtMin);
+        if (an.livestock || an.game) { if (['fields', 'ranch', 'wood'].includes(areaOf(an)) && an.act !== 'flee') an.full = Math.min(1, an.full + dtMin / 600); }
+      }
+      else if (an.monster) { prowl(an, dtMin); continue; }
+      if (sim.animalMinds) { /* feeding time below still applies */ }
+      else if (an.livestock) { if (Math.random() < dtMin / 40) an.goal = randIn('ranch', 3); if (an.goal) stepToward(an, an.goal, 0.5, dtMin); continue; }
       if (an.game) { if (Math.random() < dtMin / 20) an.goal = randIn('wood', 2); if (an.goal) stepToward(an, an.goal, an.species === 'rabbit' ? 1.2 : 0.8, dtMin); continue; }
-      if (own && own.alive && an.species === 'dog') { if (dist2(an, own) > 2.5) stepToward(an, own, 1.8, dtMin); }
+      if (sim.animalMinds) {}
+      else if (own && own.alive && an.species === 'dog') { if (dist2(an, own) > 2.5) stepToward(an, own, 1.8, dtMin); }
       else if (Math.random() < dtMin / 30) { an.goal = randIn(an.species === 'goat' ? 'fields' : an.species === 'fox' ? 'fields' : areaOf(an) || 'square'); }
-      if (an.goal) stepToward(an, an.goal, 1.0, dtMin);
+      if (an.goal && !sim.animalMinds) stepToward(an, an.goal, 1.0, dtMin);
       if (own && own.alive && H() >= 18 && H() < 19 && an.full < 0.7 && dist2(own, an) < 10 && conscious(own)) {
         const word = (own.petWord ||= pick(['dinner', 'supper', 'grub', 'food', 'treat', 'eat up']));
         const line = `${an.name}, ${word}!`; log('talk', `${own.name}: "${line}"`, [own.id, an.id]); own.bubble = { text: line, t: sim.t };
