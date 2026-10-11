@@ -624,6 +624,9 @@ function Sim(opts = {}) {
   }
   sim.via = via;
   function stepToward(p, goal, speed, dt) {
+    if (goal.kind === 'human' && goal !== p && dist2(p, goal) < 0.75) return true;   // walking up to a person: stop at arm's length, not inside them
+    // someone already stands on the spot: stop beside it rather than shoving in (the closest free place)
+    if (p.kind === 'human' && dist2(p, goal) < 1.4 && dist2(p, goal) > 0.05 && living().some(q => q !== p && q !== goal && q.kind === 'human' && conscious(q) && dist2(q, goal) < 0.6)) return true;
     const g = via(p, goal);
     const dx = g.x - p.x, dz = g.z - p.z, len = Math.hypot(dx, dz);
     if (len < 0.05) return true;
@@ -631,9 +634,25 @@ function Sim(opts = {}) {
     if (walkable(P(nx, nz))) { p.x = nx; p.z = nz; } else if (walkable(P(nx, p.z))) p.x = nx; else if (walkable(P(p.x, nz))) p.z = nz;
     p.yaw = Math.atan2(dx, dz);
     if (areaOf(p)) p.area = areaOf(p);
-    return dist2(p, goal) < 0.6;
+    const dg = dist2(p, goal);
+    return dg < 0.6 || dg < 1.6 && living().some(q => q !== p && q !== goal && q.kind === 'human' && conscious(q) && dist2(q, goal) < 0.8);
   }
   sim.stepToward = stepToward;
+  // bodies don't pass through each other (Rose): anyone standing closer than ROOM gets nudged apart, so a crowd heading
+  // for one spot spreads out around it instead of piling into one place. The knocked-out, the carried, the jailed
+  // and people mid-fight are left where they are.
+  const ROOM = 0.7;
+  function separate() {
+    const ps = living().filter(p => p.kind === 'human' && conscious(p) && !p.carriedBy && !(p.jailedUntil > 0) && !p.fight);
+    for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+      const a = ps[i], b = ps[j], dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+      if (d >= ROOM || !sameSpace(a, b)) continue;
+      let ux = dx / d, uz = dz / d; if (!(d > 1e-4)) { const ang = Math.random() * Math.PI * 2; ux = Math.cos(ang); uz = Math.sin(ang); }
+      const push = (ROOM - d) / 2;
+      for (const [q, s] of [[a, -1], [b, 1]]) { const n = P(q.x + ux * push * s, q.z + uz * push * s); if (walkable(n)) { q.x = n.x; q.z = n.z; } }
+    }
+  }
+  sim.separate = separate;
   const setTask = (p, kind, o = {}) => { if (o.to && o.until) o.until = Math.max(o.until, sim.t + dist2(p, o.to) / 1.6 + 30); p.task = { kind, t0: sim.t, ...o }; p.state = kind; p.stateT = 0; };
   sim.setTask = setTask;
 
@@ -2954,6 +2973,7 @@ function Sim(opts = {}) {
   // =================================================================== tick ==
   let lastHour = Math.floor(sim.t / 60), lastDay = Math.floor(sim.t / 1440);
   sim.step = dtMin => {
+    separate();
     sim.t += dtMin;
     while (later.length) later.shift()();
     const hourNow = Math.floor(sim.t / 60), dayNow = Math.floor(sim.t / 1440);
