@@ -2140,7 +2140,8 @@ function Sim(opts = {}) {
     setTimeout0(() => runForGuard(p, at, evs0()));
     const evs = sim.events.filter(e => sim.t - e.t < 15 && e.at && dist2(e.at, at) < 20 && ['assault', 'mugging', 'murder', 'robbery', 'theft', 'burglary', 'extortion', 'vandalism'].includes(e.type));
     log('law', `${p.id === 'player' ? 'You shout' : p.name + ' shouts'} "Guard! Guard!"`, [p.id]); p.bubble = { text: 'Guard! Guard!', t: sim.t };
-    for (const q of living()) if (q !== p && q.kind === 'human' && conscious(q) && dist2(q, p) < CRY_RANGE && sameSpace(q, p)) {
+    for (const q of living()) if (q !== p && q.kind === 'human' && conscious(q) && dist2(q, p) < (sameSpace(q, p) ? CRY_RANGE : CRY_RANGE / 2)) {
+      if (q.state === 'sleep' && q.brain !== 'human') { q.task = null; q.state = 'idle'; remember(q, { text: `woken by ${p.name} shouting for the guard` }); }   // Rose: a shout wakes people
       q.alert = true; remember(q, { text: `${p.name} shouted for the guard near ${AREAS[areaOf(p)]?.name || 'here'}` });
       if (isGuard(q) && q.jailedUntil <= 0 && !q.fight) { if (waitsForOrders(q)) askOrders(q, `${p.name} is shouting for the guard near ${AREAS[areaOf(p)]?.name || 'you'}.`); else setTask(q, 'goto', { to: at, until: sim.t + 40, cry: evs.map(e => e.id) }); }
     }
@@ -2630,6 +2631,7 @@ function Sim(opts = {}) {
       f = { by: a.id, id: 'f' + Math.random().toString(36).slice(2, 7), round: 1, order: [], turn: 0, sides: new Map(), mode: new Map(), log: [], started: sim.t, why: o.why || 'a fight', at: P(a.x, a.z) };
       sim.fights.push(f);
       log('fight', `${a.name} attacks ${b.name}${o.why ? ' (' + o.why + ')' : ''}.`, [a.id, b.id]);
+      if (a.monster || b.monster) for (const q of living()) if (q !== a && q !== b && q.kind === 'human' && q.state === 'sleep' && q.brain !== 'human' && conscious(q) && dist2(q, b) < (sameSpace(q, b) ? 12 : 5)) { q.task = null; q.state = 'idle'; q.alert = true; remember(q, { text: `woken by ${a.monster ? 'a ' + a.name.toLowerCase() : a.name} attacking ${b.monster ? 'a ' + b.name.toLowerCase() : b.name}` }); }
     }
     join(f, a, 'A' + a.id, o.mode || 'nonlethal');
     join(f, b, f.sides.get(b.id) || 'B' + b.id, b.brain === 'human' ? (b.prefMode || 'lethal') : b.monster ? 'lethal' : 'nonlethal');
