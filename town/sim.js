@@ -145,7 +145,7 @@ const GOODS = {
   fish: { name: 'Pond fish', price: 3, food: 0.35, shop: 'store' }, apple: { name: 'Apples', price: 1, food: 0.15, shop: 'store' },
   cure: { name: 'Healing draught', price: 5000, shop: 'store', heal: [1, 8] },
   finery: { name: 'Fine clothes', price: 3000, shop: 'store' },
-  waterskin: { name: 'Waterskin', price: 100, food: 0.02, water: 0.6 }, note: { name: 'A folded note', price: 0 }, wood: { name: 'Bundle of wood', price: 1 },
+  waterskin: { name: 'Waterskin', price: 100, food: 0.02, water: 0.6 }, note: { name: 'A folded note', price: 0 }, stones: { name: 'Throwing stones', price: 0 }, wood: { name: 'Bundle of wood', price: 1 },
   longsword1: { name: 'Longsword +1', price: 231500, weapon: 'longsword1' }, elvenchain: { name: 'Gilded elven chain', price: 415000, armor: 'elvenchain' },
 };
 
@@ -249,6 +249,8 @@ const FEATS = {
   'Negotiator':            { req: () => true, blurb: '+2 diplomacy and sense motive' },
   'Stealthy':              { req: () => true, blurb: '+2 hide and move silently' },
   'Self-Sufficient':       { req: () => true, blurb: '+2 heal' },
+  'Improved Unarmed Strike': { req: () => true, blurb: 'your fists count as armed: punching an armed foe no longer gives them a free swing at you, and you choose lethal or nonlethal at no cost' },
+  'Precise Shot':          { req: p => p.feats?.includes('Point Blank Shot'), blurb: 'no -4 for shooting into a melee' },
 };
 function rollStats(bias = {}) {
   const s = {};
@@ -931,7 +933,7 @@ function Sim(opts = {}) {
       if (OUTSIDE.has(areaOf(p))) {
         if (WEAPONS[p.weapon]?.weak && !(p.items.club > 0)) add('forage', 1.5 + fear + wild, { craft: 'club' });
         else if (p.weapon === 'club' && !(p.items.spear > 0)) add('forage', 0.5 + fear * 0.5 + wild, { craft: 'spear' });
-        if (WEAPONS[p.weapon]?.ammo === 'bullets' && (p.items.bullets || 0) < 10) add('forage', 2 + wild, { craft: 'stones' });
+        if ((WEAPONS[p.weapon]?.ammo === 'bullets' && (p.items.bullets || 0) < 10 || WEAPONS[p.weapon]?.weak) && (p.items.stones || 0) < 4) add('forage', 1 + fear * 0.5 + wild, { craft: 'stones' });
       }
       const wantWood = (p.home != null && (HOUSES[p.home].barricade || 0) < 60) || sim.palisade.hp < sim.palisade.max * 0.6;
       if (wantWood && sim.beastsSeen && (p.items.wood || 0) < 3) add('forage', 0.8 + p.traits.caution * 2 + wild, { craft: 'wood' });
@@ -2407,7 +2409,7 @@ function Sim(opts = {}) {
   function finishCraft(p, tk) {
     const w = tk.what, c = CRAFT[w];
     if (w === 'club' || w === 'spear') { const eq = equipIfBetter(p, w); log('life', `${p.name} whittles a ${w} in ${AREAS[areaOf(p)]?.name || 'the wild'}${eq ? ' and carries it' : ''}.`, [p.id]); remember(p, { text: `I whittled a ${w}` }); return; }
-    if (w === 'stones') { p.items.bullets = (p.items.bullets || 0) + 10; remember(p, { text: 'I gathered sling stones' }); return; }
+    if (w === 'stones') { p.items.stones = (p.items.stones || 0) + 6; remember(p, { text: 'I gathered stones to throw' }); return; }
     if (w === 'wood') { const n = ['handaxe', 'battleaxe', 'greataxe'].includes(p.weapon) ? 5 : 3; p.items.wood = (p.items.wood || 0) + n; remember(p, { text: `I chopped ${n} wood` }); return; }
     if ((p.items.wood || 0) < c.wood) { (p.failed ||= []).push(`${c.label} (ran out of wood)`); return; }
     p.items.wood -= c.wood;
@@ -2893,6 +2895,96 @@ function Sim(opts = {}) {
   // ========================================================= D&D 3.5 combat ==
   // A fight is a bubble: initiative order, 6-second rounds, turn by turn. Only the people
   // in it take turns; the town keeps moving around them.
+  // ---- THE SRD (Rose: "srd everything"; the rules are Legends of Harpine's own, brought into town/srd) -------------
+  // With town/srd_bridge.js loaded (globalThis.SRD), every swing, shot and thrown stone is rolled by LoH's rules/attack.js
+  // (attackRoll, rollDamage) over LoH's weapon table, proficiency table and weapons rules: improvised throws, sling stones,
+  // pulled blows, crits, flanking, concealment, sneak dice. Hollow Town only builds the swing it asks about. Armour gives AC
+  // and soaks nothing (SRD); bare hands provoke from an armed foe unless the fist is "armed" (Improved Unarmed Strike, a monk).
+  const LOH_WEAPON = { fists: 'Unarmed', dagger: 'Dagger', sickle: 'Sickle', club: 'Club', sap: 'Sap', quarterstaff: 'Quarterstaff', spear: 'Spear', lightmace: 'Light Mace', heavymace: 'Heavy Mace', handaxe: 'Handaxe', shortsword: 'Short Sword', rapier: 'Rapier', scimitar: 'Scimitar', longsword: 'Longsword', battleaxe: 'Battleaxe', warhammer: 'Warhammer', flail: 'Flail', greataxe: 'Greataxe', greatsword: 'Greatsword', halberd: 'Halberd', sling: 'Sling', javelin: 'Javelin', shortbow: 'Shortbow', longbow: 'Longbow', lightxbow: 'Light Crossbow', heavyxbow: 'Heavy Crossbow', longsword1: 'Longsword' };
+  const NPC_PROF = { commoner: { named: ['club'] }, expert: { simple: true }, warrior: { simple: true, martial: true }, aristocrat: { simple: true, martial: true } };
+  const srdOn = () => !!(globalThis.SRD && sim.srd !== false);
+  sim.LOH_WEAPON = LOH_WEAPON; sim.srdOn = srdOn;
+  function profOf(p) {
+    const out = { simple: false, martial: false, named: new Set() };
+    for (const k of Object.keys(classesOf(p))) for (const r of [NPC_PROF[k], globalThis.SRD?.CLASS_WEAPONS?.[k[0].toUpperCase() + k.slice(1)]]) if (r) { if (r.simple) out.simple = true; if (r.martial) out.martial = true; for (const n of r.named || []) out.named.add(n); }
+    return out;
+  }
+  const fistArmed = p => p.kind !== 'human' || hasFeat(p, 'Improved Unarmed Strike') || clvl(p, 'monk') > 0;
+  // who threatens the ground around them (SRD): a melee weapon, a natural weapon, or an "armed" fist
+  const threatens = p => p.kind === 'animal' ? true : p.weapon === 'fists' ? fistArmed(p) : !!WEAPONS[p.weapon]?.melee;
+  sim.threatens = threatens;
+  // flanking (SRD): an ally who threatens the foe from the far side of it
+  function flankAlly(f, a, t) {
+    for (const id of f.order) { const q = body(id); if (!q || q === a || !q.alive || !conscious(q) || f.sides.get(q.id) !== f.sides.get(a.id) || dist2(q, t) > 2.1 || !threatens(q)) continue;
+      const ax = a.x - t.x, az = a.z - t.z, qx = q.x - t.x, qz = q.z - t.z, c = (ax * qx + az * qz) / ((Math.hypot(ax, az) * Math.hypot(qx, qz)) || 1); if (c < -0.5) return q; }
+    return null;
+  }
+  const sgn = n => n ? (n > 0 ? '+' : '') + n : '';
+  const nz = ts => { const k = ts.filter(([n]) => n); return k.length ? k : [[0, 'base attack']]; };
+  function srdAttack(f, a, t, o = {}) {
+    const S = globalThis.SRD, human = a.kind === 'human', mode = o.mode || f.mode.get(a.id) || 'lethal';
+    const strM = human ? mod(a.st.str) : 0, dexM = human ? mod(a.st.dex) : 0;
+    const parts = [], dparts = []; let hp = 0, dp = 0;
+    const term = (n, w, dmg) => { if (!n) return; if (dmg) { dp += n; dparts.push([n, w]); } else { hp += n; parts.push([n, w]); } };
+    let move;
+    if (!human) {
+      move = { name: a.attackName || 'bite', type: 'attack', natural: true, toHit: a.atk ?? 2, dmg: `${a.bite[0]}d${a.bite[1]}${sgn(a.dmgBonus || 0)}`, critMult: 2, threat: 20, dmgType: /claw|tusk|club/.test(a.attackName || '') ? (/club/.test(a.attackName) ? 'bludgeoning' : 'slashing') : 'piercing', rangeFt: 5 };
+    } else {
+      const bab = babOf(a);
+      if (o.stone) {   // a stone thrown by hand: an improvised thrown weapon (SRD, Thrown Weapons), 1d3 like a sling's stone
+        const I = S.IMPROVISED_THROW;
+        move = { name: 'stone', type: 'attack', thrown: true, improvised: true, toHit: bab + dexM + I.toHit, toHitTerms: nz([[bab, 'base attack'], [dexM, 'Dexterity'], [I.toHit, 'improvised throw']]), dmg: `1d3${sgn(strM)}`, critMult: I.mult, threat: I.threat, dmgType: 'bludgeoning', rangeIncFt: I.incFt, rangeFt: I.incFt * 5, light: true };
+      } else if (o.bash) {   // a bow or crossbow swung as a club: a light improvised weapon (-4)
+        move = { name: (WEAPONS[a.weapon]?.name || 'it').toLowerCase(), type: 'attack', improvised: true, toHit: bab + strM - 4, toHitTerms: nz([[bab, 'base attack'], [strM, 'Strength'], [-4, 'improvised']]), dmg: `1d4${sgn(strM)}`, critMult: 2, threat: 20, dmgType: 'bludgeoning', rangeFt: 5, light: true };
+      } else {
+        const name = LOH_WEAPON[a.weapon] || 'Unarmed', k = S.kindOf(name) || S.kindOf('Unarmed');
+        const monk = name === 'Unarmed' && clvl(a, 'monk') > 0, ranged = k.use === 'projectile', thrown = k.use === 'thrown', enh = WEAPONS[a.weapon]?.enh || 0;
+        const cp = S.critParts(k.crit) || { threat: 20, mult: 2 };
+        const prof = S.proficientWith(profOf(a), name) ? 0 : S.NONPROFICIENT;
+        const two = S.gripOf(k, { offhandBusy: !!(a.shield && a.shield !== 'none') || !!(a.items?.torch > 0 && night()) }) === 2;
+        const sb = ranged ? (/sling/i.test(name) ? strM : /bow$/i.test(name) && !/cross/i.test(name) ? Math.min(0, strM) : 0) : thrown ? strM : Math.floor(strM * (two && strM > 0 ? 1.5 : 1));
+        const dice = monk ? String(S.monkFistAt(clvl(a, 'monk'))).match(/\d+d\d+/)?.[0] || '1d6' : (k.dmg || '1d3');
+        move = { name: (WEAPONS[a.weapon]?.name || name).toLowerCase(), weapon: name, type: 'attack', toHit: bab + (ranged || thrown ? dexM : strM) + prof + enh, toHitTerms: nz([[bab, 'base attack'], [ranged || thrown ? dexM : strM, ranged || thrown ? 'Dexterity' : 'Strength'], [prof, 'not proficient'], [enh, 'magic']]),
+          dmg: `${dice}${sgn(sb + enh)}`, critMult: cp.mult, threat: cp.threat, dmgType: k.types[0] || 'bludgeoning',
+          light: k.effort === 'light' || k.effort === 'unarmed', unarmed: k.effort === 'unarmed', fx: ranged ? (k.ammo || 'shot') : undefined, thrown, ranged,
+          rangeIncFt: k.inc || 0, rangeFt: ranged || thrown ? (k.inc || 10) * (thrown ? 5 : 10) : 5 };
+        if (ranged && k.ammo === 'bullets' && !(a.items.bullets > 0) && a.items.stones > 0) move = { ...move, ...S.stoneShotOf(move) };
+      }
+      // the town's own terms, each by name: hunger (Rose), the classes' features
+      const hun = a.food < 0.1 ? 2 : a.food < 0.3 ? 1 : 0; term(-hun, 'hunger'); term(-hun, 'hunger', true);
+      if (hasFeat(a, 'Weapon Focus') && !o.stone && !o.bash) term(1, 'Weapon Focus');
+      if (hasFeat(a, 'Weapon Specialization') && !o.stone && !o.bash) term(2, 'Weapon Specialization', true);
+      if (a.rage === f.id) { term(2, 'rage'); term(2, 'rage', true); }
+      const insp = inspire(f, a); term(insp, 'inspire courage'); term(insp, 'inspire courage', true);
+      if (S.isRanged(move) && clvl(a, 'ranger') >= 2) term(1, 'ranger');
+      if (t.kind === 'animal' && t.monster && clvl(a, 'ranger')) term(2, 'favoured enemy', true);
+      if (clvl(a, 'paladin') && !(a.smote ||= {})[f.id] && (t.monster || mode === 'lethal')) { a.smote[f.id] = 1; term(Math.max(0, mod(a.st.cha)), 'smite'); term(clvl(a, 'paladin'), 'smite', true); }
+    }
+    if (o.charge) term(2, 'charge');
+    const rangedMove = S.isRanged(move), dFt = dist2(a, t) / 0.3048;
+    const actorV = { name: a.id === 'player' ? 'Rose' : a.name, feats: human ? (a.feats || []).filter(x => ['Point Blank Shot', 'Precise Shot', 'Blind-Fight', 'Improved Unarmed Strike'].includes(x)) : [],
+      meleeAtkMod: hp, rangedAtkMod: hp, meleeAtkParts: parts, rangedAtkParts: parts, attackMod: 0, dmgMod: dp,
+      pullBlows: human && mode === 'nonlethal', strikeToKill: human && mode === 'lethal', monkLevel: human ? clvl(a, 'monk') : 0,
+      powerAttack: human && mode === 'lethal' && !rangedMove && hasFeat(a, 'Power Attack') ? Math.min(2, Math.max(1, babOf(a))) : 0,
+      sneakDice: human ? Math.ceil(clvl(a, 'rogue') / 2) : 0 };
+    const tV = { name: t.id === 'player' ? 'Rose' : t.name, dexMod: t.kind === 'human' ? mod(t.st.dex) : 0, flatFooted: !!t.flatfooted, acMod: 0, naturalAc: 0 };
+    const ally = !rangedMove ? flankAlly(f, a, t) : null;
+    const intoMelee = rangedMove && f.order.some(id => { const q = body(id); return q && q !== a && q.alive && conscious(q) && f.sides.get(q.id) === f.sides.get(a.id) && dist2(q, t) <= 2.1; }) && !hasFeat(a, 'Precise Shot') ? -4 : 0;
+    const dark = () => night() && !litAt(P(t.x, t.z), t);   // shadowy light: concealment, 20% (SRD)
+    const gather = () => ({ scene: {}, weather: 0, distFt: dFt, intoMelee, flank: { ally: ally ? { name: ally.name, feats: [] } : null, bonus: 2, backToBack: false },
+      feat: { damage: { n: 0, note: '' }, guard: { n: 0, note: '' } }, acBase: t.kind === 'animal' ? t.ac : acOf(t), totalDefense: 0, helpless: !conscious(t),
+      attackerHeld: false, targetHeldByOther: false, cover: null, surprise: f.round === 1 });
+    const ask = { helpless: () => !conscious(t), unobserved: () => false, flanked: () => !!ally, spend: () => {}, concealment: () => dark() ? { total: false } : null, perceives: () => false,
+      feat: { deflect: () => ({ deflected: false, note: '' }), blackCat: () => false }, confirmTerms: () => [],
+      sneak: () => { if (!actorV.sneakDice || dark()) return null; const why = !conscious(t) ? 'helpless' : t.flatfooted ? 'flat-footed' : !rangedMove && ally ? 'flanked' : null; return why && (!rangedMove || dFt <= 30) ? { dice: actorV.sneakDice, why } : null; },
+      opening: () => null, damageDice: m => S.damageDiceOf(m) };
+    const swing = { attacker: actorV, target: tV, move };
+    const rec = S.attackRoll(swing, gather, ask);
+    if (!rec.hit) return { hit: false, line: rec.rollLine, move };
+    const res = S.rollDamage(rec, swing, ask);
+    return { hit: true, crit: rec.crit, dmg: res.dmg, nonlethal: human && S.pullsBlows(actorV, move), line: rec.rollLine + ' ' + res.dmgLine, move };
+  }
+  sim.srdAttack = srdAttack;
   function startFight(a, b, o = {}) {
     if (!conscious(a) || !b.alive) return null;
     let f = sim.fights.find(f => f.sides.has(a.id) || f.sides.has(b.id));
@@ -2945,7 +3037,7 @@ function Sim(opts = {}) {
   const body = id => sim.people[id] || sim.animals[id];
   sim.body = body;
   const foesOf = (f, p) => f.order.map(body).filter(q => q && f.sides.get(q.id) !== f.sides.get(p.id) && q.alive && conscious(q));
-  const threatened = (f, p) => foesOf(f, p).filter(q => dist2(q, p) <= 2.1 && (q.kind === 'animal' || WEAPONS[q.weapon].melee && q.weapon !== 'fists' || q.weapon === 'fists' && false));
+  const threatened = (f, p) => foesOf(f, p).filter(q => dist2(q, p) <= 2.1 && threatens(q));
   sim.foesOf = foesOf;
 
   const flanked = (f, a, t) => f.order.some(id => { const q = body(id); return q && q !== a && q.alive && conscious(q) && f.sides.get(q.id) === f.sides.get(a.id) && dist2(q, t) <= 2.1; });
@@ -2960,7 +3052,26 @@ function Sim(opts = {}) {
   function attack1(f, a, t, o = {}) {
     const w = a.kind === 'animal' ? { name: a.attackName || 'bite', dmg: a.bite, crit: [20, 2], melee: true } : weaponOf(a);
     const mode = o.mode || f.mode.get(a.id) || 'lethal';
-    const ranged = !!w.range;
+    const ranged = !!w.range && !o.bash && !o.stone;
+    if (srdOn()) {
+      if (o.stone) { if (dist2(a, t) > 15) return logF(f, `${a.name} can't throw a stone that far.`); if (threatened(f, a).length) provoke(f, a); if (!conscious(a)) return; }
+      else if (ranged && w.ammo) {
+        const stone = w.ammo === 'bullets' && !(a.items.bullets > 0) && a.items.stones > 0;
+        if (!(a.items[w.ammo] > 0) && !stone) return logF(f, `${a.name} has nothing left to shoot.`);
+        if (w.reload && a.unloaded) return logF(f, `${a.name}'s crossbow isn't loaded.`);
+        a.items[stone ? 'stones' : w.ammo]--; if (w.reload) a.unloaded = true;
+        if (threatened(f, a).length) provoke(f, a); if (!conscious(a)) return;   // a shot in a foe's reach provokes (SRD)
+      } else if (dist2(a, t) > 2.1) return logF(f, `${a.name} can't reach ${t.name}.`);
+      // bare hands provoke from the armed foe they strike, before the blow (SRD, Unarmed Attacks; LoH battle.js unarmedProvokes)
+      if (a.kind === 'human' && !o.stone && !o.bash && !o.aoo && a.weapon === 'fists' && !fistArmed(a) && t !== a && conscious(t) && f.sides.has(t.id) && threatens(t) && t.aooUsed !== f.round && dist2(a, t) <= 2.1) {
+        t.aooUsed = f.round; logF(f, `${a.name} swings bare-handed at an armed foe: ${t.name} gets a free swing first.`); attack(f, t, a, { aoo: true }); if (!conscious(a) || !t.alive) return;
+      }
+      const r = srdAttack(f, a, t, o);
+      if (!r.hit) return logF(f, r.line);
+      hurt(t, r.dmg, r.nonlethal, a);
+      if (a.kind === 'animal' && t.kind === 'human' && t.alive && Math.random() < 0.3) expose(t, ({ bear: 'redache', boar: 'redache', direwolf: 'chills', ogre: 'demon' })[a.species] || 'filth', 'a ' + String(a.name).toLowerCase() + ' bite');
+      return logF(f, `${r.line}${r.nonlethal ? ' (nonlethal)' : ''} ${status(t)}`);
+    }
     if (ranged && w.ammo) { if (!(a.items[w.ammo] > 0)) return logF(f, `${a.name} has nothing left to shoot.`); if (w.reload && a.unloaded) return logF(f, `${a.name}'s crossbow isn't loaded.`); a.items[w.ammo]--; if (w.reload) a.unloaded = true; }
     if (!ranged && dist2(a, t) > 2.1) return logF(f, `${a.name} can't reach ${t.name}.`);
     let bonus = (a.kind === 'animal' ? (a.atk ?? 2) : babOf(a) + (ranged ? mod(a.st.dex) : mod(a.st.str))) + (w.enh || 0);
@@ -3053,7 +3164,7 @@ function Sim(opts = {}) {
     const w = p.kind === 'animal' ? { melee: true } : WEAPONS[p.weapon];
     const tn = p.turnLeft || { standard: 1, move: 1, swift: 1, step: 1 };
     if (tn.standard) {
-      const canShoot = w.range && (!w.ammo || p.items?.[w.ammo] > 0) && !(w.reload && p.unloaded);
+      const canShoot = w.range && (!w.ammo || p.items?.[w.ammo] > 0 || w.ammo === 'bullets' && p.items?.stones > 0 && srdOn()) && !(w.reload && p.unloaded);
       for (const q of foes) if ((canShoot && dist2(q, p) < w.range * 5) || (!w.range && dist2(q, p) <= 2.1)) acts.push({ id: 'attack', target: q.id, label: `${w.range ? 'Shoot' : 'Attack'} ${q.name}`, cost: 'standard' });
       if (w.range && dist2(foes.sort((x, y) => dist2(x, p) - dist2(y, p))[0] || p, p) <= 2.1 && p.kind === 'human') for (const q of adj) acts.push({ id: 'bash', target: q.id, label: `Hit ${q.name} with the ${w.name.toLowerCase()}`, cost: 'standard' });
       if (tn.move && tn.standard) for (const q of foes) { const dd = dist2(q, p); if (dd > 3 && dd <= SPEED(p) * 2 && w.melee) acts.push({ id: 'charge', target: q.id, label: `Charge ${q.name}`, cost: 'full' }); }
@@ -3067,6 +3178,7 @@ function Sim(opts = {}) {
       if (tn.move) acts.push({ id: 'run', label: 'Run (4× speed, away)', cost: 'full' });
       if (tn.move && p.kind === 'human') acts.push({ id: 'withdraw', label: 'Withdraw (no attack of opportunity leaving)', cost: 'full' });
     }
+    if (tn.standard && p.kind === 'human' && p.items?.stones > 0 && srdOn()) for (const q of foes) if (dist2(q, p) <= 15 && dist2(q, p) > 0.5) acts.push({ id: 'throw', target: q.id, label: `Throw a stone at ${q.name}`, cost: 'standard' });
     if (w.reload && p.unloaded && p.items?.[w.ammo] > 0 && (w.reload === 'move' ? tn.move : tn.move && tn.standard)) acts.push({ id: 'reload', label: `Reload (${w.reload === 'move' ? 'move action' : 'full round'})`, cost: w.reload === 'move' ? 'move' : 'full' });
     if (tn.move) for (const q of foes) if (dist2(q, p) > 2.1) acts.push({ id: 'move', target: q.id, label: `Move toward ${q.name}`, cost: 'move' });
     if (tn.step && tn.move) acts.push({ id: 'step', label: '5-foot step back', cost: 'step' });
@@ -3082,6 +3194,7 @@ function Sim(opts = {}) {
     const spend = c => { if (c === 'full') { tn.standard = 0; tn.move = 0; tn.step = 0; } else if (c === 'standard') tn.standard = 0; else if (c === 'move') { tn.move = 0; tn.step = 0; } else if (c === 'swift') tn.swift = 0; else if (c === 'step') { tn.step = 0; tn.moved = true; } };
     switch (a.id) {
       case 'attack': attack(f, p, t); spend('standard'); break;
+      case 'throw': if (p.items.stones > 0) { p.items.stones--; attack(f, p, t, { stone: true }); } spend('standard'); break;
       case 'reload': p.unloaded = false; logF(f, `${p.name} reloads.`); spend(a.cost); break;
       case 'bash': { const keep = p.weapon; p.weapon = 'club'; attack(f, p, t); p.weapon = keep; spend('standard'); break; }
       case 'charge': { moveToward(p, t, SPEED(p) * 2, 1.6); provoke(f, p); p.charged = true; attack(f, p, t, { charge: true }); spend('full'); break; }
@@ -3156,6 +3269,7 @@ function Sim(opts = {}) {
     const rl = acts.find(a => a.id === 'reload'); if (rl && !acts.some(a => a.id === 'attack')) return act(f, p, rl);
     const atk = acts.filter(a => a.id === 'attack').sort((x, y) => (body(x.target).hp - body(x.target).nl) - (body(y.target).hp - body(y.target).nl))[0];
     if (atk) { if (p.turnLeft.move && Math.random() < 0.15 && acts.find(a => a.id === 'demoralize')) act(f, p, acts.find(a => a.id === 'demoralize' && a.target === atk.target) || atk); return act(f, p, atk); }
+    { const th = acts.find(a => a.id === 'throw'); if (th && (WEAPONS[p.weapon]?.weak || WEAPONS[p.weapon]?.range) && dist2(body(th.target), p) > 2.1 && (tr.caution > 0.4 || threatens(body(th.target)) && !fistArmed(p))) return act(f, p, th); }   // the unarmed keep their distance and throw
     const charge = acts.find(a => a.id === 'charge'); if (charge && p.kind === 'human' && tr.aggression > 0.4) return act(f, p, charge);
     const mv = acts.find(a => a.id === 'move'); if (mv) { act(f, p, mv); const atk2 = legalActions(f, p).find(a => a.id === 'attack'); if (atk2) act(f, p, atk2); return; }
     act(f, p, { id: 'end' });
@@ -3456,7 +3570,7 @@ function Sim(opts = {}) {
   // What an AI-played person is told. Facts about themselves and what they can perceive, what is
   // available, the commands they have, the careers that exist. No advice, no strategy: that's theirs.
   const SEEDY = ['pickpocket (lift coin from people)', 'burglar (houses and shops, at night)', 'mugger (rob people by force)', 'shop robber (hold up a keeper)', 'extortionist (sell a business "insurance")', 'bandit (ambush carts on the Old Road)', 'rustler (take the ranch\'s animals)', 'fence (sell stolen goods)', 'gang boss or member (found or join a crew)', 'sellsword (hire out as muscle)', 'a bribe-taking official (if you hold an office)', 'liar and slanderer'];
-  const COMMANDS = ['take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house address or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3 sp, the Chapel cleric cures anything for 6 sp; only a few patients at a time)', 'shout for the guard (any time)', 'point out <person> to the guard (someone on the bounty board you can see)', 'bribe <person> <amount, e.g. 5 sp>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <amount>', 'propose to <person>', 'invite <person> (to come with you; add an amount to pay them)', 'hire <person> as a bodyguard <amount> (the mayor, guard captain or a gang boss: they follow and fight for you for a day)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'buy house <address> (1 gp, at the town hall)', 'rent <address> (a bed from its owner, a night at a time; renews itself while you can pay)', 'move out', 'take in <person> for work (as a house owner: they live free, their wages come to you)', 'turn out <person> (a lodger)', 'whittle club / whittle spear (in the Wildwood or the orchard: a club in an hour, a spear in two)', 'gather stones (sling bullets, outside town)', 'chop wood (in the Wildwood, an hour: 3 wood, 5 with an axe)', 'barricade <address> (3 wood, 2 hours, your own house: beasts must batter it down)', 'build palisade (3 wood, 2 hours on the town palisade at the edge of the Wildwood)', 'light a watch-fire (2 wood: light until dawn, outdoors)', 'write <words> (on the notice board in the Market square)', 'go to <place, address or person> (e.g. "go to 3 Wick Lane", "go to Guard station")', 'rally <place or address> (the mayor calls the town, the guard captain the guards, a gang boss the crew: they come and hold there about two hours)', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
+  const COMMANDS = ['take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house address or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3 sp, the Chapel cleric cures anything for 6 sp; only a few patients at a time)', 'shout for the guard (any time)', 'point out <person> to the guard (someone on the bounty board you can see)', 'bribe <person> <amount, e.g. 5 sp>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <amount>', 'propose to <person>', 'invite <person> (to come with you; add an amount to pay them)', 'hire <person> as a bodyguard <amount> (the mayor, guard captain or a gang boss: they follow and fight for you for a day)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'buy house <address> (1 gp, at the town hall)', 'rent <address> (a bed from its owner, a night at a time; renews itself while you can pay)', 'move out', 'take in <person> for work (as a house owner: they live free, their wages come to you)', 'turn out <person> (a lodger)', 'whittle club / whittle spear (in the Wildwood or the orchard: a club in an hour, a spear in two)', 'gather stones (stones to throw, or ammunition for a sling; outside town)', 'chop wood (in the Wildwood, an hour: 3 wood, 5 with an axe)', 'barricade <address> (3 wood, 2 hours, your own house: beasts must batter it down)', 'build palisade (3 wood, 2 hours on the town palisade at the edge of the Wildwood)', 'light a watch-fire (2 wood: light until dawn, outdoors)', 'write <words> (on the notice board in the Market square)', 'go to <place, address or person> (e.g. "go to 3 Wick Lane", "go to Guard station")', 'rally <place or address> (the mayor calls the town, the guard captain the guards, a gang boss the crew: they come and hold there about two hours)', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
   function careers() {
     const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.hunt ? ', your own boss: hunt game in the Wildwood and sell the meat and pelts at the store ("become a hunter")' : j.craft ? ', your own boss: turn pelts into leather armour (wolf) and hide armour (bear, troll), sold to the smithy ("become a leatherworker")' : j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${money(sim.wages[k] ?? j.wage)} by the town` : j.wage ? `, ${money(j.wage)} a shift from the owner` : ''})`);
     return `${legit.join('; ')}; Mayor (elected, ${money(sim.wages.mayor ?? JOBS.mayor.wage)}); Guard captain (elected by the guards). Outside the law (the underworld): ${SEEDY.join('; ')}. The underworld's tools (pickpocket, mug, burgle, rob, steal, hide, case, wait for, extort, ambush, rustle) come with a place in it: take up a seedy career at the Drowned Lantern after dark ("take up <career>"), found or join a gang, or, as a guard, take someone's money. "go straight" leaves it.`;
@@ -3491,7 +3605,7 @@ function Sim(opts = {}) {
     `Here is what commands you have access to: ${COMMANDS.join('; ')}.`,
     'Money is D&D coin: copper (cp), silver (sp), gold (gp) and platinum (pp); 10 cp = 1 sp, 10 sp = 1 gp, 10 gp = 1 pp. Prices are the book prices: bread 2 cp, a mug of ale 4 cp, a hired hand earns 1-3 sp a day, a dagger is 2 gp, a longsword 15 gp, chainmail 150 gp. Any amount you put in a command can name its coin ("5 sp", "2 gp"); a bare number in a JSON reply is copper pieces.',
     `Here is what careers you can do: ${careers()}`,
-    `Fighting (D&D 3.5 rules): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, coup de grace on the helpless, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false, "shout": true|false (call for the guard)}.`,
+    `Fighting (D&D 3.5 SRD rules, the same as in Legends of Harpine): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, coup de grace on the helpless, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false, "shout": true|false (call for the guard)}.`,
     personaOf(p),
     sim.lore?.wisdom?.length ? `What Hollow Town remembers from earlier generations (old stories, not your life; learn from them): ${sim.lore.wisdom.join(' ')}` : '',
     sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',

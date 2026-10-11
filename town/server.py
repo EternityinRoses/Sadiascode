@@ -409,7 +409,9 @@ class H(BaseHTTPRequestHandler):
         name = "index.html" if path in ("/", "") else path.lstrip("/")
         full = os.path.normpath(os.path.join(HERE, name))
         # only the town's own page files; never settings, notebooks or keys
-        if os.path.dirname(full) != HERE or os.path.splitext(full)[1] not in (".html", ".js", ".css", ".png") or not os.path.isfile(full):
+        # ...and the SRD rules brought from Legends of Harpine (town/srd), which the page imports as modules
+        in_srd = full.startswith(os.path.join(HERE, "srd") + os.sep)
+        if (os.path.dirname(full) != HERE and not in_srd) or os.path.splitext(full)[1] not in (".html", ".js", ".css", ".png") or not os.path.isfile(full):
             return self.send(404, "{}")
         with open(full, "rb") as f:
             self.send(200, f.read(), TYPES.get(os.path.splitext(full)[1], "application/octet-stream"))
