@@ -451,10 +451,14 @@ function Sim(opts = {}) {
     // a beast out of the Wildwood hunts people by scent (60 m, through doors and walls: it comes in after you);
     // only when nobody's within reach of its nose does it go for the penned animals and dogs it can see (Rose)
     const SCENT = 60;
-    const prey = living().filter(q => q.kind === 'human' && conscious(q) && !(q.jailedUntil > 0) && !q.carriedBy && dist2(q, an) < SCENT).sort((a, b) => dist2(a, an) - dist2(b, an))[0]
+    // it locks onto one victim and runs them down; it only picks again when that one is down, caught or out of its nose's reach
+    const held = an.prey && (sim.people[an.prey] || sim.animals[an.prey]);
+    const keep = held && held.alive && (held.kind !== 'human' || conscious(held) && !(held.jailedUntil > 0) && !held.carriedBy) && dist2(held, an) < SCENT * 1.2;
+    const prey = (keep ? held : null) || living().filter(q => q.kind === 'human' && conscious(q) && !(q.jailedUntil > 0) && !q.carriedBy && dist2(q, an) < SCENT).sort((a, b) => dist2(a, an) - dist2(b, an))[0]
       || Object.values(sim.animals).filter(a => a.alive && !a.monster && (a.livestock || a.owner) && dist2(a, an) < 26 && sees(an, a)).sort((a, b) => dist2(a, an) - dist2(b, an))[0];
+    an.prey = prey?.id || null;
     if (prey) {
-      if (dist2(prey, an) > 2) { if (!an.scented && prey.kind === 'human') { an.scented = true; log('fight', `The ${an.name.toLowerCase()} catches a scent and heads into town!`, [an.id]); } stepToward(an, prey, 1.8, dtMin); return; }
+      if (dist2(prey, an) > 2) { if (!an.scented && prey.kind === 'human') { an.scented = true; log('fight', `The ${an.name.toLowerCase()} catches a scent and heads into town!`, [an.id]); } stepToward(an, prey, 4.84 * (an.speed || 12) / 9, dtMin); return; }
       if (prey.livestock) {      // penned beasts can't get away: a bite now and then until it's down
         if (sim.t < (an.nextBite || 0)) return; an.nextBite = sim.t + 1;
         if (d(20) + an.atk >= prey.ac) { prey.hp -= roll(an.bite[0], an.bite[1]) + an.dmgBonus; if (prey.hp <= 0) { prey.alive = false; prey.state = 'dead'; log('death', `The ${an.name.toLowerCase()} kills a ${prey.species} at the ranch.`, [an.id]); an.full = Math.min(1, an.full + 0.3); } }
