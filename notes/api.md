@@ -121,3 +121,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 
 - Drafted a Reddit post for r/CRPG, "just testing the water", pitching an RPG where the party members are AI minds making their own choices.
 - Explained cloud sessions vs Claude Code CLI. Cloud runs in a throwaway container and can't reach the user's PC. The CLI or Remote Control runs on the PC and can use Claude in Chrome on localhost.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- Oct 11: Hollow Town NPC brain (Rose wants the sim to train an NPC AI): recorder rows (pilot/choice/policy/agenda/death/talk/babble/line/board with x vector, words, role, traits) -> town/dataset.jsonl via /chronicle; babble that learns (listener sense score, kept if >0.35); town/npcbrain.js standalone (action scorer + policy regressor + retrieved dialogue), town/train_brain.js or TrainBrain.bat -> npcbrain.json (gitignored), GET /npcbrain, Settings Plain brains = Trained NPC brain. Same day: batch built (whittle/stones, chop wood, barricades, palisade, watch-fires light only, shelter law + harboring, notice board, scoreboard in Mind > Generations). Smoke: .backups/smoke_recorder, smoke_brain, smoke_batch, smoke_batch2.
