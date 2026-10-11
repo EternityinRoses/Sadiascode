@@ -511,8 +511,15 @@ function Sim(opts = {}) {
     const seen = witnesses(at.kind ? P(at.x, at.z) : at, [actor], ['assault', 'mugging', 'murder', 'vandalism'].includes(type));
     if (victim && victim.kind === 'human' && conscious(victim) && !seen.includes(victim) && extra.victimKnows !== false && dist2(victim, at) < 2.5) seen.push(victim);
     if (victim && victim.kind === 'human' && seen.includes(victim)) victim.alert = true;
-    if (['assault', 'mugging', 'murder', 'robbery'].includes(type) && actor.id !== 'player' || ['assault', 'mugging', 'murder', 'robbery'].includes(type)) { const crier = seen.filter(w => w !== actor && w.kind === 'human' && w.brain !== 'human' && conscious(w) && !isGuard(w)).find(w => Math.random() < 0.25 + w.traits.honesty * 0.4 - w.traits.caution * 0.1); if (crier) setTimeout0(() => hueAndCry(crier)); }
+    if (['assault', 'mugging', 'murder', 'robbery'].includes(type) && actor.id !== 'player' || ['assault', 'mugging', 'murder', 'robbery'].includes(type)) { const crier = seen.filter(w => w !== actor && w.kind === 'human' && !thinks(w) && w.brain !== 'human' && conscious(w) && !isGuard(w)).find(w => Math.random() < 0.25 + w.traits.honesty * 0.4 - w.traits.caution * 0.1); if (crier) setTimeout0(() => hueAndCry(crier)); }
     for (const w of seen) { perceive(w, ev, 'saw', null); w.alert = true; if (w.state === 'sleep' && w.brain !== 'human') { w.task = null; w.state = 'idle'; } }
+    // an AI witness to violence decides at once what to do about it (shout, step in, run, or look away)
+    if (['assault', 'mugging', 'murder', 'robbery'].includes(type)) {
+      const who = q => q.id === 'player' ? 'Rose of the City' : fullName(q), deedWord = { assault: 'attack', mugging: 'mug', murder: 'kill', robbery: 'rob' }[type];
+      seen.filter(w => w !== actor && w.kind === 'human' && thinks(w) && w.brain !== 'human' && conscious(w) && !w.fight && !w.awaiting && !(w.aiDownUntil > sim.t))
+        .sort((x, y) => dist2(x, at) - dist2(y, at)).slice(0, 4)
+        .forEach(w => { w.alert = false; setTimeout0(() => askOrders(w, `You just SAW ${who(actor)} ${deedWord} ${victim ? (victim.kind === 'human' ? who(victim) : 'a ' + (victim.species || 'beast')) : 'someone'}, right in front of you${w === victim ? ' (you are the one attacked)' : ''}. What do you do? You could "shout for the guard", step in ("attack ${who(actor)}"), flee, report it at the guard station later, or keep your head down.`)); });
+    }
     sim.events.push(ev); if (sim.events.length > 400) sim.events.shift();
     return { ev, seen };
   }
@@ -2246,7 +2253,7 @@ function Sim(opts = {}) {
       if (p.kind === 'human') for (const q of adj.filter(q => q.kind === 'human')) acts.push({ id: 'feint', target: q.id, label: `Feint ${q.name} (Bluff)`, cost: 'standard' });
       if (p.kind === 'human' && p.items.cure) acts.push({ id: 'drink', label: 'Drink a healing draught', cost: 'standard' });
       for (const q of f.order.map(body).filter(q => q && q.dying && f.sides.get(q.id) === f.sides.get(p.id) && dist2(q, p) <= 2.1)) acts.push({ id: 'stabilize', target: q.id, label: `Stabilize ${q.name} (Heal DC 15)`, cost: 'standard' });
-      if (p.kind === 'human') for (const q of helpless) acts.push({ id: 'coup', target: q.id, label: `Coup de grace on ${q.name} (kills)`, cost: 'full' });
+      // (no coup de grace: Rose asked for the instant kill on the helpless to go)
       for (const q of helpless) if (p.kind === 'human') acts.push({ id: 'rob', target: q.id, label: `Rob ${q.name}`, cost: 'standard' });
       if (tn.move) acts.push({ id: 'run', label: 'Run (4× speed, away)', cost: 'full' });
       if (tn.move && p.kind === 'human') acts.push({ id: 'withdraw', label: 'Withdraw (no attack of opportunity leaving)', cost: 'full' });
@@ -2628,7 +2635,7 @@ function Sim(opts = {}) {
     p.brain === 'mayor-ai' ? `You are an AI in a lifesim. You operate within a civilization as a living autonomous being with agency. Winning, for you, means holding power (and staying alive: death is permanent).` : INTRO + ` You start with nothing.`,
     `Here is what commands you have access to: ${COMMANDS.join('; ')}.`,
     `Here is what careers you can do: ${careers()}`,
-    `Fighting (D&D 3.5 rules): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, coup de grace on the helpless, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false, "shout": true|false (call for the guard)}.`,
+    `Fighting (D&D 3.5 rules): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false, "shout": true|false (call for the guard)}.`,
     personaOf(p),
     sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
     `You are one person, living one life. Each message you get is a moment of it: a PLAN moment (decide what to do) or a TALK moment (someone is in front of you). Each says what is available right now and how to reply.`,
