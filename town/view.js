@@ -276,7 +276,7 @@ const doTo = (kind, extra) => { if (!selected) return; note(S.playerDo(kind, sel
 $('aTalk').onclick = () => doTo('talk'); $('aPersuade').onclick = () => doTo('persuade'); $('aIntim').onclick = () => doTo('intimidate');
 $('aBribe').onclick = () => doTo('bribe', { amount: +$('bribeAmt').value || 3 }); $('aPropose').onclick = () => doTo('propose');
 $('aRecruit').onclick = () => doTo('recruit'); $('aJoin').onclick = () => doTo('join'); $('aPick').onclick = () => doTo('pickpocket');
-$('aApply').onclick = () => doTo('apply'); $('aBoast').onclick = () => doTo('boast', { amount: +$('boastAmt').value || 100 }); $('aInvite').onclick = () => doTo('invite', { purpose: $('invPurpose').value, pay: +$('invPay').value || 0 });
+$('aApply').onclick = () => doTo('apply'); $('aTip').onclick = () => doTo('tipoff'); $('aBoast').onclick = () => doTo('boast', { amount: +$('boastAmt').value || 100 }); $('aInvite').onclick = () => doTo('invite', { purpose: $('invPurpose').value, pay: +$('invPay').value || 0 });
 $('cFeed').onclick = () => { if (selected) note(S.playerDo('feed', selected)); drawPanel(); };
 $('cQuit').onclick = () => note(S.playerDo('quit')); $('cDismiss').onclick = () => note(S.playerDo('dismiss')); $('cFish').onclick = () => note(S.playerDo('fish')); $('cForage').onclick = () => note(S.playerDo('forage'));
 $('aHit').onclick = () => doTo('attack', { mode: 'lethal' }); $('aSubdue').onclick = () => doTo('attack', { mode: 'nonlethal' }); $('aCarry').onclick = () => doTo('carry');

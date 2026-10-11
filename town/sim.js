@@ -869,7 +869,7 @@ function Sim(opts = {}) {
     if (p.sick?.sym && careTaker('chapel') && p.coin >= sim.careFee.chapel) add('treat', DISEASES[p.sick.key].cleric ? 9 : 6, { where: 'chapel' });
     // guards: pursue the wanted (bounties make it pay)
     if (isGuard(p) && inShift(p.job, h)) {
-      const wanted = living().filter(q => q !== p && q.jailedUntil <= 0 && openRecord(q).length && hasEvidence(q) && dist2(p, q) < 60);
+      const wanted = living().filter(q => q !== p && q.jailedUntil <= 0 && (openRecord(q).length && hasEvidence(q) || sim.bounty[q.id]) && dist2(p, q) < 60);
       for (const q of wanted) { const ev = 4 + (sim.bounty[q.id] || 0) + openRecord(q).length - (power(q) / Math.max(1, power(p))) * 3 * p.traits.caution - (q.gang && p.gang === q.gang ? 20 : 0); if (ev > 0) add('arrest', ev, { target: q }); }
     }
     // mourning: visit someone you loved in the graveyard
@@ -996,7 +996,8 @@ function Sim(opts = {}) {
       case 'buy': { const item = Object.keys(GOODS).find(k => rest.includes(k) || rest.includes(GOODS[k].name.toLowerCase())); const shop = item && Object.keys(sim.business).find(b => (sim.business[b].stock[item] || 0) > 0 && shopOpen(b)); return shop && p.coin >= priceOf(shop, item) ? { kind: 'buy', shop, item, value: 0 } : null; }
       case 'hunt': { const sp = Object.keys(GAME).find(k => rest.includes(k)) || 'rabbit'; return { kind: 'hunt', species: sp, value: 0 }; }
       case 'fish': return { kind: 'fish', value: 0 };
-      case 'shout': case 'yell': case 'cry': return { kind: 'doas', verb: 'shout', value: 0 };
+      case 'shout': case 'yell': case 'cry': if (who && sim.bounty[who.id]) return { kind: 'doas', verb: 'tipoff', target: who, value: 0 }; return { kind: 'doas', verb: 'shout', value: 0 };
+      case 'point': case 'rat': case 'tip': case 'betray': return who && sim.bounty[who.id] ? { kind: 'doas', verb: 'tipoff', target: who, value: 0 } : null;
       case 'take': case 'become': case 'join': { if (/underworld|thief|burglar|mugger|robber|extort|bandit|rustler|fence|smuggl|crook|crim/.test(rest)) { const role = Object.keys(SEEDY_ROLES).find(r => rest.includes(r.slice(0, 5))) || 'thief'; return { kind: 'takeup', role, value: 0 }; } if (kind === 'join' && who?.gang) return { kind: 'join', gang: who.gang, value: 0 }; return null; }
       case 'size': case 'sizeup': case 'study': case 'watch': return who ? { kind: 'doas', verb: 'sizeup', target: who, value: 0, reach: 8 } : (kind === 'study' ? { kind: 'study', value: 0 } : null);
       case 'case': { const n = +(rest.match(/\d+/) || [0])[0]; const bid = Object.keys(sim.business).find(b => rest.includes(b)); const owner = who; const hi = n ? n - 1 : owner?.home; if (bid) return { kind: 'doas', verb: 'case', at: SPOTS[bid], extra: { business: bid }, value: 0 }; return hi != null && HOUSES[hi] ? { kind: 'doas', verb: 'case', at: HOUSES[hi].door, extra: { house: hi }, value: 0 } : null; }
@@ -1537,6 +1538,7 @@ function Sim(opts = {}) {
         else log('law', `${p.name} finds no guard to fetch.`, [p.id]);
         p.task = null; return; }
       case 'goto': {
+        if (isGuard(p)) { const w = living().find(q => q !== p && q.kind === 'human' && sim.bounty[q.id] && conscious(q) && !(q.jailedUntil > 0) && dist2(q, p) < 12 && sees(p, q)); if (w) { setTask(p, 'arrest', { target: w.id, until: sim.t + 90 }); return; } }
 
         if (tk.cry && isGuard(p)) for (const id of tk.cry) { const ev = sim.events.find(e => e.id === id), a = ev && sim.people[ev.actor]; if (a && a.alive && dist2(p, a) < 15 && sees(p, a)) { guardHears(p, ev, 'saw', null); tk.cry = tk.cry.filter(x => x !== id); log('law', `${p.name} arrives and sees ${a.id === 'player' ? 'you' : a.name}.`, [p.id, a.id]); } }
         if (arrive(p, tk.to, dt)) p.task = null; return; }
@@ -2026,6 +2028,19 @@ function Sim(opts = {}) {
     }
   }
   sim.runForGuard = runForGuard;
+  function ratOut(p, q) {
+    if (!q || !sim.bounty[q.id] || !q.alive || q.jailedUntil > 0) return 'They are not on the board.';
+    cool(p, 'tip:' + q.id, 240); q.tippedBy = p.id;
+    const line = `Guard! It's ${q.id === 'player' ? 'Rose of the City' : q.name}, the one on the bounty board!`;
+    log('law', `${p.id === 'player' ? 'You call' : p.name + ' calls'} the guard on ${q.id === 'player' ? 'you' : q.name}: "${line}"`, [p.id, q.id]); p.bubble = { text: line, t: sim.t };
+    for (const w of living()) if (w !== p && w.kind === 'human' && inEarshot(w, p)) remember(w, { text: `${p.name} called the guard on ${q.name} (wanted)` });
+    remember(q, { text: `${p.name} called the guard on me` }); bump(q, p, 'like', -0.4);
+    const gs = living().filter(g => isGuard(g) && conscious(g) && !g.fight && g.jailedUntil <= 0 && dist2(g, p) < CRY_RANGE * 2);
+    for (const g of gs) { if (waitsForOrders(g)) askOrders(g, `${p.name} is calling you: ${q.name}, wanted on the bounty board, is near ${AREAS[areaOf(q)]?.name || 'here'}.`); else setTask(g, 'arrest', { target: q.id, until: sim.t + 90 }); }
+    if (!gs.length) hueAndCry(p);
+    return '';
+  }
+  sim.ratOut = ratOut;
   function confrontArrest(g, q) {
     // The guard states the charge; the suspect chooses: come quietly, talk, pay, run or fight.
     if (q.brain === 'human') { sim.pendingArrest = { guard: g.id, t: sim.t }; log('law', `${g.name}: "${q.name}, you're under arrest."`, [g.id, q.id]); if (sim.onArrest) sim.onArrest(g, q); return; }
@@ -2050,7 +2065,8 @@ function Sim(opts = {}) {
     q.task = { kind: 'jail', t0: sim.t }; q.state = 'jail';
     const cell = SPOTS.cells.find(c => !living().some(o => o !== q && o.jailedUntil > 0 && dist2(o, c) < 0.5)) || SPOTS.cells[0];
     place(q, cell); q.down = null; if (q.hp < 1) { q.nl = Math.max(0, q.nl - (1 - q.hp)); q.hp = 1; }
-    if (g) { g.stats.arrests++; sim.rec.arrests++; const b = sim.bounty[q.id]; if (b) { pay('town', g, b); delete sim.bounty[q.id]; } }
+    if (g) { g.stats.arrests++; sim.rec.arrests++; const b = sim.bounty[q.id]; if (b) { const tp = q.tippedBy && q.tippedBy !== g.id && sim.people[q.tippedBy]?.alive ? sim.people[q.tippedBy] : null, tip = tp ? Math.ceil(b / 4) : 0; pay('town', g, b - tip); if (tp) { pay('town', tp, tip); log('law', `${tp.name} gets ${tip}c for the tip-off.`, [tp.id]); } delete sim.bounty[q.id]; } }
+    q.tippedBy = null;
     log('law', `${fullName(q)} is jailed for ${(sentence / 4).toFixed(1)} days${g ? ' by ' + g.name : ''}.`, [q.id, g?.id].filter(Boolean));
   }
   sim.jail = jail;
@@ -2800,7 +2816,7 @@ function Sim(opts = {}) {
   // What an AI-played person is told. Facts about themselves and what they can perceive, what is
   // available, the commands they have, the careers that exist. No advice, no strategy: that's theirs.
   const SEEDY = ['pickpocket (lift coin from people)', 'burglar (houses and shops, at night)', 'mugger (rob people by force)', 'shop robber (hold up a keeper)', 'extortionist (sell a business "insurance")', 'bandit (ambush carts on the Old Road)', 'rustler (take the ranch\'s animals)', 'fence (sell stolen goods)', 'gang boss or member (found or join a crew)', 'sellsword (hire out as muscle)', 'a bribe-taking official (if you hold an office)', 'liar and slanderer'];
-  const COMMANDS = ['take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house number or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3c, the Chapel cleric cures anything for 6c; only a few patients at a time)', 'shout for the guard', 'bribe <person> <coins>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <coins>', 'propose to <person>', 'invite <person> (to come with you; add coins to pay them)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'go to <place or person>', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
+  const COMMANDS = ['take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house number or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3c, the Chapel cleric cures anything for 6c; only a few patients at a time)', 'shout for the guard (any time)', 'point out <person> to the guard (someone on the bounty board you can see)', 'bribe <person> <coins>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <coins>', 'propose to <person>', 'invite <person> (to come with you; add coins to pay them)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'go to <place or person>', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
   function careers() {
     const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${sim.wages[k] ?? j.wage}c by the town` : j.wage ? `, ${j.wage}c a shift from the owner` : ''})`);
     return `${legit.join('; ')}; Mayor (elected, ${sim.wages.mayor ?? JOBS.mayor.wage}c); Guard captain (elected by the guards). Outside the law (the underworld): ${SEEDY.join('; ')}. The underworld's tools (pickpocket, mug, burgle, rob, steal, hide, case, wait for, extort, ambush, rustle) come with a place in it: take up a seedy career at the Drowned Lantern after dark ("take up <career>"), found or join a gang, or, as a guard, take someone's money. "go straight" leaves it.`;
@@ -2895,7 +2911,7 @@ function Sim(opts = {}) {
     const out = [];
     for (const q of [...living(), ...Object.values(sim.animals)]) if (q !== p && q.alive && sees(p, q)) out.push(q);
     const bodies = sim.bodies.filter(b => !b.buried && !b.collected && dist2(b, p) < 10 && sameSpace(p, b)).map(b => `a body on the ground${b.coin > 0 || Object.values(b.items || {}).some(n => n > 0) ? ' (something on it)' : ''} (~${Math.round(dist2(b, p))}m; "loot" when beside it)`);
-    return [...out.sort((a, b) => dist2(a, p) - dist2(b, p)).slice(0, max).map(q => q.kind === 'animal' ? `a ${q.species}` : `${q.id === 'player' ? 'Rose of the City' : q.name} (${!conscious(q) ? 'on the ground' : q.fight ? 'fighting' : q.task?.kind || q.state}${q.sick?.sym ? ', ' + illLook(p, q) : ''}${q.items?.finery ? ', finely dressed' : ''}${q.items?.torch && night() ? ', carrying a torch' : ''}, ~${Math.round(dist2(q, p))}m)`), ...bodies].join(', ');
+    return [...out.sort((a, b) => dist2(a, p) - dist2(b, p)).slice(0, max).map(q => q.kind === 'animal' ? `a ${q.species}` : `${q.id === 'player' ? 'Rose of the City' : q.name} (${!conscious(q) ? 'on the ground' : q.fight ? 'fighting' : q.task?.kind || q.state}${sim.bounty[q.id] && q.kind === 'human' ? `, WANTED ${sim.bounty[q.id]}c${sim.bountyWhy?.[q.id] ? ' for ' + sim.bountyWhy[q.id] : ''}` : ''}${q.sick?.sym ? ', ' + illLook(p, q) : ''}${q.items?.finery ? ', finely dressed' : ''}${q.items?.torch && night() ? ', carrying a torch' : ''}, ~${Math.round(dist2(q, p))}m)`), ...bodies].join(', ');
   }
   sim.inView = inView;
   function electionNews(p) {
@@ -3077,6 +3093,10 @@ function Sim(opts = {}) {
       // every night at 22:00 something comes out of the Wildwood (Rose, 2026-10-10)
       if (sim.lastBeastNight !== sim.day && sim.t % 1440 >= 22 * 60) { sim.lastBeastNight = sim.day; invade(!sim.invaded); sim.invaded = true; }   // (this block runs on the hour, so: 22:00)
       diseaseHour();
+      for (const p of living()) if (p.kind === 'human' && !thinks(p) && p.brain !== 'human' && conscious(p) && !isGuard(p) && !p.fight) {
+        const q = living().find(q => q !== p && q.kind === 'human' && sim.bounty[q.id] && conscious(q) && !(q.jailedUntil > 0) && !(p.cd?.['tip:' + q.id] > sim.t) && dist2(q, p) < 15 && sees(p, q));
+        if (q && !(p.gang && p.gang === q.gang) && R(p, q).like < 0.4 && Math.random() < 0.1 + p.traits.honesty * 0.4 - R(p, q).fear * 0.3) ratOut(p, q);
+      }
       if (h === 18 && isElectionDay(sim.day)) guardVote('the daily vote');
       if (h === 21 && isElectionDay(sim.day)) for (const g of Object.values(sim.gangs)) gangVote(g, 'the nightly reckoning');
       for (const p of living()) if (!waitsForOrders(p) && p.task && (p.agenda?.length && !['jail', 'flee', 'talk', 'tail'].includes(p.task.kind) || !['jail', 'sleep', 'work', 'flee', 'follow', 'caravan', 'fish', 'tail', 'talk'].includes(p.task.kind)) && sim.t - p.task.t0 > 60) p.task = null;   // replan hourly
@@ -3365,6 +3385,7 @@ function Sim(opts = {}) {
         const things = got.filter(([k]) => k !== 'note').map(([k, c]) => (c > 1 ? c + ' ' : '') + (GOODS[k]?.name || gearOf(k)?.name || k).toLowerCase()).join(', ');
         return `You go through ${b.name}'s things: ${n}c${things ? ', ' + things : ''}.` + (b.stranger && b.note ? ` A folded note: "${b.note}"` : '');
       }
+      case 'tipoff': { const q = t && t.kind === 'human' ? t : null; if (!q || !sim.bounty[q.id]) return 'Pick someone who is on the bounty board.'; if (!(dist2(q, me) < 8 || dist2(q, me) < 20 && sees(me, q))) return 'You need them in sight.'; return ratOut(me, q) || `You call the guard on ${q.name}.`; }
       case 'turnin': {   // hand a dead stranger's belongings to the guard, as his note asked
         if (!me.found) return 'You have nothing to turn in.';
         if (areaOf(me) !== 'station') return 'Take them to the Guard station.';
