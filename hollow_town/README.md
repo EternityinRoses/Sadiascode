@@ -338,3 +338,21 @@ reach of something that would otherwise have to break a door.
 - The mayor persona no longer says the town starts without a mayor.
 - Left as they are: the tools themselves (palisade, barracks, watch-fires, alarm bell) and the underworld's
   "bandit (ambush carts on the Old Road)" career.
+
+### Food, drink and hearing
+- **SRD food and drink.** The Drowned Lantern serves poor, common and good meals (1 sp, 3 sp, 5 sp), cooked
+  from turnips and meat bought from the store. Ale is 4 cp, bread 2 cp, meat 3 sp. The store sells waterskins
+  (1 gp). The SRD gives water no price, so it's free at the wells and the Drowned Lantern.
+- **The Eatery and the Pub**, off the Drowned Lantern, open 6:00-16:00. On day one two jobless townsfolk become
+  the cook and the publican; after that the businesses can be leased at the hall.
+- **"dine [poor | common | good] [at the Eatery | the Pub | the Drowned Lantern]"**: a sit-down meal and drink,
+  30 minutes, that fills food and water to full. Plain townsfolk dine when they're hungry or thirsty and can pay.
+  In tests the town's average food at 21:00 went from about 0.3 to about 0.65, and the starving from 4-7 people to 0-1.
+- **The alarm bell** (Market square) is heard 240 ft around. Anyone awake within that radius is alerted at once.
+  A sleeper must make Listen (d20 + listen) against DC 13 on every ring (it rings each minute, for an hour)
+  to wake: about 1 in 4 per ring, about 85% after five. Nobody outside 240 ft hears it.
+- **Yelling** ("Guard! Guard!", "wake the neighbours") carries 60 ft, tapering by SRD Listen: DC 1 per 10 ft,
+  +10 asleep, +5 through a wall. One shout wakes about 70% of sleepers at 10 ft and about half at 50 ft.
+- **The battle test**, troll night with fire: 64% won (71% with the squad fed first), against 79% before these
+  changes. The difference comes from hungry guards leaving their posts to eat, and from sleepers no longer
+  always waking to shouts.
