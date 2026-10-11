@@ -498,6 +498,9 @@ function Sim(opts = {}) {
     }
     return true;
   };
+  const EARSHOT = 9, CRY_RANGE = 18;   // metres: ~30 ft for talk, ~60 ft for "Guard!" (Rose)
+  const inEarshot = (q, sp) => conscious(q) && sameSpace(q, sp) && dist2(q, sp) < EARSHOT * (q.state === 'sleep' ? 0.4 : 1);
+  sim.EARSHOT = EARSHOT; sim.inEarshot = inEarshot;
   const hears = (a, pos) => conscious(a) && sameSpace(a, pos) && dist2(a, pos) < hearOf(a) * (a.state === 'sleep' ? 0.4 : 1);
   sim.sees = sees; sim.hears = hears;
   sim.sees = sees;
@@ -1495,7 +1498,15 @@ function Sim(opts = {}) {
       }
       case 'wait': { if (sim.t >= tk.until) p.task = null; return; }
       case 'tail': { const L = sim.people[tk.target]; if (!L || !L.alive) { p.task = null; return; } if (dist2(p, L) > 2.2) arrive(p, L, dt, 2.2); else p.yaw = Math.atan2(L.x - p.x, L.z - p.z); return; }
+      case 'fetchguard': {
+        const g = tk.guard && sim.people[tk.guard], live = g && g.alive && conscious(g) && !g.fight ? g : null;
+        if (!arrive(p, live || tk.to, dt)) { if (Math.random() < dt / 4) for (const q of living()) if (q !== p && q.kind === 'human' && inEarshot(q, p) && !isGuard(q)) remember(q, { text: `${p.name} ran past calling for a guard (trouble near ${tk.where})` }); return; }
+        const guard = live || living().find(x => isGuard(x) && conscious(x) && !x.fight && areaOf(x) === 'station');
+        if (guard) { log('law', `${p.name} reaches ${guard.name}: "Come quick, someone needs a guard near ${tk.where}!"`, [p.id, guard.id]); if (waitsForOrders(guard)) askOrders(guard, `${p.name} ran up to you: someone needs a guard near ${tk.where}.`); else setTask(guard, 'goto', { to: tk.at, until: sim.t + 60, cry: tk.cry, run: true }); }
+        else log('law', `${p.name} finds no guard to fetch.`, [p.id]);
+        p.task = null; return; }
       case 'goto': {
+
         if (tk.cry && isGuard(p)) for (const id of tk.cry) { const ev = sim.events.find(e => e.id === id), a = ev && sim.people[ev.actor]; if (a && a.alive && dist2(p, a) < 15 && sees(p, a)) { guardHears(p, ev, 'saw', null); tk.cry = tk.cry.filter(x => x !== id); log('law', `${p.name} arrives and sees ${a.id === 'player' ? 'you' : a.name}.`, [p.id, a.id]); } }
         if (arrive(p, tk.to, dt)) p.task = null; return; }
       case 'talk': { const w = sim.people[tk.with]; if (w) p.yaw = Math.atan2(w.x - p.x, w.z - p.z); if (w && dist2(w, p) > 6) p.task = null; return; }
@@ -1961,14 +1972,29 @@ function Sim(opts = {}) {
   }
   function hueAndCry(p) {
     if (p.cried && sim.t - p.cried < 10) return; p.cried = sim.t;
-    const at = P(p.x, p.z), evs = sim.events.filter(e => sim.t - e.t < 15 && e.at && dist2(e.at, at) < 20 && ['assault', 'mugging', 'murder', 'robbery', 'theft', 'burglary', 'extortion', 'vandalism'].includes(e.type));
+    const at = P(p.x, p.z), evs0 = () => sim.events.filter(e => sim.t - e.t < 15 && e.at && dist2(e.at, at) < 20);
+    setTimeout0(() => runForGuard(p, at, evs0()));
+    const evs = sim.events.filter(e => sim.t - e.t < 15 && e.at && dist2(e.at, at) < 20 && ['assault', 'mugging', 'murder', 'robbery', 'theft', 'burglary', 'extortion', 'vandalism'].includes(e.type));
     log('law', `${p.id === 'player' ? 'You shout' : p.name + ' shouts'} "Guard! Guard!"`, [p.id]); p.bubble = { text: 'Guard! Guard!', t: sim.t };
-    for (const q of living()) if (q !== p && q.kind === 'human' && conscious(q) && dist2(q, p) < Math.max(25, hearOf(q) * 3)) {
+    for (const q of living()) if (q !== p && q.kind === 'human' && conscious(q) && dist2(q, p) < CRY_RANGE && sameSpace(q, p)) {
       q.alert = true; remember(q, { text: `${p.name} shouted for the guard near ${AREAS[areaOf(p)]?.name || 'here'}` });
       if (isGuard(q) && q.jailedUntil <= 0 && !q.fight) { if (waitsForOrders(q)) askOrders(q, `${p.name} is shouting for the guard near ${AREAS[areaOf(p)]?.name || 'you'}.`); else setTask(q, 'goto', { to: at, until: sim.t + 40, cry: evs.map(e => e.id) }); }
     }
   }
   sim.hueAndCry = hueAndCry;
+  // the two nearest who heard the cry (not guards, not whoever did it) run to find a guard and bring them back
+  function runForGuard(p, at, evs) {
+    const culprits = new Set(evs.map(e => e.actor)), where = AREAS[areaOf(at)]?.name || 'the street';
+    const runners = living().filter(q => q !== p && q.kind === 'human' && q.brain !== 'human' && conscious(q) && !q.fight && !isGuard(q) && !(q.jailedUntil > 0) && !culprits.has(q.id) && dist2(q, p) < CRY_RANGE && sameSpace(q, p))
+      .sort((a, b) => dist2(a, p) - dist2(b, p)).slice(0, 2);
+    for (const q of runners) {
+      if (waitsForOrders(q)) { askOrders(q, `${p.id === 'player' ? 'Rose of the City' : p.name} is shouting "Guard! Guard!" near ${where}: someone needs a guard. You could run and fetch one ("go to <guard>" or "go to Guard station"), step in, or keep out of it.`); continue; }
+      const g = living().filter(g => isGuard(g) && conscious(g) && g.jailedUntil <= 0 && !g.fight && dist2(g, at) >= CRY_RANGE).sort((a, b) => dist2(a, q) - dist2(b, q))[0];
+      setTask(q, 'fetchguard', { guard: g?.id || null, to: g ? P(g.x, g.z) : SPOTS.desk, at, where, cry: evs.map(e => e.id), until: sim.t + 120, run: true });
+      log('law', `${q.name} runs to fetch a guard.`, [q.id]);
+    }
+  }
+  sim.runForGuard = runForGuard;
   function confrontArrest(g, q) {
     // The guard states the charge; the suspect chooses: come quietly, talk, pay, run or fight.
     if (q.brain === 'human') { sim.pendingArrest = { guard: g.id, t: sim.t }; log('law', `${g.name}: "${q.name}, you're under arrest."`, [g.id, q.id]); if (sim.onArrest) sim.onArrest(g, q); return; }
@@ -2848,14 +2874,15 @@ function Sim(opts = {}) {
       sp.offerFrom?.from === to.id ? `They offered you a deal: ${offerText(sp.offerFrom.offer)}. Answer with "accept": true or false, or make your own "offer".` : '',
       facts(sp, true).split('\n').filter(l => !l.startsWith('Rose of the City')).join('\n'),
       `You can act on any command right now with "do". A deal: "offer": {"give": {"coin": n} or {"item": "name", "n": k}, "want": {"coin": n} or {"item": "name", "n": k} or {"favor": "join_party"|"vote_for_me"|"work_for_me"|"keep_quiet"|"marry_me"}, "threat": true|false}.`,
-      `Reply with ONLY JSON: {"say":"the words you speak (spoken words only)","do":"optional command","feeling":-1..1 (how you feel about them now),"note":"optional: one line to remember","offer":{...} optional,"accept":true|false optional,"end":true|false (true when you're done talking)}`,
+      `Reply with ONLY JSON: {"say":"the words you speak (spoken words only)","do":"optional command","feeling":-1..1 (how you feel about them now),"note":"optional: one line to remember","offer":{...} optional,"accept":true|false optional,"end":true|false (true when you're done talking),"hearers":["<id>", ...] optional (who else in earshot hears you; leave it out and everyone near hears),"whisper":true optional (only they hear)}`,
+      (() => { const near = living().filter(q => q !== sp && q !== to && q.kind === 'human' && inEarshot(q, sp)); return near.length ? `In earshot (about 30 ft): ${near.map(q => (q.id === 'player' ? 'Rose of the City' : q.name) + ' ' + q.id).join(', ')}.` : ''; })(),
     ].filter(Boolean).join('\n');
   };
   sim.chatPrompt = (sp, to, heard) => sim.identityFor(sp) + '\n' + sim.chatTurn(sp, to, heard);
   sim.applyChat = (sp, to, dec) => {
     if (!sp || !to || !sp.alive || !dec || typeof dec !== 'object' || !dec.say) return null;
     const raw = String(dec.say).replace(/\s+/g, ' ').trim(), text = raw.length <= 240 ? raw : wholeSentences(raw) || raw.slice(0, 240).replace(/\s+\S*$/, '') + '…';
-    log('talk', `${sp.name} to ${to.id === 'player' ? 'you' : to.name}: "${text}"`, [sp.id, to.id]);
+    log('talk', `${sp.name} ${dec.whisper ? 'whispers to' : 'to'} ${to.id === 'player' ? 'you' : to.name}: "${text}"`, [sp.id, to.id]);
     sp.bubble = { text, t: sim.t };
     // talking stops you where you stand (unless you're in a fight or in jail)
     for (const [x, y] of [[sp, to], [to, sp]]) if (x.brain !== 'human' && conscious(x) && !x.fight && !(x.jailedUntil > 0)) { if (dec.end) { if (x.task?.kind === 'talk') x.task = null; } else setTask(x, 'talk', { with: y.id, until: sim.t + 6 }); }
@@ -2869,7 +2896,9 @@ function Sim(opts = {}) {
     if (typeof dec.feeling === 'number') { const r = R(sp, to); r.like = clamp(r.like + (clamp(dec.feeling, -1, 1) - r.like) * 0.15, -1, 1); }
     remember(to, { text: `${sp.name} told me: "${text}"` });
     if (dec.note) remember(sp, { text: String(dec.note).slice(0, 160) });
-    for (const w of living()) if (w !== sp && w !== to && w.kind === 'human' && hears(w, sp) && dist2(w, sp) < 6) remember(w, { text: `I overheard ${sp.name} tell ${to.name}: "${text.slice(0, 120)}"` });
+    const picked = Array.isArray(dec.hearers) ? dec.hearers.map(String) : null;
+    for (const w of living()) if (w !== sp && w !== to && w.kind === 'human' && !dec.whisper && (!picked || picked.includes(w.id)) && inEarshot(w, sp)) remember(w, { text: picked ? `${sp.name} told ${to.name} and me: "${text.slice(0, 120)}"` : `I overheard ${sp.name} tell ${to.name}: "${text.slice(0, 120)}"` });
+    if (!dec.whisper && /\bguard!/i.test(text)) hueAndCry(sp);
     return text;
   };
   sim.thinks = thinks;
@@ -3097,8 +3126,12 @@ function Sim(opts = {}) {
       case 'say': {
         const text = String(extra.text || '').slice(0, 200); if (!text) return '';
         const to = extra.to && sim.people[extra.to], aimed = !!(to && to !== me && to.alive && to.kind === 'human' && dist2(to, me) < 8);
-        log('talk', aimed ? `${me.name} to ${to.name}: "${text}"` : `${me.name}: "${text}"`, aimed ? ['player', to.id] : ['player']);
-        for (const q of living()) if (q !== me && hears(q, me)) remember(q, { text: `${me.name} said: "${text}"` });
+        const whisper = !!extra.whisper;
+        if (whisper && !aimed) return 'Select who you want to whisper to.';
+        if (whisper && dist2(to, me) > 2.5) return `Get closer to ${to.name} to whisper.`;
+        log('talk', whisper ? `${me.name} whispers to ${to.name}: "${text}"` : aimed ? `${me.name} to ${to.name}: "${text}"` : `${me.name}: "${text}"`, aimed ? ['player', to.id] : ['player']);
+        if (!whisper && /^\W*(guard|help)\b.*!|guard!/i.test(text)) hueAndCry(me);
+        for (const q of living()) if (q !== me && (whisper ? q === to : inEarshot(q, me))) remember(q, { text: whisper ? `${me.name} whispered to me: "${text}"` : q === to ? `${me.name} said to me: "${text}"` : `${me.name} said: "${text}"` });
         remember(me, { said: (text.toLowerCase().match(/[a-z']{4,}/g) || []).pop() });
         const listener = aimed ? (thinks(to) && conscious(to) && !to.fight ? to : null) : living().filter(q => q !== me && thinks(q) && conscious(q) && !q.fight && dist2(q, me) < 5 && hears(q, me)).sort((a, b) => dist2(a, me) - dist2(b, me))[0];
         if (listener && sim.onChat) sim.onChat({ a: 'player', b: listener.id, heard: text });
