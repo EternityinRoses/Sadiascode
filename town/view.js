@@ -378,7 +378,7 @@ async function openSettings() {
   $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning);
   if (!server) return;
   const st = await (await fetch('/settings')).json();
-  for (const [x, k] of [['m', 'mayor'], ['f', 'folk']]) { $(x + 'Prov').value = st[k].provider; $(x + 'Model').value = st[k].model || ''; $(x + 'Host').value = st[k].host || 'http://localhost:11434'; }
+  for (const [x, k] of [['m', 'mayor'], ['f', 'folk']]) { $(x + 'Prov').value = st[k].provider; $(x + 'Model').value = st[k].model || ''; $(x + 'Host').value = st[k].host || 'http://localhost:11434'; if ($(x + 'Effort')) $(x + 'Effort').value = st[k].effort || ''; }
   $('sCap').value = st.daily_dollar_cap; $('sEvery').value = st.folk_every_minutes; $('sChat').value = st.chat_every_minutes ?? 3; $('sPar').value = st.parallel;
   $('sKeys').textContent = `Claude API key: ${st.keys.anthropic ? 'found (Cloude’s)' : 'not found'} · Ollama key: ${st.keys.ollama ? 'found' : 'none (fine if you use the Ollama app)'}. Keys stay in Cloude’s config.json; this page never sees them.`;
   showHosts(); fillModels('m'); fillModels('f');
@@ -461,7 +461,7 @@ $('setStart').onchange = saveSetup; $('setBrain').onchange = saveSetup; $('setBo
 $('sSave').onclick = async () => {
   saveSetup();
   if (!server) { $('settings').hidden = true; return; }
-  const brain = x => ({ provider: $(x + 'Prov').value, model: $(x + 'Model').value.trim(), host: $(x + 'Host').value });
+  const brain = x => ({ provider: $(x + 'Prov').value, model: $(x + 'Model').value.trim(), host: $(x + 'Host').value, effort: $(x + 'Effort')?.value || '' });
   const body = { mayor: brain('m'), folk: brain('f'), daily_dollar_cap: +$('sCap').value, folk_every_minutes: +$('sEvery').value, chat_every_minutes: +$('sChat').value, parallel: +$('sPar').value };
   const r = await fetch('/settings', { method: 'POST', headers: { 'X-Town': '1' }, body: JSON.stringify(body) });
   if (!r.ok) { $('sMsg').textContent = 'Couldn’t save.'; return; }

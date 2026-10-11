@@ -104,6 +104,8 @@ def post(url, body, headers, timeout=60):
             hint = " (the Ollama app on this PC isn't signed in for cloud models: open a terminal, run `ollama signin`, then restart the Ollama app)"
         raise RuntimeError(f"HTTP {e.code} from {url.split('/api')[0]}: {said}{hint}") from None
 
+NO_EFFORT = {}   # models that refused an effort setting
+
 def ask_model(cfg, prompt, system=None, history=None):
     """One turn for one person's instance: their fixed identity (system), their own past turns, and now."""
     prov, model = cfg.get("provider", "off"), cfg.get("model", "")
@@ -115,8 +117,20 @@ def ask_model(cfg, prompt, system=None, history=None):
         body = {"model": model, "max_tokens": 1200, "messages": msgs}
         if system:   # the identity never changes, so it is cached between this person's turns
             body["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
-        j = post("https://api.anthropic.com/v1/messages", body,
-                 {"x-api-key": key, "anthropic-version": "2023-06-01"})
+        eff = cfg.get("effort")
+        if eff and not NO_EFFORT.get(model):
+            body["output_config"] = {"effort": eff}
+        try:
+            j = post("https://api.anthropic.com/v1/messages", body,
+                     {"x-api-key": key, "anthropic-version": "2023-06-01"})
+        except Exception as e:
+            if "output_config" not in body or "400" not in str(e):
+                raise
+            NO_EFFORT[model] = True   # this model doesn't take an effort setting: go on without it
+            print(f"[brain] {model} doesn't take effort={eff}; asking without it from now on")
+            body.pop("output_config", None)
+            j = post("https://api.anthropic.com/v1/messages", body,
+                     {"x-api-key": key, "anthropic-version": "2023-06-01"})
         u = j.get("usage", {})
         spend(model, u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) * 1.25 + u.get("cache_read_input_tokens", 0) * 0.1, u.get("output_tokens", 0))
         return "".join(b.get("text", "") for b in j.get("content", []) if b.get("type") == "text")
@@ -221,6 +235,9 @@ def clean_brain(b, old):
     b = b if isinstance(b, dict) else {}
     out = {"provider": b.get("provider") if b.get("provider") in PROVIDERS else old.get("provider", "off"),
            "model": re.sub(r"[^\w.:/-]", "", str(b.get("model", old.get("model", ""))))[:80]}
+    eff = b.get("effort", old.get("effort", ""))
+    if eff in ("low", "medium", "high"):
+        out["effort"] = eff   # Claude API reasoning effort (Rose: "haiku low")
     if out["provider"] == "ollama":
         out["host"] = b.get("host") if ok_host(b.get("host")) else old.get("host", "http://localhost:11434")
         if not ok_host(out["host"]):
