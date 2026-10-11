@@ -1038,6 +1038,16 @@ function Sim(opts = {}) {
   // towns: save it, load it, and the next town's plain folk start out a little wiser.
   sim.lore = { v: 1, acts: {}, taught: 0, scored: 0, chain: {}, runs: 0 };
   sim.learning = 1;     // 0 = plain script only; 1 = lean on the lore
+  // ---- the recorder (Rose: more data, to train an NPC brain) ----------------------
+  // Every AI choice, AI policy, plain choice and its outcome, talk and babble goes into dataset.jsonl (via the daily chronicle),
+  // with the person's perception vector (x), the words they had just heard, their role and traits.
+  const r2 = v => Math.round(v * 100) / 100;
+  const xOf = p => Array.from(features(p), r2);
+  const recording = () => !!(sim.onChronicle || sim.keepData);
+  function dataRow(r) { if (!recording()) return; const rows = (sim.dataRows ||= []); if (rows.length < 8000) rows.push(r); }
+  sim.dataRow = dataRow;
+  const traitsOf = p => Object.fromEntries(Object.entries(p.traits || {}).map(([k, v]) => [k, r2(v)]));
+  const wordsNow = p => (p.heard || []).filter(r => sim.t - r.t < 30).map(r => r.w);
   const band = (x, cuts, names) => names[cuts.findIndex(c => x < c) === -1 ? names.length - 1 : cuts.findIndex(c => x < c)];
   function roleOf(p) { const j = JOBS[p.job]; return j?.guard ? 'guard' : p.id === sim.mayorId ? 'mayor' : j?.owner ? 'owner' : j?.payer === 'town' ? 'public' : p.job === 'none' ? 'idle' : p.job === 'mercenary' ? 'merc' : 'worker'; }
   function situation(p) {
@@ -1058,7 +1068,7 @@ function Sim(opts = {}) {
     const lc = p.lastChoice; if (!lc) return;
     lesson(lc.key, lc.kind, worth(p) - lc.worth, false); p.lastChoice = null;
     if (lc.x && sim.studentMode !== 'habit') { const r = Math.max(-1, Math.min(1, (worth(p) - lc.worth) / 10)); const n = netOf(); const b = (n.base[lc.kind] ??= 0); n.base[lc.kind] = b * 0.98 + r * 0.02; nudge(lc.x, lc.kind, r - b, 0.02); n.rewarded++; }
-    if (sim.onChronicle && Math.random() < 0.2) { const rows = (sim.dataRows ||= []); if (rows.length < 3000) rows.push({ type: 'choice', day: sim.day, sit: lc.key, choice: lc.kind, reward: +(worth(p) - lc.worth).toFixed(1), brain: p.brain }); }
+    dataRow({ type: 'choice', day: sim.day, sit: lc.key, choice: lc.kind, reward: +(worth(p) - lc.worth).toFixed(1), brain: p.brain, role: roleOf(p), x: (lc.x || lc.rx) ? Array.from(lc.x || lc.rx, r2) : undefined, opts: lc.opts });
   }
   function loreBias(key, kind) {
     const row = sim.lore.acts[key]; if (!row) return 0;
@@ -1226,6 +1236,7 @@ function Sim(opts = {}) {
     const { out } = forward(x); let best = null, bv = -1e9; for (const k of (feas || KINDS)) { const v = out[kindIndex(k)]; if (v > bv) { bv = v; best = k; } }
     n.asked++; if (best === kind) n.agree++;
     nudge(x, kind, 1, 0.08, feas); n.imitated++;
+    if (sim.npcBrain) { const top = sim.npcBrain.decide({ x, words: wordsNow(p), opts: feas || undefined, traits: p.traits, role: roleOf(p) })[0]; const bs = (sim.brainStats ||= { asked: 0, agree: 0 }); bs.asked++; if (top?.kind === kind) bs.agree++; }
   }
   sim.teach = teach;
   sim.studentMode = 'blend';      // 'habit' (the old scripted scores), 'blend', 'student'
@@ -1255,11 +1266,11 @@ function Sim(opts = {}) {
     while (p.agenda?.length) {
       const step = p.agenda[0], o = matchStep(step, opts, p);
       if (o) {
-        p.agenda.shift(); const key = situation(p);
+        p.agenda.shift(); const key = situation(p), x0 = xOf(p), w0 = wordsNow(p);
         lesson(key, o.kind, null, true);   // a lesson for the plain brains: in this situation, the AI chose this
         teach(p, o.kind, opts); groundWords(p, o.kind); trace(p, 'teacher (AI)', o, [{ o, v: 0 }], key);
-        (sim.dataRows ||= []).push({ type: 'pilot', day: sim.day, sit: key, choice: o.kind, label: optLabel(o), brain: p.brain });
-        if (p.town !== 'marrow') p.lastChoice = { key, kind: o.kind, worth: worth(p), t: sim.t };
+        dataRow({ type: 'pilot', day: sim.day, sit: key, choice: o.kind, label: optLabel(o), brain: p.brain, role: roleOf(p), x: x0, words: w0, traits: traitsOf(p), opts: [...new Set(opts.map(q => q.kind))] });
+        if (p.town !== 'marrow') p.lastChoice = { key, kind: o.kind, worth: worth(p), t: sim.t, rx: recording() ? features(p) : null, opts: recording() ? [...new Set(opts.map(q => q.kind))] : undefined };
         p.lastStep = optLabel(o);
         startTask(p, o); if (p.task) { p.task.value = Math.max(o.value || 0, 8); p.task.fromAgenda = step.do; }
         return;
@@ -1270,16 +1281,18 @@ function Sim(opts = {}) {
       break;
     }
     const key = situation(p), lean = p.brain === 'script' ? sim.learning : 0;
-    const studentOn = p.brain === 'script' && sim.studentMode !== 'habit', x = studentOn ? features(p) : null;
+    const brainOn = p.brain === 'script' && sim.studentMode === 'brain' && !!sim.npcBrain;
+    const bp = brainOn ? Object.fromEntries(sim.npcBrain.decide({ x: features(p), words: wordsNow(p), opts: [...new Set(opts.map(o => o.kind))], traits: p.traits, role: roleOf(p) }).map(o => [o.kind, o.p])) : null;
+    const studentOn = p.brain === 'script' && sim.studentMode !== 'habit' && !brainOn, x = studentOn ? features(p) : null;
     const logits = studentOn ? forward(x, p.noise).out : null, w = sim.studentMode === 'student' ? 1 : sim.studentWeight;
-    const scored = opts.map(o => { const habit = o.value + rnd(0, 1.5) + (lean ? loreBias(key, o.kind) * lean : 0); return { o, v: studentOn ? habit * (1 - w) + (logits[kindIndex(o.kind)] * 4 + rnd(0, 0.5)) * w : habit }; }).sort((a, b) => b.v - a.v);
+    const scored = opts.map(o => { const habit = o.value + rnd(0, 1.5) + (lean ? loreBias(key, o.kind) * lean : 0); return { o, v: bp ? habit * 0.4 + (Math.log((bp[o.kind] ?? 0) + 0.01) * 3 + rnd(0, 0.5)) * 0.6 : studentOn ? habit * (1 - w) + (logits[kindIndex(o.kind)] * 4 + rnd(0, 0.5)) * w : habit }; }).sort((a, b) => b.v - a.v);
     const pickOpt = scored[0].o;
-    trace(p, p.brain === 'script' ? (studentOn ? (sim.studentMode === 'student' ? 'student' : 'blend') : 'habit') : 'habit (between AI steps)', pickOpt, scored, key);
+    trace(p, p.brain === 'script' ? (brainOn ? 'NPC brain' : studentOn ? (sim.studentMode === 'student' ? 'student' : 'blend') : 'habit') : 'habit (between AI steps)', pickOpt, scored, key);
     groundWords(p, pickOpt.kind);
     p.lastX = x;
     // an AI-played person's choices (steered by their own plan for the day) are examples for the rest
     if (p.brain !== 'script' && p.brain !== 'human' && p.policy) lesson(key, pickOpt.kind, null, true);
-    if (p.town !== 'marrow') p.lastChoice = { key, kind: pickOpt.kind, worth: worth(p), t: sim.t, x: p.lastX };
+    if (p.town !== 'marrow') p.lastChoice = { key, kind: pickOpt.kind, worth: worth(p), t: sim.t, x: p.lastX, rx: !p.lastX && recording() ? features(p) : null, opts: recording() ? [...new Set(opts.map(q => q.kind))] : undefined };
     startTask(p, pickOpt);
     if (p.task) p.task.value = pickOpt.value;
   }
@@ -1300,7 +1313,7 @@ function Sim(opts = {}) {
     if (best.o.kind === tk.kind || best.v <= now * 1.25 + 1.5) return;
     if (tk.fromAgenda) (p.agenda ||= []).unshift({ do: tk.fromAgenda });     // back to the list afterwards
     p.task = null; settle(p);
-    if (p.town !== 'marrow') p.lastChoice = { key, kind: best.o.kind, worth: worth(p), t: sim.t };
+    if (p.town !== 'marrow') p.lastChoice = { key, kind: best.o.kind, worth: worth(p), t: sim.t, rx: recording() ? features(p) : null, opts: recording() ? [...new Set(opts.map(q => q.kind))] : undefined };
     if (p.brain !== 'script' && p.brain !== 'human' && p.policy) lesson(key, best.o.kind, null, true);
     startTask(p, best.o); if (p.task) p.task.value = best.o.value;
     p.switched = (p.switched || 0) + 1;
@@ -1483,24 +1496,31 @@ function Sim(opts = {}) {
     sim.lore.phrasesLearned = (sim.lore.phrasesLearned || 0) + 1;
   }
   // a plain brain answering: the closest thing an AI once said to words like these
-  function plainReply(sp, to, heard) {
+  function plainReply(sp, to, heard) { return plainPick(sp, to, heard)?.line || null; }
+  function plainPick(sp, to, heard) {
     const ph = sim.lore.phrases || {}, k = heard ? keywords(heard) : ['^'];
     let best = null, bestScore = 0.25;
     for (const [role, list] of Object.entries(ph)) for (const e of list) {
       const hit = e.k.filter(w => k.includes(w)).length; if (!hit && !(k[0] === '^' && e.k[0] === '^')) continue;
-      const sc = (k[0] === '^' && e.k[0] === '^' ? 0.5 : hit / Math.sqrt(e.k.length * Math.max(1, k.length))) * (role === roleOf(sp) ? 1.3 : 1) + Math.random() * 0.15;
+      const sc = (k[0] === '^' && e.k[0] === '^' ? 0.5 : hit / Math.sqrt(e.k.length * Math.max(1, k.length))) * (role === roleOf(sp) ? 1.3 : 1) * (1 + clamp(e.w ?? 0.3, -0.5, 1) * 0.5) + Math.random() * 0.15;
       if (sc > bestScore) { bestScore = sc; best = e; }
     }
     if (!best) return null;
     best.n++;
     const other = pick(living().filter(q => q !== sp && q !== to && q.kind === 'human' && !q.town)) || sp;
-    return best.say.replace(/\{you\}/g, to.id === 'player' ? 'Rose' : to.name).replace(/\{me\}/g, sp.name).replace(/\{someone\}/g, other.name);
+    return { e: best, line: best.say.replace(/\{you\}/g, to.id === 'player' ? 'Rose' : to.name).replace(/\{me\}/g, sp.name).replace(/\{someone\}/g, other.name) };
   }
   sim.plainReply = plainReply;
   // plain-brained talk: a line out loud (heard by those in earshot, pets included)
   function plainSay(sp, to, heard) {
-    const line = plainReply(sp, to, heard) || (sim.learning && Math.random() < 0.3 ? babble(keywords(heard)[0]) : null);
+    let line = null, src = null, entry = null;
+    const explore = sim.learning && Math.random() < (Object.values(sim.lore.phrases || {}).reduce((n, l) => n + l.length, 0) < 40 ? 0.5 : 0.2);   // babbling on purpose: the only way new lines get tried
+    if (!explore) { const r = plainPick(sp, to, heard); if (r) { line = r.line; entry = r.e; src = 'phrase'; } }
+    if (!line && sim.learning && (explore || Math.random() < 0.3)) { line = babble(keywords(heard)[0]); if (line) src = 'babble'; }
+    if (!line && sim.npcBrain) { const other = pick(living().filter(q => q !== sp && q !== to && q.kind === 'human' && !q.town)) || sp; line = sim.npcBrain.reply(heard, { role: roleOf(sp), names: { you: to.id === 'player' ? 'Rose' : to.name, me: sp.name, someone: other.name } }); if (line) src = 'brain'; }
     if (!line) return null;
+    (sp.saidTo ||= {})[to.id] = sim.t;
+    if (to.kind === 'human' && to.brain !== 'human') judgeLine(sp, to, line, heard, src, entry);
     log('talk', `${sp.name} to ${to.id === 'player' ? 'you' : to.name}: "${line}"`, [sp.id, to.id]);
     sp.bubble = { text: line, t: sim.t };
     remember(to, { text: `${sp.name} told me: "${line}"` });
@@ -1508,13 +1528,61 @@ function Sim(opts = {}) {
     return line;
   }
   sim.plainSay = plainSay;
+  // ---- babble that learns (Rose) ----------------------------------------------------
+  // The listener reacts to a plain line by how well it touches what's on their mind (their needs, what they've
+  // just heard, what happened to them) and whether it's a sentence at all. Fifteen minutes later the line is
+  // scored (that reaction, how their liking moved, whether they answered back): a babbled line that landed is
+  // kept as a phrase; a kept phrase that keeps flopping is dropped.
+  const pendingTalk = [];
+  function needWords(q) {
+    const w = [];
+    if (q.food < 0.4) w.push('bread', 'food', 'hungry', 'eat', 'meal', 'stew', 'meat');
+    if ((q.water ?? 1) < 0.4) w.push('water', 'drink', 'thirsty', 'well', 'ale');
+    if (q.coin < 4) w.push('coin', 'money', 'work', 'job', 'pay', 'wage', 'poor');
+    if (night()) w.push('night', 'dark', 'sleep', 'bed', 'home');
+    if (q.home == null) w.push('home', 'house', 'roof', 'bed', 'rent');
+    if (Object.values(sim.animals).some(a => a.alive && a.monster)) w.push('beast', 'beasts', 'bear', 'wolf', 'wolves', 'troll', 'ogre', 'run', 'wildwood');
+    if (sim.election.due || sim.election.candidates.length) w.push('mayor', 'vote', 'election', 'tax', 'taxes');
+    if (q.job && q.job !== 'none') w.push(...JOBS[q.job].title.toLowerCase().split(/\W+/));
+    return w;
+  }
+  function sense(q, line) {
+    const ks = keywords(line); if (!ks.length) return -0.1;
+    const mind = new Set([...wordsNow(q), ...keywords(q.memory.slice(-4).map(m => m.text || '').join(' ')), ...needWords(q)]);
+    const n = (String(line).match(/\S+/g) || []).length;
+    return ks.filter(w => mind.has(w)).length / ks.length + (n >= 3 && n <= 25 && wholeSentences(line) ? 0.15 : -0.15);
+  }
+  function judgeLine(sp, to, line, heard, src, entry) {
+    const s = sense(to, line);
+    pendingTalk.push({ sp: sp.id, to: to.id, line, k: heard ? keywords(heard) : ['^'], heard: heard || null, role: roleOf(sp), src, e: entry, t: sim.t, like0: R(to, sp).like, s });
+    if (pendingTalk.length > 400) pendingTalk.shift();
+    bump(to, sp, 'like', clamp((s - 0.25) * 0.08, -0.03, 0.05));
+  }
+  function settleTalk() {
+    while (pendingTalk.length && sim.t - pendingTalk[0].t >= 15) {
+      const b = pendingTalk.shift(), sp = sim.people[b.sp], to = sim.people[b.to]; if (!sp || !to) continue;
+      const replied = (to.saidTo?.[sp.id] || 0) > b.t ? 1 : 0, score = +(b.s + (R(to, sp).like - b.like0) * 4 + replied * 0.2).toFixed(2);
+      const L = sim.lore;
+      if (b.src === 'babble') {
+        L.babbleTried = (L.babbleTried || 0) + 1;
+        const whole = wholeSentences(b.line), kept = score > 0.35 && !!whole && b.k.length > 0;
+        if (kept) { const list = ((L.phrases ||= {})[b.role] ||= []), say = slotify(whole, sp, to); if (!list.some(e => e.say === say)) { list.push({ k: b.k, say, n: 0, w: score, src: 'babble' }); if (list.length > 400) list.splice(Math.floor(Math.random() * 200), 1); L.babbleKept = (L.babbleKept || 0) + 1; } }
+        dataRow({ type: 'babble', day: sim.day, role: b.role, heard: b.heard ? slotify(b.heard, to, sp) : null, said: slotify(b.line, sp, to), score, kept });
+      } else if (b.src === 'phrase' && b.e) {
+        b.e.w = +(((b.e.w ?? 0.3) * 0.8) + score * 0.2).toFixed(3); b.e.used = (b.e.used || 0) + 1;
+        if (b.e.used >= 6 && b.e.w < 0) for (const list of Object.values(L.phrases || {})) { const i = list.indexOf(b.e); if (i >= 0) { list.splice(i, 1); L.phrasesDropped = (L.phrasesDropped || 0) + 1; } }
+        dataRow({ type: 'line', day: sim.day, role: b.role, heard: b.heard ? slotify(b.heard, to, sp) : null, said: slotify(b.line, sp, to), score });
+      }
+    }
+  }
+  sim.settleTalk = settleTalk; sim.sense = sense;
   function cleanLore(o) {
     for (const w of Object.keys(o.words || {})) if (w.includes("'") || STOP.has(w) || isName(w)) delete o.words[w];
     for (const [role, list] of Object.entries(o.phrases || {})) o.phrases[role] = list.filter(e => { e.k = (e.k || []).filter(w => w === '^' || !w.includes("'") && !STOP.has(w) && !isName(w)); const ws = wholeSentences(e.say); if (ws) e.say = ws; return ws && e.k.length; });
   }
   sim.importLore = o => { if (o && o.v === 1 && o.acts) { cleanLore(o); sim.lore = o; sim.lore.runs = (o.runs || 0) + 1; if (o.net?.theta) o.net.theta = Float32Array.from(o.net.theta); mutateAll(); } };
   sim.exportLore = () => { const o = JSON.parse(JSON.stringify({ ...sim.lore, net: undefined, animals: undefined })); o.animals = Object.fromEntries(Object.entries(sim.lore.animals || {}).map(([k, n]) => [k, { ...n, theta: Array.from(n.theta, v => +v.toFixed(5)) }])); const n = netOf(); o.net = { ...n, theta: Array.from(n.theta, v => +v.toFixed(5)) }; return o; };
-  sim.loreSize = () => ({ phrases: Object.values(sim.lore.phrases || {}).reduce((a, l) => a + l.length, 0), situations: Object.keys(sim.lore.acts).length, taught: sim.lore.taught, scored: sim.lore.scored, words: Object.keys(sim.lore.chain).length, runs: sim.lore.runs });
+  sim.loreSize = () => ({ phrases: Object.values(sim.lore.phrases || {}).reduce((a, l) => a + l.length, 0), situations: Object.keys(sim.lore.acts).length, taught: sim.lore.taught, scored: sim.lore.scored, words: Object.keys(sim.lore.chain).length, babbled: sim.lore.babbleTried || 0, babbleKept: sim.lore.babbleKept || 0, runs: sim.lore.runs });
   sim.options = options; sim.choose = choose;
 
   function startTask(p, o) {
@@ -2043,7 +2111,7 @@ function Sim(opts = {}) {
     if (q.brain === 'human') return;
     // two AI-minded people meeting actually talk (each speaks from their own mind)
     if (thinks(p) && thinks(q) && sim.onChat && sees(p, q) && sees(q, p) && !(p.cd?.chat > sim.t) && !(q.cd?.chat > sim.t)) { cool(p, 'chat', 480); cool(q, 'chat', 480); sim.onChat({ a: p.id, b: q.id }); }
-    else if (!thinks(p) && sees(p, q) && !(p.cd?.chat > sim.t) && Math.random() < 0.25) { cool(p, 'chat', 180); const l1 = plainSay(p, q, null); if (l1 && !thinks(q)) plainSay(q, p, l1); }
+    else if (!thinks(p) && sees(p, q) && !(p.cd?.chat > sim.t) && Math.random() < 0.4) { cool(p, 'chat', 120); const l1 = plainSay(p, q, null); if (l1 && !thinks(q)) plainSay(q, p, l1); }
     bump(p, q, 'like', 0.02 * p.traits.sociability); bump(q, p, 'like', 0.02 * q.traits.sociability);
     bump(p, q, 'trust', 0.01); bump(q, p, 'trust', 0.01);
     { const about = pick(living().filter(x => x !== p && x !== q && x.kind === 'human' && p.rel[x.id]?.worth != null)); if (about && R(q, p).trust > 0.3) glimpse(q, about, seen(p, about).worth, 0.15 * R(q, p).trust); }
@@ -2381,7 +2449,7 @@ function Sim(opts = {}) {
   function die(p, killer, how) {
     if (!p.alive) return;
     try { (sim.genLog ||= []).push({ t: 'death', day: sim.day, hr: Math.floor(H()), who: p.id === sim.mayorId ? 'the mayor' : p.job === 'none' ? 'a jobless one' : 'a ' + (JOBS[p.job]?.title || 'townsperson').toLowerCase(), killer: killer ? (sim.animals[killer.id] ? (killer.name || 'a beast') : 'a person') : null, how: how || '', where: AREAS[areaOf(p)]?.name || 'the road', doing: p.lastChoice?.kind || p.state || '' }); } catch (e) {}
-    if (p.lastChoice && sim.lore) { if (p.lastChoice.x && sim.studentMode !== 'habit') nudge(p.lastChoice.x, p.lastChoice.kind, -1, 0.05); lesson(p.lastChoice.key, p.lastChoice.kind, -40, false); (sim.dataRows ||= []).push({ type: 'death', day: sim.day, sit: p.lastChoice.key, choice: p.lastChoice.kind, how: how || '' }); p.lastChoice = null; }   // the worst outcome there is
+    if (p.lastChoice && sim.lore) { if (p.lastChoice.x && sim.studentMode !== 'habit') nudge(p.lastChoice.x, p.lastChoice.kind, -1, 0.05); lesson(p.lastChoice.key, p.lastChoice.kind, -40, false); dataRow({ type: 'death', day: sim.day, sit: p.lastChoice.key, choice: p.lastChoice.kind, how: how || '', role: roleOf(p), x: (p.lastChoice.x || p.lastChoice.rx) ? Array.from(p.lastChoice.x || p.lastChoice.rx, r2) : undefined }); p.lastChoice = null; }   // the worst outcome there is
     p.deathWorth = worth(p);
     p.alive = false; p.deadAt = sim.t; p.state = 'dead'; p.task = null; p.dying = false; sim.rec.deaths++;
     for (const hs of HOUSES) if (hs.owner === p.id) { const sp = p.spouse && sim.people[p.spouse]; hs.owner = sp && sp.alive ? sp.id : null; }
@@ -3336,7 +3404,7 @@ function Sim(opts = {}) {
     if (dec.offer && typeof dec.offer === 'object') makeOffer(sp, to, dec.offer);
     learnPhrase(sp, to, sp.lastHeard?.[to.id] || null, text); (to.lastHeard ||= {})[sp.id] = text;
     hearWords(sp, text);
-    (sim.dataRows ||= []).push({ type: 'talk', day: sim.day, role: roleOf(sp), heard: sp.lastHeard?.[to.id] || null, said: text });
+    dataRow({ type: 'talk', day: sim.day, role: roleOf(sp), toRole: roleOf(to), sit: situation(sp), words: wordsNow(sp), heard: sp.lastHeard?.[to.id] ? slotify(sp.lastHeard[to.id], to, sp) : null, said: slotify(text, sp, to), src: 'ai' }); (sp.saidTo ||= {})[to.id] = sim.t;
     if (typeof dec.feeling === 'number') { const r = R(sp, to); r.like = clamp(r.like + (clamp(dec.feeling, -1, 1) - r.like) * 0.15, -1, 1); }
     remember(to, { text: `${sp.name} told me: "${text}"` });
     if (dec.note) remember(sp, { text: String(dec.note).slice(0, 160) });
@@ -3386,7 +3454,7 @@ function Sim(opts = {}) {
     log(o.threat ? 'crime' : 'trade', `${to.id === 'player' ? 'You' : to.name} ${o.threat ? 'give in to' : 'agree to'} ${from.id === 'player' ? 'your' : from.name + "'s"} ${o.threat ? 'demand' : 'deal'}: ${sideText(o.give)} for ${sideText(o.want)}.`, [from.id, to.id]);
     if (o.threat) deed('extortion', from, to, to);
     remember(to, { text: `${o.threat ? 'gave in to' : 'made a deal with'} ${from.name}: ${sideText(o.give)} for ${sideText(o.want)}` }); remember(from, { text: `deal with ${to.name}: ${sideText(o.give)} for ${sideText(o.want)}` });
-    (sim.dataRows ||= []).push({ type: 'deal', day: sim.day, from: roleOf(from), to: roleOf(to), give: o.give, want: o.want, threat: !!o.threat, ok: true });
+    dataRow({ type: 'deal', day: sim.day, from: roleOf(from), to: roleOf(to), give: o.give, want: o.want, threat: !!o.threat, ok: true });
   }
   // an offer made in a line of talk: the other side answers (Rose by a card; a plain brain at once; an AI in its next line)
   function makeOffer(from, to, raw) {
@@ -3414,7 +3482,8 @@ function Sim(opts = {}) {
     if (dec.level_class && p.levelReady) levelUp(p, String(dec.level_class).toLowerCase().replace(/[^a-z]/g, ''), dec.feat, true);
     p.awaiting = null;
     if (Array.isArray(dec.agenda)) { p.agenda = dec.agenda.slice(0, 5).map(x => ({ do: String(typeof x === 'object' ? x.do || x.step || '' : x).slice(0, 80) })).filter(x => x.do); if (p.agenda.length && p.task && !['jail', 'fight', 'flee', 'sleep'].includes(p.task.kind)) p.task = null; }
-    if (dec.policy && typeof dec.policy === 'object') { p.policy = {}; for (const [k, v] of Object.entries(dec.policy)) if (typeof v === 'number') p.policy[k] = clamp(v, 0, 3); }
+    if (dec.policy && typeof dec.policy === 'object') { p.policy = {}; for (const [k, v] of Object.entries(dec.policy)) if (typeof v === 'number') p.policy[k] = clamp(v, 0, 3); dataRow({ type: 'policy', day: sim.day, sit: situation(p), role: roleOf(p), x: xOf(p), words: wordsNow(p), traits: traitsOf(p), policy: p.policy, brain: p.brain, persona: !!p.persona }); }
+    if (Array.isArray(dec.agenda) && dec.agenda.length) dataRow({ type: 'agenda', day: sim.day, sit: situation(p), role: roleOf(p), x: xOf(p), words: wordsNow(p), agenda: dec.agenda.slice(0, 5).map(a => String(typeof a === 'object' ? a.do || '' : a).slice(0, 80)), why: kind });
     if (dec.say) log('talk', `${p.name}: "${String(dec.say).slice(0, 200)}"`, [p.id]);
     if (dec.platform && (sim.election.candidates.includes(p.id) || p.id === sim.mayorId)) { const pl = String(dec.platform).slice(0, 160); if (pl !== p.platform) { p.platform = pl; log('politics', `${p.name}'s platform: "${pl}"`, [p.id]); learnWords(pl); } }
     if (dec.vote_for && sim.people[dec.vote_for]?.alive) p.voteFor = dec.vote_for;
@@ -3462,6 +3531,7 @@ function Sim(opts = {}) {
     for (const q of living()) if (q.carriedBy && sim.bounty[q.id] && areaOf(q) === 'station' && !(q.jailedUntil > 0)) { const c = sim.people[q.carriedBy]; drop(q); if (c?.carrying === q.id) c.carrying = null; if (c?.task?.kind === 'haul') c.task = null; jail(q, c); }
     sim.t += dtMin;
     while (later.length) later.shift()();
+    settleTalk();
     const hourNow = Math.floor(sim.t / 60), dayNow = Math.floor(sim.t / 1440);
     if (dayNow !== lastDay) { lastDay = dayNow; dailyTick(); }
     if (sim.pendingInvite && sim.t - sim.pendingInvite.t > 30) { const L = sim.people[sim.pendingInvite.leader]; if (L && !living().some(q => q !== L && q.party === L.party)) L.party = null; sim.pendingInvite = null; sim.onInvite?.(null); }
