@@ -399,8 +399,8 @@ function Sim(opts = {}) {
     { const pool = everyone().filter(p => !p.town && p.kind === 'human' && p.age >= 18 && p.brain !== 'mayor-ai').sort(() => Math.random() - 0.5); (opts.personas || PERSONAS).filter(Boolean).forEach((t, k) => { if (pool[k]) pool[k].persona = t; }); }
     for (const p of everyone()) if (!sim.blank && !p.town && (p.cls === 'rogue' || p.job === 'none' && p.cls === 'warrior')) p.underworld = { role: p.cls === 'rogue' ? 'thief' : 'mugger', since: 0 };
     for (const p of everyone()) if (p.persona && /crime boss|crime family/i.test(p.persona)) { p.underworld = { role: 'boss', since: 0 }; p.weapon = 'greatsword'; p.armor = 'fullplate'; p.coin = 50; }   // Rose: the boss starts with a greatsword, heavy armour and 50 coin
-    // a dead traveller lies hidden in the Wildwood with a fortune on them, and a note asking for it to go to the guard (Rose)
-    { const at = P(rnd(-122, -108), pick([-1, 1]) * rnd(14, 22));
+    // a dead traveller lies hidden in a back corner of one of the houses with a fortune on them, and a note asking for it to go to the guard (Rose)
+    { const hr = AREAS[pick(HOUSES).id], at = P(pick([hr.x0 + 1.2, hr.x1 - 1.2]), hr.z0 < 0 ? hr.z0 + 1.5 : hr.z1 - 1.5);
       sim.bodies.push({ id: 'stranger', name: 'Aldous Merrow, a traveller', x: at.x, z: at.z, coin: 200, items: { longsword1: 1, elvenchain: 1, bread: 3, meat: 2, waterskin: 2, note: 1 }, weapon: 'fists', buried: false, killer: null, how: 'a fall on the rocks', stranger: true, hidden: true,
         note: 'To whoever finds me: my name is Aldous Merrow. I was walking home to Marrowford with all we had saved. My wife Elspeth and my little girl Wren are waiting for me; Wren turns seven this spring and I promised her I would be home for it. I fell, and my leg is broken, and I do not think anyone will come. Please, I beg you, take my belongings to the town guard so they can reach my family. They will have nothing without them. Tell Wren her papa loved her. God keep you. - A.M.' }); }
     sim.lore && mutateAll();
