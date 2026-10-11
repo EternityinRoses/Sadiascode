@@ -157,3 +157,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - HT fail state (Rose): >4 townsfolk deaths in one calendar day = town fails immediately (sim.failed).
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT healing the dying: healAt (spell/lay hands/draught) in doRescue; rescue option for clergy/doctor any hour, casters, friends with draughts; fight feed action. Smoke: .backups/smoke_heal.mjs.
