@@ -60,6 +60,7 @@ for (const h of S.HOUSES) box(1.9, 0.35, 0.95, 0x4a3a2a, h.bed.x, 0.18, h.bed.z)
 box(3, 1.4, 1.2, 0x6a5444, -12, 0.7, -22.5); const oven = box(1.2, 0.5, 0.2, 0xff7a2a, -12, 0.5, -21.8); oven.material.emissive = new THREE.Color(0xff5010);
 box(1.2, 0.9, 0.8, 0x3a3a40, 0, 0.45, -21); box(2, 1, 0.8, 0x2a2420, 2.5, 0.5, -23);
 box(4, 1, 0.8, 0x6e5030, 10, 0.5, -17.5);
+box(5, 1, 0.6, 0x3a4a30, 21, 0.5, 11.2); for (let i = 0; i < 5; i++) { const v = box(0.25, 0.4, 0.25, [0x6ad06a, 0xd05050, 0x5080e0, 0xe0b040, 0xb060d0][i], 19 + i, 1.2, 11.2); v.material.emissive = new THREE.Color([0x1a401a, 0x401010, 0x102040, 0x403010, 0x301040][i]); }   // the apothecary's counter and bottles
 box(6, 1.1, 0.8, 0x4a3020, 22, 0.55, -5); for (const [x, z] of [[24, 2], [28, 2], [28, -3]]) box(2, 0.8, 1.2, 0x5a3d24, x, 0.4, z);
 box(2, 0.85, 0.9, 0x5a3a24, -9, 0.42, 21.5);
 for (const b of S.SPOTS.beds) box(1.8, 0.35, 0.9, 0xd8d0c0, b.x, 0.18, b.z + 0.6);
@@ -307,7 +308,7 @@ function openShop() {
 }
 function shopRows() {
   const b = S.business[S.areaOf(me)];
-  if (shopTab === 'buy') return Object.entries(b.stock).filter(([, n]) => n > 0).map(([k, n]) => ({ k, n, price: S.GOODS[k].price }));
+  if (shopTab === 'buy') return Object.entries(b.stock).filter(([, n]) => n > 0).map(([k, n]) => ({ k, n, price: S.quote ? S.quote(S.areaOf(me), k, me) : S.GOODS[k].price }));
   return Object.entries(me.items).filter(([k, n]) => n > 0 && S.GOODS[k]).map(([k, n]) => ({ k, n, price: Math.max(1, Math.floor(S.GOODS[k].price / 2)) }));
 }
 function drawShop(line) {
