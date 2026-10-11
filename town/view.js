@@ -121,7 +121,7 @@ const logEl = $('log'); let filter = 'all';
 const KIND_CLASS = { crime: 'sig', law: 'law', politics: 'pol', gang: 'gang', death: 'death', life: 'life', lie: 'lie', rumor: 'know', fight: 'fight', talk: 'base', trade: 'coin', town: 'pol' };
 // which tab a line belongs in: crime = crimes that happened and the law; accusations stay under lies/rumors
 const ACCUSE = /committed|robs|steals|lifts|burgl|mugs|arrest|jail|report|wanted|bounty|ambush|slaughters one/i;
-const tabOf = e => e.kind === 'crime' || e.kind === 'law' ? 'crime' : e.kind === 'lie' || e.kind === 'rumor' ? (e.kind === 'rumor' ? 'rumor' : 'lie') : e.kind === 'town' ? 'politics' : e.kind;
+const tabOf = e => e.kind === 'crime' || e.kind === 'law' ? 'crime' : e.kind === 'lie' || e.kind === 'rumor' ? (e.kind === 'rumor' ? 'rumor' : 'lie') : e.kind === 'town' ? 'politics' : e.kind === 'board' ? 'talk' : e.kind;
 const shows = d => filter === 'all' || filter === 'me' && d.classList.contains('me') || d.dataset.tab === filter || d.dataset.kind === filter || filter === 'lie' && d.dataset.kind === 'lie' || filter === 'rumor' && d.dataset.kind === 'rumor';
 function emptyNote() { let n = $('logEmpty'); if (!n) { n = document.createElement('div'); n.id = 'logEmpty'; n.className = 'k'; logEl.appendChild(n); } n.textContent = `Nothing under "${filter}" yet.` + (filter === 'crime' ? ' Most crime happens in the evening and at night.' : ''); n.hidden = filter === 'all' || [...logEl.children].some(d => d !== n && !d.hidden); }
 function logLine(e) {
@@ -425,6 +425,17 @@ $('ff1').onclick = () => fastForward(1); $('ff7').onclick = () => fastForward(7)
 $('newTown').onclick = () => { saveSetup(); if (!$('newTown').dataset.sure) { $('newTown').dataset.sure = 1; $('newTown').textContent = 'Sure? Start over'; return; } saveLore(); setTimeout(() => location.reload(), 300); };
 $('gear').onclick = openSettings;
 let mindTab = 'words';
+// the scoreboard (Rose only): who lived, by home, weapon, work and class; the last generation and the last six together
+function scoreHtml(H) {
+  const S6 = H.filter(h => h.score).slice(-6); if (!S6.length) return '<p class="k">Scoreboard: shows up when the next generation ends.</p>';
+  const last = S6[S6.length - 1].score, tot = {};
+  for (const h of S6) for (const [cat, m] of Object.entries(h.score)) { if (cat === 'guardAtDeath') continue; for (const [k, [l, n]] of Object.entries(m)) { const c = ((tot[cat] ||= {})[k] ||= [0, 0]); c[0] += l; c[1] += n; } }
+  const pct = v => v && v[1] ? `${v[0]}/${v[1]} <span class="k">(${Math.round(v[0] / v[1] * 100)}%)</span>` : '–';
+  const names = { housed: 'Home', armed: 'Weapon', group: 'Work', cls: 'Class' };
+  const rows = Object.keys(names).map(cat => Object.keys(tot[cat] || {}).sort().map(k => `<tr><td>${names[cat]}</td><td>${k}</td><td>${pct(last[cat]?.[k])}</td><td>${pct(tot[cat][k])}</td></tr>`).join('')).join('');
+  const g = last.guardAtDeath || {};
+  return `<p><b>Scoreboard</b> <span class="k">(who lived; for you only, the town never sees it)</span></p><table class="why"><tr><th></th><th></th><th>last generation</th><th>last ${S6.length}</th></tr>${rows}</table><p class="k">Last generation: ${g.deaths || 0} died, ${g.guard || 0} of them with a guard within 15 m; ${g.beastDeaths || 0} killed by beasts (${g.beastGuard || 0} with a guard near).</p>`;
+}
 function drawMind() {
   document.querySelectorAll('[data-mind]').forEach(b => b.classList.toggle('on', b.dataset.mind === mindTab));
   const n = S.netOf(), box = $('mindBody');
@@ -449,7 +460,7 @@ function drawMind() {
   } else {
     const H = n.history;
     box.innerHTML = `<p class="k">Generation ${n.gen} · taught by AI ${n.imitated} times · ${n.rewarded} outcomes learned from · plain brains: ${S.studentMode}${S.npcBrain ? ` · NPC brain: trained on ${S.npcBrainStats.actRows || 0} choices, ${S.npcBrainStats.policyRows || 0} policies, ${S.npcBrainStats.lines || 0} lines, ${S.npcBrainStats.agree != null ? Math.round(S.npcBrainStats.agree * 100) + '% agreement on held-out AI choices' : ''}${S.brainStats?.asked ? `, agrees with the AI ${Math.round(S.brainStats.agree / S.brainStats.asked * 100)}% live (${S.brainStats.asked})` : ''}` : ' · no NPC brain trained yet'}</p><canvas id="genChart" width="560" height="160" style="width:100%;height:160px;background:#0006;border-radius:4px"></canvas>
-      <table class="why"><tr><th>gen</th><th>alive</th><th>avg fitness</th><th>best</th><th>agrees with AI</th><th>words</th><th>crimes</th><th>inequality</th></tr>${H.slice(-12).reverse().map(h => `<tr><td>${h.gen}</td><td>${h.alive}/${h.people}</td><td>${h.avgFit}</td><td>${h.bestFit}</td><td>${h.agree == null ? '–' : Math.round(h.agree * 100) + '%'}</td><td>${h.words}</td><td>${h.crimes}</td><td>${h.gini}</td></tr>`).join('')}</table>`;
+      <table class="why"><tr><th>gen</th><th>alive</th><th>avg fitness</th><th>best</th><th>agrees with AI</th><th>words</th><th>crimes</th><th>inequality</th></tr>${H.slice(-12).reverse().map(h => `<tr><td>${h.gen}</td><td>${h.alive}/${h.people}</td><td>${h.avgFit}</td><td>${h.bestFit}</td><td>${h.agree == null ? '–' : Math.round(h.agree * 100) + '%'}</td><td>${h.words}</td><td>${h.crimes}</td><td>${h.gini}</td></tr>`).join('')}</table>${scoreHtml(H)}`;
     const c = $('genChart'), x = c.getContext('2d'); if (H.length < 2) return;
     const mx = Math.max(...H.map(h => h.bestFit), 1), line = (vals, col, m) => { x.strokeStyle = col; x.lineWidth = 2; x.beginPath(); vals.forEach((v, i) => { const px = 6 + i / (vals.length - 1) * (c.width - 12), py = c.height - 6 - v / m * (c.height - 12); i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.stroke(); };
     line(H.map(h => h.avgFit), '#e0b84a', mx); line(H.map(h => h.bestFit), '#8cc47a', mx); if (H.some(h => h.agree != null)) line(H.map(h => h.agree ?? 0), '#c89be8', 1);
