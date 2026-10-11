@@ -141,3 +141,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - HT diag tools: .backups/diag_fight.mjs <simpath> N beast (staged party vs beast), diag_deaths.mjs (gen deaths). Lesson: body soft cover made beasts unshootable -> removed. Memories: big flag (deaths/warnings) kept, News of deaths at dailyTick.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT win condition (Rose): community alive at noon on day 8 = win (sim.genWon); generation ends then.
