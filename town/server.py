@@ -27,6 +27,7 @@ LORE = os.path.join(HERE, "lore.json")
 CHRONICLE = os.path.join(HERE, "chronicle.md")
 DATASET = os.path.join(HERE, "dataset.jsonl")
 BRAINS = os.path.join(HERE, "brains")
+CHATLOGS = os.path.join(HERE, "chatlogs")   # one plain-text log of talk per person per town (local only)
 DEFAULTS = {
     "mayor": {"provider": "anthropic", "model": "claude-sonnet-5-5"},
     "folk": {"provider": "anthropic", "model": "claude-haiku-5-5"},
@@ -35,6 +36,7 @@ DEFAULTS = {
     "parallel": 3,
     "folk_every_minutes": 10,
     "chat_every_minutes": 3,
+    "chatlog_mayor": False,   # Cloude as mayor already keeps its own chat, so its chat log is skipped unless this is true
 }
 # rough $ per million tokens (input, output), for the cap; Ollama cloud is a flat subscription
 PRICES = {"haiku": (1, 5), "sonnet": (3, 15), "opus": (5, 25)}
@@ -354,6 +356,13 @@ class H(BaseHTTPRequestHandler):
             lab = lambda c: "plain brains" if c.get("provider", "off") == "off" else f"{c.get('model')} ({c.get('provider')})"
             return self.send(200, json.dumps({"ok": True, "mayor": lab(st["mayor"]), "folk": "off" if st["folk"].get("provider", "off") == "off" else lab(st["folk"]),
                                               "calls": usage["calls"], "cost": usage["cost"], "capped": capped(), "errors": usage["errors"]}))
+        if path == "/chatlog":
+            q = dict(p.split("=", 1) for p in (self.path.split("?", 1) + [""])[1].split("&") if "=" in p)
+            f = os.path.join(CHATLOGS, safe(urllib.parse.unquote(q.get("town", ""))), safe(urllib.parse.unquote(q.get("person", ""))) + ".md")
+            if not os.path.isfile(f):
+                return self.send(200, "Nothing said yet.".encode("utf-8"), "text/plain; charset=utf-8")
+            with open(f, "rb") as fh:
+                return self.send(200, fh.read(), "text/plain; charset=utf-8")
         if path == "/lore":
             if not os.path.exists(LORE):
                 return self.send(200, "{}")
@@ -396,6 +405,24 @@ class H(BaseHTTPRequestHandler):
             with open(DATASET, "a", encoding="utf-8") as f:
                 for r in (j.get("rows") or [])[:5000]:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            return self.send(200, "{}")
+        if self.path == "/chatlog":
+            try:
+                j = json.loads(self.body() or b"{}")
+            except Exception:
+                return self.send(400, "{}")
+            st = settings()
+            skip_mayor = st["mayor"].get("provider") == "cloude" and not st.get("chatlog_mayor", False)
+            line = str(j.get("line", "")).replace("\n", " ")[:1000]
+            d = os.path.join(CHATLOGS, safe(j.get("town", "town")))
+            os.makedirs(d, exist_ok=True)
+            for p in (j.get("people") or [])[:4]:
+                if not isinstance(p, dict) or (p.get("mayor") and skip_mayor):
+                    continue
+                with open(os.path.join(d, safe(p.get("id", "x")) + ".md"), "a", encoding="utf-8") as f:
+                    if f.tell() == 0:
+                        f.write(f"# {str(p.get('name', p.get('id')))[:80]} ({safe(p.get('id', 'x'))}), town {safe(j.get('town', 'town'))}\n\n")
+                    f.write(line + "\n")
             return self.send(200, "{}")
         if self.path == "/lore":
             raw = self.body()
