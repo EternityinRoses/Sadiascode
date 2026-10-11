@@ -6,6 +6,7 @@
 //
 // Prints one JSON line per generation: won/failed, days lasted, deaths by cause, and how often
 // people barricaded, built the palisade, lit watch-fires, woke others, rang the alarm bell, gave coin,
+// people enlisted, beasts killed, the guard corps still alive at the end,
 // where they slept (shelter, Cellar, fields) and how much busking earned (in copper).
 import { createRequire } from 'module';
 import fs from 'fs';
@@ -24,7 +25,7 @@ for (let g = 0; g < +gens; g++) {
   S.studentMode = process.env.MODE || 'blend'; S.genDays = 7; S.fightMode = 'script';
   if (lore) S.importLore(lore);
   if (process.env.REMEMBER) S.beastsSeen = 1;
-  const acts = { barricade: 0, palisade: 0, fire: 0, wake: 0, bell: 0, give: 0 };
+  const acts = { barricade: 0, palisade: 0, fire: 0, wake: 0, bell: 0, give: 0, enlist: 0 };
   S.onLog = e => {
     if (/ barricades /.test(e.text)) acts.barricade++;
     if (/works on the palisade/.test(e.text)) acts.palisade++;
@@ -32,6 +33,7 @@ for (let g = 0; g < +gens; g++) {
     if (e.kind === 'life' && / wakes /.test(e.text)) acts.wake++;
     if (/rings the alarm bell/.test(e.text)) acts.bell++;
     if (e.kind === 'life' && / gives /.test(e.text)) acts.give++;
+    if (/ enlists in the /.test(e.text)) acts.enlist++;
   };
   const nights = { shelter: 0, cellar: 0, fields: 0 };   // where people sleep at midnight, summed over nights
   let lastDay = S.day;
@@ -55,10 +57,12 @@ for (let g = 0; g < +gens; g++) {
     causes[k] = (causes[k] || 0) + 1;
     if (k === 'beasts') { const a = S.AREAS[S.areaOf(b)]?.name || 'somewhere'; beastWhere[a] = (beastWhere[a] || 0) + 1; }
   }
+  const beastsKilled = Object.values(S.animals).filter(a => a.monster && !a.alive).length;
+  const corps = {}; for (const p of S.living()) if (['artillery', 'mageguard', 'guard', 'nightguard'].includes(p.job)) corps[p.job] = (corps[p.job] || 0) + 1;
   const busked = S.everyone().reduce((a, p) => a + (p.stats?.busked || 0), 0);
   const st = S.endGeneration();
   lore = S.exportLore();
   console.log(JSON.stringify({ gen: st.gen, won: st.won, failed: st.failed, days: st.days, alive: st.alive, people: st.people,
-    avgFit: st.avgFit, crimes: st.crimes, causes, beastWhere, acts, nights, busked, secs: +((Date.now() - t0) / 1000).toFixed(1) }));
+    avgFit: st.avgFit, crimes: st.crimes, causes, beastWhere, acts, nights, busked, beastsKilled, corps, secs: +((Date.now() - t0) / 1000).toFixed(1) }));
 }
 fs.writeFileSync(loreOut, JSON.stringify(lore));
