@@ -243,7 +243,7 @@ function townPanel() {
   return `<b>Day ${S.day}</b> · ${S.clock()} ${S.night() ? '· night' : ''}${S.curfew ? ' · <span class="sig">curfew</span>' : ''}<br>
     <span class="k">Mayor</span> ${m ? S.fullName(m) + (m.brain === 'mayor-ai' ? ' <span class="pol">(Claude)</span>' : '') : '<i>vacant</i>'} · <span class="k">Captain</span> ${c?.name || '<i>none</i>'}${c?.rank === 'acting captain' ? ' <i>(acting)</i>' : ''}${(() => { const sg = S.living().find(q => q.rank === 'sergeant'); return sg ? ' · <span class="k">Sergeant</span> ' + sg.name : ''; })()}<br>
     <span class="k">Treasury</span> <b>${S.treasury}c</b> · tax ${Math.round(S.taxRate * 100)}% · rent ${S.rent}c · head ${S.headTax}c<br>
-    <span class="k">Election</span> day ${nextE}${S.election.candidates.length ? ': ' + S.election.candidates.map(id => S.people[id]?.name).join(', ') : ''}${S.election.last ? ` <span class="k">(last: ${Object.entries(S.election.last.tally).map(([n, v]) => n + ' ' + v).join(', ')})</span>` : ''}<br>
+    ${Object.keys(S.bounty).some(id => id !== 'beasts' && S.people[id]?.alive) ? `<span class="k">Bounty board</span> ${Object.entries(S.bounty).filter(([id]) => id !== 'beasts' && S.people[id]?.alive).map(([id, c]) => `<span class="sig">${S.people[id].name} ${c}c</span>`).join(', ')}<br>` : ''}    <span class="k">Election</span> day ${nextE}${S.election.candidates.length ? ': ' + S.election.candidates.map(id => S.people[id]?.name).join(', ') : ''}${S.election.last ? ` <span class="k">(last: ${Object.entries(S.election.last.tally).map(([n, v]) => n + ' ' + v).join(', ')})</span>` : ''}<br>
     <span class="k">Gangs</span> ${gangs}<br>
     <span class="k">Crimes so far</span> ${(() => { const c = {}; for (const e of S.events) if (S.CRIMES[e.type] && !e.lie && e.type !== 'warrant') c[e.type] = (c[e.type] || 0) + 1; return Object.entries(c).sort((x, y) => y[1] - x[1]).map(([k, n]) => k + ' ' + n).join(', ') || 'none yet'; })()}<br>
     <span class="k">Standing</span> ${['gentry', 'freeholder', 'commoner', 'lowborn'].map(r => r + ' ' + S.living().filter(p => p.kind === 'human' && !p.town && S.rankOf(p) === r).length).join(' · ')}<br>
@@ -287,7 +287,7 @@ $('aLie').onclick = () => {
 $('lieGo').onclick = () => { const c = $('lieCrime').value; doTo('lie', c === 'liar' ? { about: $('lieAbout').value, liar: true } : { about: $('lieAbout').value, crime: c, victim: selected }); $('liebox').hidden = true; };
 // context actions where you stand
 $('cWork').onclick = () => note(S.playerDo('work')); $('cStudy').onclick = () => note(S.playerDo('study'));
-$('cStand').onclick = () => note(S.playerDo('stand')); $('cEscape').onclick = () => note(S.playerDo('escape')); $('cCure').onclick = () => note(S.playerDo('cure')); $('cEat').onclick = () => note(S.playerDo('eat'));
+$('cStand').onclick = () => note(S.playerDo('stand')); $('cEscape').onclick = () => note(S.playerDo('escape')); $('cCure').onclick = () => note(S.playerDo('cure')); $('cTurnin').onclick = () => note(S.playerDo('turnin')); $('cEat').onclick = () => note(S.playerDo('eat'));
 $('cBurgle').onclick = () => note(S.playerDo('burgle')); $('cLoot').onclick = () => note(S.playerDo('loot')); $('cDig').onclick = () => note(S.playerDo('dig'));
 $('cWait').onclick = () => { for (let i = 0; i < 120; i++) S.step(0.5); note('You wait an hour.'); };
 $('cMode').onclick = () => { me.prefMode = me.prefMode === 'nonlethal' ? 'lethal' : 'nonlethal'; drawPanel(); };
@@ -579,7 +579,7 @@ function loop() {
   // context buttons
   const where = S.areaOf(me);
   $('cShop').hidden = !(S.business[where] && S.shopOpen(where)); $('cWork').hidden = !['bakery', 'store', 'smithy', 'tavern', 'fields', 'ranch'].includes(where);
-  $('cStudy').hidden = where !== 'school'; $('cStand').hidden = where !== 'hall'; $('cReport').hidden = where !== 'station'; $('cEscape').hidden = !(me.jailedUntil > 0); $('cCure').hidden = !(me.sick && (where === 'healer' || where === 'chapel'));
+  $('cStudy').hidden = where !== 'school'; $('cStand').hidden = where !== 'hall'; $('cReport').hidden = where !== 'station'; $('cEscape').hidden = !(me.jailedUntil > 0); $('cCure').hidden = !(me.sick && (where === 'healer' || where === 'chapel')); $('cTurnin').hidden = !(me.found && where === 'station');
   $('cBurgle').hidden = !(S.AREAS[where]?.house && me.home !== S.HOUSES.findIndex(h => h.id === where));
   { const an = selected && S.animals[selected]; $('cFeed').hidden = !(an && an.alive && !an.game && S.dist(me, an) < 2.5); }
   $('cQuit').hidden = me.job === 'none'; $('cDismiss').hidden = !me.party; $('cFish').hidden = S.dist(me, S.SPOTS.pond) > 7; $('cForage').hidden = !['orchard', 'wood'].includes(where);
