@@ -336,7 +336,7 @@ S.onChat = async c => {
   for (let turn = 0; turn < (c.a === 'player' ? 1 : 3); turn++) {
     if (!sp?.alive || !to?.alive || !S.conscious(sp) || sp.fight) break;
     let dec = null;
-    try { const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: sp.brain, kind: 'chat', system: S.identityFor(sp), prompt: S.chatTurn(sp, to, heard), town: townId, day: S.day, person: sp.id, name: S.fullName(sp), player: c.a === 'player' }) }); dec = (await r.json()).decision; } catch (e) {}
+    try { const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: sp.brain, kind: 'chat', system: S.identityFor(sp), prompt: S.chatTurn(sp, to, heard), town: townId, day: S.day, person: sp.id, name: S.fullName(sp), player: c.a === 'player', reply: turn > 0 || !!heard }) }); dec = (await r.json()).decision; } catch (e) {}
     if (dec) sp.lastTalk = { day: S.day, clock: S.clock(), to: to.id === 'player' ? 'Rose' : to.name, dec };
     const said = S.applyChat(sp, to, dec); if (!said) break;
     bubbles[sp.id] = { text: said, until: performance.now() + 7000 };

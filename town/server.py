@@ -267,8 +267,8 @@ def think(req):
     book = read_book(town, person)
     # townsfolk re-plan at most every few real minutes (at high speed most days run on yesterday's plan)
     if req.get("kind") == "chat":
-        # a conversation line: each person talks at most every few real minutes (answering Rose is always allowed)
-        if not req.get("player") and time.time() - book.get("chatted", 0) < 60 * float(st.get("chat_every_minutes", 3)):
+        # a conversation line: each person STARTS a talk at most every few real minutes (answering anyone is always allowed)
+        if not req.get("player") and not req.get("reply") and time.time() - book.get("chatted", 0) < 60 * float(st.get("chat_every_minutes", 3)):
             return None
         book["chatted"] = time.time()
     elif req.get("brain") != "mayor-ai" and time.time() - book.get("asked", 0) < (20 if req.get("waiting") else 60 * float(st.get("folk_every_minutes", 10))):

@@ -85,3 +85,5 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **(Hollow Town) Escape button (Nimbus):** town/index.html + view.js: an 'Escape' button (cEscape) that shows only while Rose is jailed and runs playerDo('escape'). Backups .backups\20261010-214000__town__*.
 
 - **(Hollow Town) Talk from jail (Nimbus):** town/sim.js doAs: a jailed but conscious person can still talk, say, bribe, persuade, give, intimidate and lie (jailTalk); moving stays blocked. Backup .backups\20261010-214500__town__sim.js.
+
+- **(Hollow Town) NPCs answer each other (Nimbus):** the per-person chat limit (chat_every_minutes) was also blocking *replies*, so talks died after one line. view.js now sends reply:true for answers; server.py only limits starting a talk. Backups .backups\20261010-215500__town__view.js / server.py.
