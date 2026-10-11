@@ -60,6 +60,7 @@ for (const h of S.HOUSES) box(1.9, 0.35, 0.95, 0x4a3a2a, h.bed.x, 0.18, h.bed.z)
 box(3, 1.4, 1.2, 0x6a5444, -12, 0.7, -22.5); const oven = box(1.2, 0.5, 0.2, 0xff7a2a, -12, 0.5, -21.8); oven.material.emissive = new THREE.Color(0xff5010);
 box(1.2, 0.9, 0.8, 0x3a3a40, 0, 0.45, -21); box(2, 1, 0.8, 0x2a2420, 2.5, 0.5, -23);
 box(4, 1, 0.8, 0x6e5030, 10, 0.5, -17.5);
+box(0.5, 2.4, 0.5, 0x4a3a2a, 6, 1.2, -9); { const bell = box(0.8, 0.7, 0.8, 0xc8a040, 6, 2.5, -9); bell.material.emissive = new THREE.Color(0x302008); }   // the alarm bell
 box(5, 1, 0.6, 0x3a4a30, 21, 0.5, 11.2); for (let i = 0; i < 5; i++) { const v = box(0.25, 0.4, 0.25, [0x6ad06a, 0xd05050, 0x5080e0, 0xe0b040, 0xb060d0][i], 19 + i, 1.2, 11.2); v.material.emissive = new THREE.Color([0x1a401a, 0x401010, 0x102040, 0x403010, 0x301040][i]); }   // the apothecary's counter and bottles
 box(6, 1.1, 0.8, 0x4a3020, 22, 0.55, -5); for (const [x, z] of [[24, 2], [28, 2], [28, -3]]) box(2, 0.8, 1.2, 0x5a3d24, x, 0.4, z);
 box(2, 0.85, 0.9, 0x5a3a24, -9, 0.42, 21.5);
@@ -296,7 +297,8 @@ $('cBurgle').onclick = () => note(S.playerDo('burgle')); $('cLoot').onclick = ()
 $('cWait').onclick = () => { for (let i = 0; i < 120; i++) S.step(0.5); note('You wait an hour.'); };
 $('cMode').onclick = () => { me.prefMode = me.prefMode === 'nonlethal' ? 'lethal' : 'nonlethal'; drawPanel(); };
 $('cReport').onclick = () => { if (!selected) return note('Select who you want to report, then press Report at the station desk.'); note(S.playerDo('report', null, { about: selected })); };
-$('say').onsubmit = e => { e.preventDefault(); const t = $('sayText').value.trim(); if (!t) return; $('sayText').value = ''; { const m = /^class\s+([a-z]+)/i.exec(t); if (m) { note(S.playerDo('class', null, { cls: m[1].toLowerCase() })); drawPanel(); return; } } note(S.playerDo('say', null, { text: t, to: selected, whisper: $('whisper')?.checked })); };
+$('say').onsubmit = e => { e.preventDefault(); const t = $('sayText').value.trim(); if (!t) return; $('sayText').value = ''; { const w = /^(wake|ring|stay (?:awake|up))\b(.*)$/i.exec(t); if (w) { const k = w[1].toLowerCase(); note(S.playerDo(k === 'wake' ? 'wake' : k === 'ring' ? 'ring' : 'stayup', k === 'wake' ? selected : null, { text: w[2] })); drawPanel(); return; } }
+  { const m = /^class\s+([a-z]+)/i.exec(t); if (m) { note(S.playerDo('class', null, { cls: m[1].toLowerCase() })); drawPanel(); return; } } note(S.playerDo('say', null, { text: t, to: selected, whisper: $('whisper')?.checked })); };
 
 // ------------------------------------------------------------------ shop --
 // A shop only opens when someone is behind the counter and you're inside.
