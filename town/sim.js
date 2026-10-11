@@ -785,7 +785,7 @@ function Sim(opts = {}) {
       }
     }
     // politics: run for mayor before the election
-    if (!sim.election.candidates.includes(p.id) && p.id !== sim.mayorId && (sim.day % 7 >= 3 || sim.day % 7 === 0 || !sim.mayorId && sim.day >= 2) && p.coin >= 5 && !(p.cd?.stand > sim.t) && p.kind === 'human' && !p.town) {
+    if (!sim.election.candidates.includes(p.id) && p.id !== sim.mayorId && (nextElectionDay() - sim.day <= 1 || !sim.mayorId) && p.coin >= 5 && !(p.cd?.stand > sim.t) && p.kind === 'human' && !p.town) {
       const field = sim.election.candidates.length;
       add('stand', p.traits.ambition * 3 + p.traits.greed * 1.5 + popularity(p) * 0.2 + (field === 0 ? 2 : 0) - field * 0.4 + (p.job === 'none' ? 1 : 0) - 2.5);
     }
@@ -1045,7 +1045,7 @@ function Sim(opts = {}) {
     for (const a of Object.values(sim.animals)) if (a.alive && a.monster && dist2(a, p) < 30 && sees(p, a)) beast = Math.max(beast, a.species === 'ogre' ? 1 : 0.5);
     put(beast); put(guard); put(Math.min(1, ppl / 8)); put(down);
     put(Object.keys(p.items).some(k => GOODS[k]?.food && p.items[k] > 0) ? 1 : 0); put(p.party ? 1 : 0); put(p.spouse ? 1 : 0);
-    put(sim.election.candidates.includes(p.id) ? 1 : 0); put(((7 - sim.day % 7) % 7) / 7);
+    put(sim.election.candidates.includes(p.id) ? 1 : 0); put(Math.min(1, (nextElectionDay() - sim.day) / 7));
     while (i < 46) put(0);
     for (const r of (p.heard || [])) if (sim.t - r.t < 30) x[46 + hashWord(r.w)] = 1;
     return x;
@@ -1255,6 +1255,10 @@ function Sim(opts = {}) {
   sim.animalMinds = true;
   // ---- generations ---------------------------------------------------------------
   sim.genDays = 3; sim.sigma = 0.04;
+  sim.firstElection = 2; sim.electionEvery = 1;
+  const isElectionDay = d => d >= sim.firstElection && (d - sim.firstElection) % sim.electionEvery === 0;
+  const nextElectionDay = (pastNoon = H() >= 12) => { let d = sim.day + (pastNoon && isElectionDay(sim.day) ? 1 : 0); while (!isElectionDay(d)) d++; return d; };
+  sim.isElectionDay = isElectionDay; sim.nextElectionDay = nextElectionDay;
   function mutateAll() { for (const p of everyone()) if (p.kind === 'human' && p.brain === 'script' && !p.town) { const nz = new Float32Array(NPARAM); for (let k = 0; k < NPARAM; k++) nz[k] = (Math.random() + Math.random() + Math.random() - 1.5) * 2 * sim.sigma; p.noise = nz; } }
   sim.mutateAll = mutateAll;
   // fitness: the most money, and survival (the dead keep a fraction of what they had)
@@ -2574,9 +2578,9 @@ function Sim(opts = {}) {
     const pop = living().filter(p => p.brain !== 'human' && p.town !== 'marrow').length;
     if (pop < 30 && Math.random() < 0.6) newcomers(Math.min(5, 30 - pop));
     // elections every seventh day
-    if (sim.day % 7 === 0 || !sim.mayorId && sim.day === 4) sim.election.due = true;
+    if (isElectionDay(sim.day) || !sim.mayorId && sim.day >= 2) sim.election.due = true;
     // (beasts now come every night around 22:00, see the step loop)
-    { const left = (7 - sim.day % 7) % 7; const n = [...new Set([...(sim.mayorId ? [sim.mayorId] : []), ...sim.election.candidates])].length; if (left <= 3) log('politics', left === 0 ? `Election day. ${n} on the ballot; the vote is at noon.` : `${left} day${left > 1 ? 's' : ''} to the election. ${n} on the ballot.`); }
+    { const left = nextElectionDay(false) - sim.day; const n = [...new Set([...(sim.mayorId ? [sim.mayorId] : []), ...sim.election.candidates])].length; if (left <= 3) log('politics', left === 0 ? `Election day. ${n} on the ballot; the vote is at noon.` : `${left} day${left > 1 ? 's' : ''} to the election. ${n} on the ballot.`); }
     sim.history.push(snapshot());
     if (sim.onChronicle) {
       const hs = sim.history, a = hs[hs.length - 2] || hs[0], b = hs[hs.length - 1], day = sim.lore.acts;
@@ -2797,7 +2801,7 @@ function Sim(opts = {}) {
     const menu = [...new Set(options(p).map(optLabel))].sort(() => Math.random() - 0.5);
     const failed = (p.failed || []).splice(0); const lines = [failed.length ? `These steps couldn't be done: ${failed.join('; ')}.` : '', `PLAN. Here is what is available to you right now: ${menu.join('; ') || 'nothing at this moment'} (more becomes possible as things change).`, facts(p).split('\n').filter(l => !l.startsWith('Rose of the City')).join('\n')];
     if (kind === 'mayor') lines.push(
-      `YOUR SEAT OF POWER. You set the sales tax, the daily rent and head tax, every public wage (guards, captain, jailer, clerk, labourers, undertaker, cleric, doctor, teacher, your own), bounties on anyone (or on beasts), a curfew, bail; you hire and fire public workers, pardon prisoners, back a guard for captain, and the treasury is in your hands (you can take from it; if someone sees, it's embezzlement). You command the guard: "orders": [{"guard": "<guard id>" | "all" | "captain", "do": "arrest <id>" (on your own warrant, no evidence needed) | "patrol <place>" | "escort me" | "raid <business>" | "release <id>" | "stand down"}]. Guards carry out orders; some may refuse what they think is unjust, and people who see an arrest without cause remember it. The election is every 7 days; anyone may stand against you.`,
+      `YOUR SEAT OF POWER. You set the sales tax, the daily rent and head tax, every public wage (guards, captain, jailer, clerk, labourers, undertaker, cleric, doctor, teacher, your own), bounties on anyone (or on beasts), a curfew, bail; you hire and fire public workers, pardon prisoners, back a guard for captain, and the treasury is in your hands (you can take from it; if someone sees, it's embezzlement). You command the guard: "orders": [{"guard": "<guard id>" | "all" | "captain", "do": "arrest <id>" (on your own warrant, no evidence needed) | "patrol <place>" | "escort me" | "raid <business>" | "release <id>" | "stand down"}]. Guards carry out orders; some may refuse what they think is unjust, and people who see an arrest without cause remember it. The election is ${sim.electionEvery === 1 ? 'every day' : 'every ' + sim.electionEvery + ' days'} at noon (from day ${sim.firstElection}); anyone may stand against you.`,
       `Wages now: ${JSON.stringify(sim.wages)}. Bounties: ${JSON.stringify(sim.bounty)}. Curfew: ${sim.curfew}. Bail: ${sim.bail}c. Crimes in the last day: ${sim.events.filter(e => sim.t - e.t < 1440).length}. People with open charges: ${living().filter(q => openRecord(q).length).map(q => `${q.name} (${q.id}) ${openRecord(q).length}`).join(', ') || 'none'}. Guards: ${living().filter(isGuard).map(g => `${g.name} (${g.id}, ${JOBS[g.job].title})`).join('; ') || 'none'}.`,
       `Reply with ONLY a JSON object; every key optional: {"agenda":["command", ...up to 5], "tax_rate":0-0.4, "wages":{"<job>":n}, "rent":n, "head_tax":n, "captain":"<guard id you back>", "bounty":{"<id>" or "beasts":coins}, "curfew":true|false, "bail":n, "hire":["<public job>"], "fire":["<id>"], "pardon":["<id>"], "take_from_treasury":n, "orders":[{"guard":"...","do":"..."}], "vote_for":"<id>", "platform":"...", "statement":"...", "say":"...", "note":"one line to remember"}`);
     else lines.push(`Reply with ONLY a JSON object; every key optional: {"agenda":["command", ...up to 5, in order], "policy":{"work":0-3,"crime":0-3,"violence":0-3,"romance":0-3,"politics":0-3,"gang":0-3,"tavern":0-3,"socialize":0-3,"hunt":0-3,"forage":0-3} (how you'll lean between commands), "say":"words you say aloud now", "note":"one line to remember", "stand":true, "platform":"if you're a candidate", "vote_for":"<id>", "captain_vote":"<id>", "boss_vote":"<id>", "fighting":{"blows":"lethal"|"nonlethal","flee_below":0-1,"surrender":true|false}${(p.job === 'smith' || p.job === 'apprentice') ? `, "forge":"anything" | "no weapons" | ["item", ...]` : ''}${JOBS[p.job]?.owner ? ', "prices":{"<item>":0.5-4}' : ''}}`);
@@ -2852,7 +2856,7 @@ function Sim(opts = {}) {
   }
   sim.inView = inView;
   function electionNews(p) {
-    const next = Math.ceil((sim.day + (H() >= 12 && sim.day % 7 === 0 ? 1 : 0)) / 7) * 7, left = next - sim.day;
+    const next = nextElectionDay(), left = next - sim.day;
     const cands = [...new Set([...(sim.mayorId ? [sim.mayorId] : []), ...sim.election.candidates])].map(id => sim.people[id]).filter(q => q && q.alive);
     const list = cands.map(c => `${c.id === 'player' ? 'Rose of the City (the outsider)' : fullName(c)} (${c.id}${c.id === sim.mayorId ? ', the sitting mayor' : ''}${c.platform ? ': "' + c.platform + '"' : ''})`).join('; ');
     const me = sim.election.candidates.includes(p.id) || p.id === sim.mayorId;
