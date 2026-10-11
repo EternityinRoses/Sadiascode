@@ -265,3 +265,12 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 
 ## 2026-10-11 08:52 Hollow Town: three barracks by the fields gate
 - Guard barracks (day/night guards; captain and jailer bunk there too), Artillery barracks (new job Artillery guard, 16:00-04:00, 3 sp; gets a light crossbow and 20 bolts if unarmed at range) and Mage barracks (new job Mage guard, 18:00-06:00, 4 sp; casters only). Nobody is assigned: "enlist <guard | night guard | artillery | mage guard>" walks you there and joins if a place is open (guard numbers + mayor's extra hires; treasury >= 2 gp; clean record; not owners/mayor/captain). Plain brains choose it like any option. Members bunk free (roof for the vagrancy law). After dark artillery and mage guards hold the fields gate unless posted. Prompts list openings; wages settable by the mayor. Smoke: .backups/smoke_barracks.mjs.
+
+## 2026-10-11 09:12 Hollow Town: SRD class features
+- Rogue: sneak attack (any weapon) now also on a feinted or stunned foe; round-one flat-footedness ends when you start your turn (ambushed prey stay flat-footed the round); uncanny dodge (rogue 4, barbarian 2).
+- Cleric: bless (side +1 to hit), command (halt / drop / fall / flee; Will; people only), summon monster I (celestial dog, level rounds), cure in the menu. Druid: summon nature's ally I (wolf), cure, wild empathy. Divine spells share the cures pool.
+- Wizard/sorcerer: familiars (the 10 SRD kinds, gifts + Alertness; follows its master; AI picks, Rose types "familiar <kind>"); sleep (4 HD, Will, wakes on a wound, sleeping beasts can be given the coup de grace), color spray (cone, HD tiers), shield (+4 AC, stops magic missiles) from the missiles pool; missile/ray in the player's fight menu.
+- Monk: flurry of blows (two blows at -2, -1 from monk 5; fists or quarterstaff, no armour), stunning fist (monk level a day; Fort or stunned a turn: lost turn, no Dex, -2 AC).
+- Bard: inspire courage is now a performance (standard action, bard level a day; lasts while the bard stands +5 rounds).
+- Ranger: chosen favoured enemy (beasts default, giants, people; "favored enemy <x>"), wild empathy ("calm <beast>": d20+level+Cha vs 20 prowling / 25 in a fight; the beast goes back to the Wildwood).
+- Saves per SRD (good/poor by class, beasts' own). Plain brains use all of it (classTurn). Smoke: .backups/smoke_classfx.mjs.
