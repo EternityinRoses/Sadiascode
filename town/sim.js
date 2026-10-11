@@ -281,7 +281,7 @@ function makePerson(sim, o) {
     id: o.id || ('p' + (NEXT_ID++)), kind: 'human', name: o.name || pick(NAMES[gender === 'nb' ? 'n' : gender]), surname: o.surname || pick(SURNAMES),
     gender, pron: gender === 'm' ? ['he', 'him', 'his'] : gender === 'f' ? ['she', 'her', 'her'] : ['they', 'them', 'their'],
     orient: o.orient || rollOrientation(), age: o.age || irnd(19, 58), cls: o.cls || 'commoner', level: lvl,
-    st, hp, maxhp: hp, nl: 0, skills: skillsFor(o.cls || 'commoner', st, lvl, o.focus || []),
+    st, hp, maxhp: hp, nl: 0, skills: skillsFor(o.cls || 'commoner', st, lvl, o.focus || []), focus: o.focus || [],
     weapon: o.weapon || 'fists', armor: o.armor || 'none', items: {}, coin: o.coin ?? irnd(30, 120),
     job: o.job || 'none', home: o.home ?? null, household: null, spouse: null, gang: null,
     traits: { greed: rnd(0.3, 1), caution: rnd(0.1, 0.9), honesty: 1 - Math.pow(Math.random(), 2) * 0.85, aggression: rnd(0.05, 0.8), loyalty: rnd(0.2, 0.95), ambition: rnd(0.05, 0.9), sociability: rnd(0.2, 0.9), ...(o.traits || {}) },
@@ -1491,6 +1491,7 @@ function Sim(opts = {}) {
       const lr = 0.6;
       ranked.forEach((p, r) => { const u = (r / (N - 1)) - 0.5; for (let k = 0; k < NPARAM; k++) n.theta[k] += lr * u * p.noise[k] / N; });
     }
+    learnPicks(everyone().filter(p => p.kind === 'human' && !p.town && p.id !== 'player' && (p.picks?.length || p.featPicks?.length)));
     const alive = pop.filter(p => p.alive), fit = pop.map(fitness);
     const words = Object.entries(sim.lore.words || {}).filter(([, e]) => e.n >= 3).length;
     const stat = { gen: n.gen + 1, won: sim.genWon(), days: sim.day, people: pop.length, alive: alive.length, deaths: sim.rec.deaths, avgFit: +(fit.reduce((a, b) => a + b, 0) / Math.max(1, fit.length)).toFixed(1), bestFit: +Math.max(0, ...fit).toFixed(1), agree: n.asked ? +(n.agree / n.asked).toFixed(2) : null, taught: n.imitated, words, crimes: sim.rec.crimes, gini: snapshot().gini };
@@ -2669,7 +2670,8 @@ function Sim(opts = {}) {
     if (p.levelReady || (p.level || 1) >= MAX_LEVEL || (p.xp || 0) < XP_AT[(p.level || 1) + 1]) return;
     p.levelReady = true; p.levelReadyAt = sim.t;
     log('life', `${p.id === 'player' ? 'You have' : p.name + ' has'} earned level ${p.level + 1}.`, [p.id]);
-    if (!thinks(p)) autoLevel(p);
+    if (!thinks(p) && p.brain !== 'human') autoLevel(p);
+    else if (p.brain === 'human') log('life', `Choose your class for level ${p.level + 1}: type "class <name>" in the say box (${Object.keys(PC).join(', ')}).`, [p.id]);
   }
   function featSlots(p, cls) { return (!p.feats ? 1 : 0) + (p.level + 1 === 3 ? 1 : 0) + (cls === 'fighter' && [1, 2, 4].includes(clvl(p, 'fighter') + 1) ? 1 : 0); }
   const normFeat = w0 => { const w = String(w0 || '').toLowerCase().trim(); if (!w) return null; const ks = Object.keys(FEATS); return ks.find(k => k.toLowerCase() === w) || ks.find(k => w.includes(k.toLowerCase())) || ks.find(k => k.toLowerCase().includes(w)) || null; };
@@ -2678,7 +2680,8 @@ function Sim(opts = {}) {
     const sk = { 'Alertness': ['spot', 'listen'], 'Persuasive': ['bluff', 'intimidate'], 'Negotiator': ['diplomacy', 'sense'], 'Stealthy': ['hide', 'sneak'], 'Self-Sufficient': ['heal'] }[k];
     if (sk) for (const x of sk) p.skills[x] = (p.skills[x] || 0) + 2;
   }
-  function pickClass(p) {
+  function pickClass(p) { return learnedPick(p, false); }   // the plain brain's levelling: what the town has learned (below)
+  function pickClassOld(p) {
     const cs = classesOf(p), have = Object.keys(cs).filter(k => PC[k] && !(k === 'rogue' && p.cls === 'rogue' && cs.rogue === 1 && !p.classes));
     if (have.length && Math.random() < 0.8) return have.sort((a, b) => cs[b] - cs[a])[0];   // mostly stay with the class they started
     const taught = sim.lore?.classPicks?.[jobGroup(p)];   // copy what the AI folk in the same line of work chose
@@ -2694,6 +2697,7 @@ function Sim(opts = {}) {
   }
   function pickFeat(p, cls) {
     const ok = k => FEATS[k] && !p.feats.includes(k) && FEATS[k].req(p);
+    { const FL = sim.lore?.featLearn?.[cls]; if (FL && Math.random() < 0.75) { const tot = Object.values(FL).reduce((t, e) => t + e.n, 0); let best = null, bv = -1; for (const k of Object.keys(FEATS).filter(ok)) { const e = FL[k], n = e?.n || 0, v = (n ? e.s / n : 0.5) + 0.3 * Math.sqrt(Math.log(tot + 2) / (n + 1)) + Math.random() * 0.05; if (v > bv) { bv = v; best = k; } } if (best) return best; } }   // feats the town learned paid off
     const taught = sim.lore?.featPicks?.[cls];
     if (taught && Math.random() < 0.5) { const best = Object.entries(taught).filter(([k]) => ok(k)).sort((a, b) => b[1] - a[1])[0]; if (best) return best[0]; }
     const pref = { fighter: ['Weapon Focus', 'Power Attack', 'Weapon Specialization', 'Cleave', 'Toughness', 'Dodge', 'Improved Initiative'], barbarian: ['Power Attack', 'Toughness', 'Cleave', 'Weapon Focus'], paladin: ['Weapon Focus', 'Toughness', 'Power Attack'], ranger: ['Point Blank Shot', 'Weapon Focus', 'Alertness', 'Toughness'], rogue: ['Improved Initiative', 'Dodge', 'Stealthy', 'Weapon Focus'], monk: ['Dodge', 'Improved Initiative', 'Toughness'], cleric: ['Toughness', 'Self-Sufficient', 'Great Fortitude'], druid: ['Toughness', 'Self-Sufficient', 'Great Fortitude'], bard: ['Negotiator', 'Persuasive', 'Toughness'], sorcerer: ['Toughness', 'Improved Initiative'], wizard: ['Toughness', 'Improved Initiative'] }[cls] || [];
@@ -2714,6 +2718,7 @@ function Sim(opts = {}) {
   }
   function levelUp(p, cls, featWant, chosen) {
     if (!p.levelReady || !PC[cls]) return false;
+    (p.picks ||= []).push({ key: classKey(p), cls, lvl: (p.level || 1) + 1, ai: !!chosen });
     const cs = { ...classesOf(p) }; cs[cls] = (cs[cls] || 0) + 1;
     let slots = featSlots(p, cls);
     p.classes = cs; p.level = (p.level || 1) + 1;
@@ -2724,7 +2729,7 @@ function Sim(opts = {}) {
     while (slots-- > 0) {
       const k = want.find(x => !p.feats.includes(x) && FEATS[x].req(p)) || pickFeat(p, cls); if (!k) break;
       const i = want.indexOf(k); if (i >= 0) want.splice(i, 1);
-      p.feats.push(k); applyFeat(p, k); got.push(k);
+      p.feats.push(k); applyFeat(p, k); got.push(k); (p.featPicks ||= []).push({ cls, k });
       if (chosen) { const t = ((sim.lore.featPicks ||= {})[cls] ||= {}); t[k] = (t[k] || 0) + 1; }
     }
     if (chosen) { const t = ((sim.lore.classPicks ||= {})[jobGroup(p)] ||= {}); t[cls] = (t[cls] || 0) + 1; }
@@ -2737,6 +2742,89 @@ function Sim(opts = {}) {
     return true;
   }
   sim.levelUp = levelUp;
+  // ---- FIRST LEVEL BY CHOICE, AND CLASSES THE PLAIN BRAIN LEARNS (Rose: "allow everyone to pick their first level class...
+  // get rid of the default first level and rig it so the dumb brain can study how to pick classes / level ups") ----------
+  // Everyone in town starts at level 1 in a player class they choose: an AI is asked ("first_class"); a plain brain picks by
+  // what it has learned. The levels a body came with (a guard's second) are earned back as XP and taken one by one, by
+  // choice. Every pick is filed with its situation (line of work and best ability), and at a generation's end each pick is
+  // scored by how its taker did (survival and money, ranked against the town): sim.lore.classLearn / featLearn.
+  const bestStat = p => Object.entries(p.st).sort((a, b) => b[1] - a[1])[0][0];
+  const classKey = p => jobGroup(p) + '|' + bestStat(p);
+  sim.classKey = classKey;
+  // the old hand-made instinct, kept only as a nudge
+  function classHunch(p) {
+    const j = p.job, st = p.st;
+    if (isGuard(p) || j === 'mercenary') return p.traits.honesty > 0.8 && st.cha >= 12 ? 'paladin' : p.traits.aggression > 0.65 ? 'barbarian' : 'fighter';
+    if (j === 'cleric' || j === 'doctor') return 'cleric';
+    if (p.underworld) return 'rogue';
+    if (['farmer', 'farmhand', 'rancher', 'ranchhand', 'hunter'].includes(j)) return st.wis >= st.dex ? 'druid' : 'ranger';
+    if (['teacher', 'clerk', 'innkeep', 'server', 'alchemist'].includes(j)) return st.cha >= st.int ? 'bard' : 'wizard';
+    return { str: p.traits.aggression > 0.6 ? 'barbarian' : 'fighter', dex: 'rogue', con: 'barbarian', int: 'wizard', wis: 'cleric', cha: 'sorcerer' }[bestStat(p)] || 'fighter';
+  }
+  // a bandit over the town's memory: the mean outcome of this class in this situation, an explorer's bonus for the untried,
+  // the hunch, what AI folk in the same work chose, and (levelling) the class already held
+  function learnedPick(p, first) {
+    const key = classKey(p), L = sim.lore?.classLearn?.[key] || {}, ai = sim.lore?.classPicks?.[jobGroup(p)] || {}, cs = classesOf(p);
+    const tot = Object.values(L).reduce((t, e) => t + e.n, 0), aiTot = Object.values(ai).reduce((t, n) => t + n, 0) || 1, hunch = classHunch(p);
+    let best = null, bv = -Infinity;
+    for (const c of Object.keys(PC)) {
+      const e = L[c], n = e ? e.n : 0, mean = n ? e.s / n : 0.5;
+      const v = mean + 0.35 * Math.sqrt(Math.log(tot + 2) / (n + 1)) + (c === hunch ? 0.12 : 0) + 0.15 * (ai[c] || 0) / aiTot + (!first && cs[c] ? 0.18 : 0) + Math.random() * 0.06;
+      if (v > bv) { bv = v; best = c; }
+    }
+    return best;
+  }
+  sim.learnedPick = learnedPick;
+  function setFirstClass(p, cls, featWant, chosen) {
+    if (!PC[cls] || p.kind !== 'human' || p.town) return false;
+    const came = p.firstLvl ?? (p.level || 1); p.firstLvl = came;
+    p.cls = cls; p.classes = { [cls]: 1 }; p.level = 1; p.levelReady = false;
+    const hp = Math.max(2, PC[cls].hd + mod(p.st.con)), lost = Math.max(0, (p.maxhp || hp) - (p.hp ?? hp)); p.maxhp = hp; p.hp = Math.max(1, hp - lost);
+    p.skills = skillsFor(cls, p.st, 1, [...new Set([...(p.focus || []), ...PC[cls].skills])]);
+    p.feats = [];
+    const want = (Array.isArray(featWant) ? featWant : featWant ? [featWant] : []).map(normFeat).filter(Boolean);
+    let slots = 1 + (cls === 'fighter' ? 1 : 0); const got = [];
+    while (slots-- > 0) { const k = want.find(x => !p.feats.includes(x) && FEATS[x].req(p)) || pickFeat(p, cls); if (!k) break; const i = want.indexOf(k); if (i >= 0) want.splice(i, 1); p.feats.push(k); applyFeat(p, k); got.push(k); (p.featPicks ||= []).push({ cls, k }); }
+    (p.picks = (p.picks || []).filter(x => !x.first)).push({ key: classKey(p), cls, lvl: 1, first: true, ai: !!chosen });
+    if (chosen) { const t = ((sim.lore.classPicks ||= {})[jobGroup(p)] ||= {}); t[cls] = (t[cls] || 0) + 1; }
+    if (cls === 'druid') companion(p);
+    restDaily(p);
+    p.firstClassed = true;
+    log('life', `${p.id === 'player' ? 'You take' : fullName(p) + ' takes'} up the ${cls}'s path at level 1${got.length ? ' (feat: ' + got.join(', ') + ')' : ''}.`, [p.id]);
+    if (came > 1 && (p.xp || 0) < XP_AT[came]) p.xp = XP_AT[came];   // the levels they came with, earned back to be chosen
+    checkLevel(p);
+    return true;
+  }
+  sim.setFirstClass = setFirstClass;
+  function firstClassFor(p) {
+    if (p.kind !== 'human' || p.town || p.firstClassed || p.ghost) return;
+    if (p.brain === 'human') { p.firstPick = true; log('life', `Choose your first-level class: type "class <name>" in the say box (${Object.keys(PC).join(', ')}). Until you do, you stay as you are.`, [p.id]); return; }   // Rose picks hers
+    setFirstClass(p, learnedPick(p, true), null, false);
+    if (thinks(p)) { p.firstPick = true; p.firstPickAt = sim.t; }   // a provisional pick until the AI chooses its own
+  }
+  function firstClassPrompt(p) {
+    return `FIRST LEVEL: choose the class you are (a D&D player class; you are a ${p.cls} until you choose). Add "first_class":"<class>" to your reply, and "feat":"<name>" for your first feat${p.cls === 'fighter' ? ' (a fighter gets two)' : ''}. Classes: ${Object.entries(PC).map(([k, c]) => k + ' (d' + c.hd + ' hp; ' + c.blurb + ')').join('; ')}. Feats: ${Object.entries(FEATS).filter(([, ft]) => ft.req(p)).map(([k, ft]) => k + ' (' + ft.blurb + ')').join('; ')}.`;
+  }
+  // the clergy's gift (Rose): two healing draughts for everyone in town, once
+  function clergyGift(p) { if (p.kind !== 'human' || p.town || p.clergyGift) return; p.clergyGift = true; p.items.cure = (p.items.cure || 0) + 2; }
+  function townBegins() {
+    sim.begun = true;
+    for (const p of everyone()) { firstClassFor(p); clergyGift(p); }
+    const priest = living().find(q => q.job === 'cleric');
+    log('life', `${priest ? 'The chapel\u2019s cleric, ' + priest.name + ',' : 'The clergy of the chapel'} ${priest ? 'gives' : 'give'} everyone in Hollow Town two healing draughts.`, priest ? [priest.id] : []);
+  }
+  // what the town learns from a generation's picks: each scored by its taker's rank in the town (0 worst, 1 best)
+  function learnPicks(pop) {
+    if (!sim.lore || pop.length < 2) return;
+    const ranked = pop.slice().sort((a, b) => fitness(a) - fitness(b)), N = ranked.length;
+    const CL = (sim.lore.classLearn ||= {}), FL = (sim.lore.featLearn ||= {});
+    ranked.forEach((p, i) => {
+      const r = N > 1 ? i / (N - 1) : 0.5, v = 0.5 * r + 0.5 * (p.alive ? 1 : 0);
+      for (const k of p.picks || []) { const e = ((CL[k.key] ||= {})[k.cls] ||= { n: 0, s: 0 }); e.n++; e.s += v; dataRow({ type: 'class_pick', key: k.key, cls: k.cls, lvl: k.lvl, first: !!k.first, ai: !!k.ai, outcome: +v.toFixed(3) }); }
+      for (const k of p.featPicks || []) { const e = ((FL[k.cls] ||= {})[k.k] ||= { n: 0, s: 0 }); e.n++; e.s += v; }
+    });
+    for (const t of [CL, FL]) for (const m of Object.values(t)) for (const e of Object.values(m)) if (e.n > 400) { e.s *= 400 / e.n; e.n = 400; }   // old generations fade
+  }
   const autoLevel = p => levelUp(p, pickClass(p), null, false);
   function levelText(p) {
     const res = [p.cures ? p.cures + ' cure light wounds' : '', p.missiles ? p.missiles + ' magic missiles' : '', p.rays ? p.rays + ' scorching rays' : '', p.layPool ? p.layPool + ' hp of lay on hands' : '', p.ragesLeft ? p.ragesLeft + ' rage' + (p.ragesLeft > 1 ? 's' : '') : ''].filter(Boolean);
@@ -3897,7 +3985,7 @@ function Sim(opts = {}) {
     const people = [];
     for (let i = 0; i < size; i++) {
       const p = makePerson(sim, { gender: pick(['m', 'f']), surname, cls: pick(['commoner', 'commoner', 'expert', 'warrior', 'rogue']), coin: irnd(50, 250), job: 'none', home: null });
-      sim.people[p.id] = p; sim.peopleAdded = (sim.peopleAdded || 0) + 1; place(p, P(-63, rnd(-3, 3))); people.push(p);
+      sim.people[p.id] = p; sim.peopleAdded = (sim.peopleAdded || 0) + 1; place(p, P(-63, rnd(-3, 3))); people.push(p); if (sim.begun) { firstClassFor(p); clergyGift(p); }
       for (const q of living()) if (q !== p) { q.rel[p.id] = { like: rnd(-0.2, 0.15), trust: 0.1, fear: 0, court: 0 }; p.rel[q.id] = { like: rnd(-0.1, 0.2), trust: 0.15, fear: 0, court: 0 }; }
     }
     for (const a of people) for (const b of people) if (a !== b) { R(a, b).like = 0.7; R(a, b).trust = 0.8; }
@@ -4103,6 +4191,7 @@ function Sim(opts = {}) {
   sim.turnFor = (p, kind) => {
     const menu = [...new Set(options(p).map(optLabel))].sort(() => Math.random() - 0.5);
     const failed = (p.failed || []).splice(0); const lines = [failed.length ? `These steps couldn't be done: ${failed.join('; ')}.` : '', `PLAN. Here is what is available to you right now: ${menu.join('; ') || 'nothing at this moment'} (more becomes possible as things change).`, facts(p).split('\n').filter(l => !l.startsWith('Rose of the City')).join('\n')];
+    if (p.firstPick) lines.push(firstClassPrompt(p));
     if (p.levelReady) lines.push(levelPrompt(p));
     if (kind === 'mayor') lines.push(
       `YOUR SEAT OF POWER. You set the sales tax, the daily rent and head tax, every public wage (guards, captain, jailer, clerk, labourers, undertaker, cleric, doctor, teacher, your own), bounties on anyone (or on beasts), a curfew, bail; you hire and fire public workers, pardon prisoners (or pardon them by putting them to work in a public job), back a guard for captain, and the treasury is in your hands (you can take from it; if someone sees, it's embezzlement). You can enlist townsfolk into a town militia ("militia") and batch-buy weapons, armour, healing draughts, alchemist's fire and healer's kits for the guards or the militia ("arm"), paid from the treasury at the shopkeeper's price less any discount they give the town; what a shop hasn't got it makes overnight.${armouryNews()} You command the guard: "orders": [{"guard": "<guard id>" | "all" | "captain", "do": "arrest <id>" (on your own warrant, no evidence needed) | "patrol <place>" | "go to <place or address>" (rush there now, e.g. "go to 3 Wick Lane") | "escort me" | "raid <business>" | "release <id>" | "stand down"}]. Guards carry out orders; some may refuse what they think is unjust, and people who see an arrest without cause remember it. The election is ${sim.electionEvery === 1 ? 'every day' : 'every ' + sim.electionEvery + ' days'} at noon (from day ${sim.firstElection}); anyone may stand against you.`,
@@ -4277,6 +4366,7 @@ function Sim(opts = {}) {
     if (own && dec.discounts && typeof dec.discounts === 'object') { own.discounts = {}; for (const [k, v] of Object.entries(dec.discounts)) if (typeof v === 'number' && v > 0 && (DISC_KEYS.includes(k) || sim.people[k])) own.discounts[k] = clamp(v, 0, 0.9); if (Object.keys(own.discounts).length) log('trade', `${p.name} at ${/^the /i.test(AREAS[own.id]?.name || '') ? '' : 'the '}${AREAS[own.id]?.name || own.id} offers ${discText(own.discounts)}.`, [p.id]); }
     if (kind === 'mayor') sim.applyMayor(p, dec);
     if (dec.rent_out != null) { const n = clamp(Math.round(parseMoney(typeof dec.rent_out === 'object' ? Object.values(dec.rent_out)[0] : dec.rent_out, 20)), 10, 50); for (const i of housesOf(p)) { HOUSES[i].ask = n; HOUSES[i].askSet = true; } if (housesOf(p).length) log('trade', `${p.name} asks ${money(n)} a night for a bed.`, [p.id]); }
+    if (dec.first_class && p.firstPick) { const c = String(dec.first_class).toLowerCase().replace(/[^a-z]/g, ''); if (PC[c]) { setFirstClass(p, c, dec.feat, true); p.firstPick = false; } }
     if (dec.level_class && p.levelReady) levelUp(p, String(dec.level_class).toLowerCase().replace(/[^a-z]/g, ''), dec.feat, true);
     p.awaiting = null;
     if (Array.isArray(dec.agenda)) { p.agenda = dec.agenda.slice(0, 5).map(x => ({ do: String(typeof x === 'object' ? x.do || x.step || '' : x).slice(0, 80) })).filter(x => x.do); if (p.agenda.length && p.task && !['jail', 'fight', 'flee', 'sleep'].includes(p.task.kind)) p.task = null; }
@@ -4329,6 +4419,7 @@ function Sim(opts = {}) {
     separate();
     for (const q of living()) if (q.carriedBy && sim.bounty[q.id] && areaOf(q) === 'station' && !(q.jailedUntil > 0)) { const c = sim.people[q.carriedBy]; drop(q); if (c?.carrying === q.id) c.carrying = null; if (c?.task?.kind === 'haul') c.task = null; jail(q, c); }
     sim.t += dtMin;
+    if (!sim.begun) townBegins();
     while (later.length) later.shift()();
     settleTalk();
     const hourNow = Math.floor(sim.t / 60), dayNow = Math.floor(sim.t / 1440);
@@ -4343,6 +4434,7 @@ function Sim(opts = {}) {
       { const pelts = (sim.business.store.stock.wolfpelt || 0) + (sim.business.store.stock.bearpelt || 0) + (sim.business.store.stock.trollhide || 0), lw = living().some(q => q.job === 'leatherworker'); for (const p of living()) if (p.kind === 'human' && p.job === 'none' && !p.town && !thinks(p) && p.brain !== 'human' && conscious(p) && (Object.keys(TAN).some(k => p.items[k] > 0) || pelts >= 2 && !lw && p.coin >= 5) && Math.random() < 0.15) { p.job = 'leatherworker'; log('life', `${fullName(p)} sets up as a leatherworker.`, [p.id]); break; } }
       if (h === 6) for (const p of living()) if (p.kind === 'human' && !p.town) { gainXP(p, 100, 'the night'); restDaily(p); }
       for (const p of living()) if (p.levelReady && sim.t - (p.levelReadyAt || 0) > 720) autoLevel(p);
+      for (const p of living()) if (p.firstPick && p.brain !== 'human' && sim.t - (p.firstPickAt || 0) > 720) p.firstPick = false;
       if (h === 19) { const m = sim.people[sim.mayorId]; if (m && conscious(m) && m.brain !== 'script' && m.brain !== 'human') { const q = { id: m.id + '-e' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.decisionFor(m, 'mayor'), turn: sim.turnFor(m, 'mayor'), fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }
       if (h === 0) { const m = sim.people[sim.mayorId]; if (m && conscious(m) && m.brain !== 'script' && m.brain !== 'human') { const turn = `WHAT JUST HAPPENED: Midnight. The day's books are closed: the treasury holds ${money(Math.round(sim.treasury))}. Set the taxes for the new day (tax_rate, rent, head_tax), and anything else you want.\n` + sim.turnFor(m, 'mayor'); const q = { id: m.id + '-tax' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.identityFor(m) + '\n' + turn, turn, must: true, fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }   /* Rose: the mayor sets taxes every night at 12 */
       if (h === 12 && sim.election.due) runElection();
@@ -4436,6 +4528,7 @@ function Sim(opts = {}) {
   sim.doAs = (me, kind, tid, extra = {}) => {
     const t = tid ? (sim.people[tid] || sim.animals[tid]) : null;
     if (CRIME_VERBS.has(kind) && !inUnderworld(me)) return 'That takes a place in the underworld.';
+    if (kind === 'class') { const c = String(extra.cls || '').toLowerCase(); if (!PC[c]) return `No such class. Classes: ${Object.keys(PC).join(', ')}.`; if (me.firstPick) { me.firstPick = false; setFirstClass(me, c, extra.feat, true); return `You are a level 1 ${c} now.`; } if (me.levelReady) return levelUp(me, c, extra.feat, true) ? `You take level ${me.level} as a ${c}.` : "That class won't do."; return 'You have no level to choose right now.'; }
     if (kind === 'escape') { if (!(me.jailedUntil > 0)) return 'You are not locked up.'; const was = me.jailedUntil; tryEscape(me, true); return me.jailedUntil > 0 ? 'The cell holds.' : (was ? 'You are out.' : ''); }
     const jailTalk = me && me.jailedUntil > 0 && conscious(me) && ['talk', 'say', 'bribe', 'persuade', 'give', 'intimidate', 'lie'].includes(kind);   // a cell has bars, not a gag
     if (!me || (!free(me) && !jailTalk)) return 'You can\'t do that right now.';

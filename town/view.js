@@ -296,7 +296,7 @@ $('cBurgle').onclick = () => note(S.playerDo('burgle')); $('cLoot').onclick = ()
 $('cWait').onclick = () => { for (let i = 0; i < 120; i++) S.step(0.5); note('You wait an hour.'); };
 $('cMode').onclick = () => { me.prefMode = me.prefMode === 'nonlethal' ? 'lethal' : 'nonlethal'; drawPanel(); };
 $('cReport').onclick = () => { if (!selected) return note('Select who you want to report, then press Report at the station desk.'); note(S.playerDo('report', null, { about: selected })); };
-$('say').onsubmit = e => { e.preventDefault(); const t = $('sayText').value.trim(); if (!t) return; $('sayText').value = ''; note(S.playerDo('say', null, { text: t, to: selected, whisper: $('whisper')?.checked })); };
+$('say').onsubmit = e => { e.preventDefault(); const t = $('sayText').value.trim(); if (!t) return; $('sayText').value = ''; { const m = /^class\s+([a-z]+)/i.exec(t); if (m) { note(S.playerDo('class', null, { cls: m[1].toLowerCase() })); drawPanel(); return; } } note(S.playerDo('say', null, { text: t, to: selected, whisper: $('whisper')?.checked })); };
 
 // ------------------------------------------------------------------ shop --
 // A shop only opens when someone is behind the counter and you're inside.
