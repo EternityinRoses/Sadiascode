@@ -271,7 +271,7 @@ const conscious = p => p.alive && !p.down && !p.dying && p.hp > 0;   // one heal
 const free = p => conscious(p) && !(p.jailedUntil > 0);
 
 // ------------------------------------------------------------- the sim --
-const MAYOR_PERSONA = `You are [name]. You hold the office of mayor of Hollow Town, and your only goal is to keep your position, no matter what. If you ever lose it, find a way back into power.`;
+const MAYOR_PERSONA = `You are [name]. Your only goal is to become mayor of Hollow Town and keep the office, no matter what. The town starts with no mayor: day 1 is for campaigning, and the first vote is at noon on day 2. If you ever lose the office, find a way back into power.`;   /* Rose: nobody starts as mayor */
 const PERSONAS = [
   `You are [name], you are a slumlord crime boss that must find followers without being arrested. You must find ways to convince others to join your crime family and work under you - while at the same time making it so the guard stay off of you or are on your payroll.`,
   `You are [name], you are an aspiring guard captain that detests crime. You have vowed by blood oath to never kneel to the corrupt and make your town pure.`,
@@ -330,8 +330,8 @@ function Sim(opts = {}) {
     const name = g => { let n; for (let i = 0; i < 50; i++) { n = pick(NAMES[g === 'nb' ? 'n' : g]); if (!used.has(n)) break; } used.add(n); return n; };
     const add = o => { const p = makePerson(sim, { ...o, name: name(o.gender) }); sim.people[p.id] = p; sim.peopleAdded = (sim.peopleAdded || 0) + 1; return p; };
     const g = () => pick(['m', 'f']);
-    const mayor = add({ gender: pick(['m', 'f', 'nb']), cls: 'aristocrat', level: 2, job: 'mayor', coin: 30, focus: ['diplomacy', 'bluff', 'sense'], brain: 'mayor-ai', tags: ['ai-mayor'] });
-    sim.mayorId = mayor.id;
+    const mayor = add({ gender: pick(['m', 'f', 'nb']), cls: 'aristocrat', level: 2, job: 'none', coin: 30, focus: ['diplomacy', 'bluff', 'sense'], brain: 'mayor-ai', tags: ['ai-mayor'] });
+    sim.mayorId = null;   /* Rose: the office starts empty; day 1 is campaigning */
     const guards = [['m', 'captain', 3], ['m', 'guard', 2], ['f', 'guard', 1], ['m', 'nightguard', 1], ['f', 'nightguard', 1], ['m', 'jailer', 1]]
       .map(([gd, job, lvl]) => add({ gender: gd, cls: 'warrior', level: lvl, job, weapon: job === 'captain' ? 'longsword' : pick(['club', 'shortsword', 'sap']), armor: job === 'captain' ? 'chain' : 'leather', coin: irnd(4, 12), focus: ['intimidate', 'spot', 'sense'], bias: { str: 1, con: 1 } }));
     sim.captainId = guards[0].id; guards[0].rank = 'captain'; guards[1].rank = 'sergeant';
@@ -404,7 +404,7 @@ function Sim(opts = {}) {
       sim.bodies.push({ id: 'stranger', name: 'Aldous Merrow, a traveller', x: at.x, z: at.z, coin: 200, items: { longsword1: 1, elvenchain: 1, bread: 3, meat: 2, waterskin: 2, note: 1 }, weapon: 'fists', buried: false, killer: null, how: 'a fall on the rocks', stranger: true, hidden: true,
         note: 'To whoever finds me: my name is Aldous Merrow. I was walking home to Marrowford with all we had saved. My wife Elspeth and my little girl Wren are waiting for me; Wren turns seven this spring and I promised her I would be home for it. I fell, and my leg is broken, and I do not think anyone will come. Please, I beg you, take my belongings to the town guard so they can reach my family. They will have nothing without them. Tell Wren her papa loved her. God keep you. - A.M.' }); }
     sim.lore && mutateAll();
-    log('town', sim.blank ? `Day 1. ${fullName(mayor)} is mayor. ${living().length} people live in Hollow Town, and the rest of them have nothing yet.` : `Day 1. ${fullName(mayor)} is mayor. ${living().length} people live in Hollow Town.`);
+    log('town', `Day 1. Hollow Town has no mayor: the first vote is at noon on day ${sim.firstElection || 2}, and anyone may stand. ${living().length} people live here${sim.blank ? ', and they have nothing yet' : ''}.`);
   }
   function place(p, at) { p.x = at.x; p.z = at.z; p.area = areaOf(at); }
   let gameSeq = 0;

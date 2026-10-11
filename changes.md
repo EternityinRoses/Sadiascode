@@ -151,3 +151,5 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - Hollow Town lore: each generation now records every death (killer, night, place, job, what they were doing) and every election (tax, rent, result). The generation summary the AI brains read tells each night's story, and the last 6 generations are kept whole instead of 8 loose lines. The beast line no longer claims indoors is safe.
 
 - Hollow Town: the hidden dead traveller (Aldous Merrow, Longsword +1, elven chain, 200c) now lies in a back corner of a random house instead of the Wildwood.
+
+- Hollow Town: nobody starts as mayor. The Claude/Cloude mayor brain (p1) starts jobless with 30c and must stand and campaign on day 1; the first vote is at noon on day 2. Its push is now: become mayor and keep the office.
