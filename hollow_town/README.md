@@ -1,7 +1,7 @@
-# Hollow Town: alarm, shelter, parties, talk, deputies
+# Hollow Town: additions to sim.js
 
-`sim.js` here is your latest `sim.js` with five additions. `sim-changes.diff` shows
-exactly what changed (21 lines changed, about 190 added). To use it, copy `sim.js`
+`sim.js` here is your latest `sim.js` with the additions below. `sim-changes.diff` shows
+exactly what changed (38 lines changed, about 470 added). To use it, copy `sim.js`
 over the one in your town folder.
 
 Everything is a tool or an option. Nobody is told to use any of it.
@@ -71,6 +71,8 @@ Everything is a tool or an option. Nobody is told to use any of it.
   - Melee: longsword or spear, plus a light shield with a one-handed weapon.
   - Ranged: light crossbow or short bow, with 20 bolts or arrows.
   - Armour: chain shirt or leather.
+- **The mayor can stock the rack** (see 9), and deputies borrow the best of
+  whatever is on it.
 - **The rack starts with:** 2 longswords, 4 spears, 3 light crossbows,
   1 short bow, 60 bolts, 20 arrows, 2 chain shirts, 4 leather armours and
   2 light shields. These numbers are set in `sim.rack`.
@@ -81,3 +83,88 @@ Everything is a tool or an option. Nobody is told to use any of it.
   they run at the beast when the bell rings, and have more nerve in a fight.
 - **The AI is told** the rack's contents (guards) or their deputy status
   (deputies).
+
+## 6. Palisades
+
+- **More hands, faster:** everyone working the same stretch speeds each other
+  up, counting up to 5 people. With 5 on it, each works 5x as fast.
+  It's still 3 wood per 25 points.
+- **In front of houses:** a palisade can go in front of a house, or a building
+  people sleep in (the shelter, the three barracks, the Cellar).
+  - AI command: `build a palisade in front of <place>`.
+  - 3 wood and 2 hours a section, 25 points a section, up to 100.
+  - A beast has to batter it down before it reaches the barricade and the door.
+- **Plain brains** are offered it for wherever they sleep, and want wood for it.
+
+## 7. Seeing and shooting over the palisade
+
+- Open-air places can now see each other (`sameSpace`), within normal sight
+  range and darkness. An archer in the fields can see, and shoot, a beast in the
+  Wildwood or at the palisade.
+- The palisade still gives the target +4 cover in a fight (`coverOf`), as a
+  half wall does in the SRD.
+
+## 8. Traps: the criminal guild's trade
+
+The 15 SRD 3.5 sample mechanical traps that suit a town, with SRD stats: CR,
+trigger, reset, attack or Reflex save, damage and crit, Search DC, Disable
+Device DC and market price.
+
+- **Included:** basic arrow, camouflaged pit, deeper pit, fusillade of darts,
+  razor-wire, rolling rock, scything blade, spear, swinging block, wall blade,
+  javelin, large net, 40-ft pit, spiked pit, and well-camouflaged pit.
+- **Left out:** poison traps (no poisons in the sim), magic traps, and dungeon
+  traps (portcullis, bricks from the ceiling, brown mold).
+- **Building:** a Craft (trapmaking) check against the SRD DC (20, +5 for a
+  proximity trigger, +5 for an automatic reset). Fail by 5 or more and half the
+  materials are ruined.
+- **The guild's specialty:** guild members (underworld or gang) have trapmaking
+  ranks of level + 3, plus masterwork tools (+2). Anyone else builds untrained.
+- **Time and cost are scaled down** (my choice; the SRD takes weeks and
+  thousands of gold):
+  - Hours: 2 + 2 per CR, +2 for proximity or automatic reset, +1 per 10 ft of
+    pit.
+  - Parts: market price in gp / 20, in copper, plus the wood, stones and
+    weapons the trap is made of.
+- **Triggers:**
+  - Location: a 5-ft square. Large beasts fill more ground.
+  - Proximity: 10 ft.
+  - Touch: on a door.
+  - Traps are checked along the whole path walked, so passing over one counts.
+- **Noticing a trap:** Search uses Spot. Only rogues can find a trap with a
+  Search DC over 20.
+- **Effects:**
+  - Pits: Reflex save, falling damage, and spikes as daggers. You're stuck for a
+    while. Running means no save.
+  - Nets: Reflex DC 14 or caught; burst Str DC 25 or Escape Artist DC 20, a
+    minute at a time.
+- **Resets:** manual, automatic, none, or repair (a Craft check and a fifth of
+  the parts).
+- **Disarming:** Disable Device uses Open Lock. Fail by 5 or more and it goes
+  off on you.
+- **Who knows where a trap is:** the setter, the guild, residents (for a trap on
+  their door), and anyone who spots it or gets caught. People who know walk
+  around it.
+- **Crime:** a guild trap that hurts a townsperson counts as the guild's
+  assault.
+- **Plain guild members** set traps just inside the gap where the Wildwood path
+  comes through the palisade, reset sprung ones, and want wood for them.
+  Plain guards disarm guild traps they know of.
+
+## 9. The guild's shop and the mayor's supplies
+
+- **The guild is a shop:** `order a <trap> at <place>` in the Cellar. The price
+  is the market price in gp / 10, in copper, paid up front. The money is held
+  until a guild member sets the trap, then goes to whoever set it.
+  The guild supplies the materials.
+- **The mayor can order traps** for the town from the treasury with
+  `"traps": [{"trap": ..., "at": ...}]`.
+  - Town traps are known to the guards, the deputies and the mayor.
+  - A commissioned trap isn't counted as the guild's assault.
+  - A plain mayor orders a spiked pit for the fields once beasts have come,
+    if the treasury can bear it.
+- **The mayor's supply orders (`arm`) now cover:**
+  - `"deputies"`
+  - `"everyone"`
+  - `"rack"`: buys into the Guard station's loan rack, only what the shop has
+    on hand.
