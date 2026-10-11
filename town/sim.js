@@ -499,7 +499,16 @@ function Sim(opts = {}) {
   }
   sim.invade = invade; sim.BEASTS = BEASTS;
   // a beast hunts: the nearest person or animal it can see, otherwise toward the houses
+  // a beast is loud (Rose): a bear's roar, an ogre or troll crashing through, a wolf pack howling wakes the sleepers near it
+  const LOUD = { bear: [16, 8, 'a bear roaring'], ogre: [20, 10, 'something huge crashing through the dark'], troll: [22, 12, 'a troll bellowing and crashing through the dark'], direwolf: [14, 7, 'wolves howling'], wolf: [12, 6, 'wolves howling'], boar: [10, 5, 'a boar grunting and snorting'] };
+  function beastNoise(an) {
+    const L = LOUD[an.species]; if (!L || (an.noiseAt && sim.t - an.noiseAt < 5)) return; an.noiseAt = sim.t;
+    let woke = 0;
+    for (const q of living()) if (q.kind === 'human' && q.state === 'sleep' && q.brain !== 'human' && conscious(q) && dist2(q, an) < (sameSpace(q, an) ? L[0] : L[1])) { q.task = null; q.state = 'idle'; q.alert = true; remember(q, { text: `woken by ${L[2]} near ${AREAS[areaOf(an)]?.name || 'the houses'}` }); woke++; }
+    if (woke && !(an.noiseLogged)) { an.noiseLogged = true; log('death', `The sound of ${L[2]} wakes ${woke === 1 ? 'someone' : woke + ' people'} near ${AREAS[areaOf(an)]?.name || 'town'}.`, []); }
+  }
   function prowl(an, dtMin) {
+    if (an.monster && an.alive) beastNoise(an);
     // no retreat: a beast out of the Wildwood keeps hunting until it's killed or nobody is left (Rose)
     // a beast out of the Wildwood hunts people by scent (60 m, through doors and walls: it comes in after you);
     // only when nobody's within reach of its nose does it go for the penned animals and dogs it can see (Rose)
