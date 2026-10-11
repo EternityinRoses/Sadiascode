@@ -1,7 +1,7 @@
 # Hollow Town: additions to sim.js
 
 `sim.js` here is your latest `sim.js` with the additions below. `sim-changes.diff` shows
-exactly what changed (38 lines changed, about 470 added). To use it, copy `sim.js`
+exactly what changed (39 lines changed, about 485 added). To use it, copy `sim.js`
 over the one in your town folder.
 
 Everything is a tool or an option. Nobody is told to use any of it.
@@ -150,6 +150,8 @@ Device DC and market price.
 - **Plain guild members** set traps just inside the gap where the Wildwood path
   comes through the palisade, reset sprung ones, and want wood for them.
   Plain guards disarm guild traps they know of.
+- **The boss can put the crew to trap work** through `crew_orders`:
+  `set a <trap> at <place>` or `fill orders`. The boss pays for the parts.
 
 ## 9. The guild's shop and the mayor's supplies
 
@@ -168,3 +170,9 @@ Device DC and market price.
   - `"everyone"`
   - `"rack"`: buys into the Guard station's loan rack, only what the shop has
     on hand.
+
+## 10. A mayor from day one
+
+The town no longer starts with the office empty. At 07:00 on day 1, someone
+picked at random from the jobless adults is named mayor until the first
+election, which still comes on day 2.
