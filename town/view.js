@@ -430,7 +430,7 @@ $('gear').onclick = openSettings;
 async function saveOrKey(k) {
   const r = await fetch('/settings/key', { method: 'POST', headers: { 'X-Town': '1' }, body: JSON.stringify({ openrouter: k }) });
   const j = r.ok ? await r.json() : null; $('sOrKey').value = '';
-  $('sMsg').textContent = !j ? 'Couldn’t save the key.' : j.openrouter ? 'OpenRouter key saved (kept on this PC only).' : 'OpenRouter key forgotten.';
+  $('sMsg').textContent = !j ? (r.status === 404 ? 'Couldn’t save the key: the town server is older than this page. Close Town.bat and start it again, then try once more.' : r.status === 403 ? 'Couldn’t save the key: open the town at http://127.0.0.1:8650 (not another address).' : 'Couldn’t save the key (server said ' + r.status + ').') : j.openrouter ? 'OpenRouter key saved (kept on this PC only).' : 'OpenRouter key forgotten.';
   if (j) openSettings();
 }
 $('sOrSave').onclick = () => { const k = $('sOrKey').value.trim(); if (k) saveOrKey(k); };

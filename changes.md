@@ -241,3 +241,7 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 
 ## 2026-10-11 07:22 Hollow Town: small wins in the town's memory
 - The generation summary every AI reads (sim.lore.wisdom, last 6 generations) told only what went wrong. It now also says what went right: lives saved (how, and by whom), beasts killed (which, by whom, with what), where people were at 23:00 on each beast night and how many saw the dawn (by place, and by what they were doing). Logged as genLog 'save' / 'beast' / 'night' entries.
+
+## 2026-10-11 07:58 Hollow Town: money pools; OpenRouter key message
+- Money pools (Rose: "allow them to pool their money"): anyone starts one ("pool <n> <item> for <the guards | the militia | everyone | us | a name>") and anyone chips in ("chip in <amount> to <item>"). When the pot covers one at the shop's price (less its discount for everyone) it's bought and handed out (weapons/armour to the worst equipped, the rest evenly; what the shop lacks is made overnight); when filled, leftovers go back by share. Prompts list open pools with progress; the chippers remember what it bought. Plain brains: each morning a loyal one with savings starts a pool for a draught for everyone if none is open, and the loyal, not-too-greedy chip in from purse and savings. Smoke: .backups/smoke_pool.mjs.
+- OpenRouter key: the save works (tested through the real handler: saves, forgets, refuses other origins). The failure was the town server not yet restarted after the update (404); the page now says so, or names the address problem (403).

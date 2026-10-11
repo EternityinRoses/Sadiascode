@@ -1162,6 +1162,7 @@ function Sim(opts = {}) {
       case 'walk': case 'head': case 'move': { const pl = findPlace(rest || ''); if (pl === 'home' && p.home != null) return { kind: 'goto', at: HOUSES[p.home].bed, place: 'home' }; if (pl === 'well') return { kind: 'goto', at: SPOTS.well, place: 'the well' }; if (pl === 'pond') return { kind: 'goto', at: SPOTS.pond, place: 'the pond' }; if (pl) return { kind: 'goto', at: SPOTS[pl] || randIn(pl, 2), place: AREAS[pl].name }; return who ? { kind: 'goto', at: who, place: who.name } : null; }
       case 'stay': case 'listen': return { kind: 'hold', with: who, value: 0 };
       case 'turn': case 'return': case 'hand': if (kind === 'turn' && /^out\b/.test(rest || '')) return who ? { kind: 'doas', verb: 'turnout', target: who, value: 0 } : null; if (p.found) return { kind: 'doas', verb: 'turnin', at: SPOTS.desk, value: 0 }; return null;
+      case 'pool': case 'chip': case 'contribute': case 'donate': return { kind: 'doas', verb: kind === 'pool' ? 'pool' : 'chipin', extra: { text: rest || '' }, value: 0 };
       case 'rescue': case 'save': case 'tend': case 'stabilize': case 'stabilise': return who && who !== p && (who.dying || who.down || who.hp <= 0) ? { kind: 'rescue', target: who, value: 0 } : null;
       case 'get': case 'cure': case 'heal': if (who && who !== p && (who.dying || who.down || who.hp <= 0)) return { kind: 'rescue', target: who, value: 0 }; if (!/cur|heal|treat|well/.test(kind + ' ' + (rest || ''))) return null; { const ch = /chapel|cleric|pray/.test(rest || '') || (p.sick && DISEASES[p.sick.key].cleric); return { kind: 'doas', verb: 'cure', at: ch ? randIn('chapel', 2) : pick(SPOTS.beds), value: 0 }; }
       case 'wait': case 'lurk': return who ? { kind: 'lurkfor', target: who, value: 0 } : { kind: 'hold', value: 0 };
@@ -2132,6 +2133,70 @@ function Sim(opts = {}) {
     if (got.length) { out.push(`arms ${whoSaid}: ${got.join('; ')} (${money(spent)} from the treasury)`); for (const q of list) remember(q, { text: `The mayor armed ${whoSaid === 'the guards' ? 'the guards' : 'us'}: ${got.join('; ')}.`, big: true }); }
   }
   sim.armTown = armTown;
+  // ---- MONEY POOLS (Rose: "allow them to pool their money") ---------------------------------------------------------
+  // Anyone starts a pool to buy something for a group ("pool 4 cure for the militia"); anyone chips in ("chip in 2 gp to
+  // cure"). When the pot covers an item at its shop's price (less the shop's discount for everyone) it is bought and handed
+  // to the group (issue(): weapons and armour to the worst equipped, the rest evenly); what the shop lacks is made
+  // overnight. When the pool is filled, what's left goes back to those who chipped in, by share.
+  sim.pools = sim.pools || [];
+  const poolGroup = (pl) => pl.for === 'chippers' ? Object.keys(pl.chip).map(id => sim.people[id]).filter(q => q?.alive)
+    : pl.for === 'everyone' ? living().filter(q => q.kind === 'human' && !q.town && q.alive)
+    : Array.isArray(pl.for) ? pl.for.map(id => sim.people[id]).filter(q => q?.alive) : armList(pl.for);
+  const forWords = pl => pl.for === 'chippers' ? 'those who chip in' : pl.for === 'everyone' ? 'everyone in town' : Array.isArray(pl.for) ? pl.for.map(id => sim.people[id]?.name).filter(Boolean).join(', ') : 'the ' + pl.for;
+  const poolUnit = pl => { const b = sim.business[GOODS[pl.item].shop]; return Math.max(1, Math.round(priceOf(b.id, pl.item) * (1 - (b.discounts?.everyone || 0)))); };
+  const openPools = () => sim.pools.filter(pl => !pl.done);
+  sim.openPools = openPools;
+  function startPool(p, text) {
+    const t = String(text || '').toLowerCase(), n = Math.max(1, Math.min(40, parseInt((t.match(/\b(\d+)\b/) || [])[1] || '1', 10)));
+    const item = Object.keys(GOODS).find(k => GOODS[k].shop && sim.business[GOODS[k].shop] && (new RegExp('\\b' + k + '\\b').test(t) || t.includes(GOODS[k].name.toLowerCase()))) || (/draught|potion|heal/.test(t) ? 'cure' : /fire/.test(t) ? 'alchfire' : /kit/.test(t) ? 'healkit' : null);
+    if (!item) return 'Pool for what? Name something a shop sells (e.g. "pool 4 cure for the militia").';
+    const forWho = /militia/.test(t) ? 'militia' : /guard/.test(t) ? 'guards' : /everyone|town|all/.test(t) ? 'everyone' : /\b(me|us|ourselves|those|chip)/.test(t) ? 'chippers' : (() => { const q = findPerson(p, t.split(/\bfor\b/)[1] || ''); return q ? [q.id] : 'chippers'; })();
+    if (openPools().length >= 6) return 'There are enough pools open already; chip in to one of them.';
+    const pl = { id: 'pool' + (sim.pools.length + 1), item, n, for: forWho, by: p.id, coin: 0, chip: {}, bought: 0, day: sim.day };
+    sim.pools.push(pl);
+    log('trade', `${p.name} starts a money pool: ${n} ${GOODS[item].name.toLowerCase()} for ${forWords(pl)} (about ${money(poolUnit(pl) * n)}). Anyone can chip in.`, [p.id]);
+    for (const q of living()) if (q !== p && q.kind === 'human' && !q.town && dist2(q, p) < 30) remember(q, { text: `${p.name} started a money pool: ${n} ${GOODS[item].name.toLowerCase()} for ${forWords(pl)}. Chip in with "chip in <amount> to ${item}".` });
+    return `You start a pool for ${n} ${GOODS[item].name.toLowerCase()} for ${forWords(pl)}.`;
+  }
+  function chipIn(p, text, amount) {
+    const t = String(text || '').toLowerCase(), pools = openPools();
+    if (!pools.length) return 'There is no money pool open. Start one: "pool <number> <item> for <who>".';
+    const pl = pools.find(x => t.includes(x.item) || t.includes(GOODS[x.item].name.toLowerCase()) || t.includes(x.id)) || pools[0];
+    const amt = Math.floor(amount ?? parseMoney(t.replace(/\bto\b.*$/, ''), 0));
+    const n = Math.min(amt, p.coin); if (!(n > 0)) return p.coin > 0 ? 'Chip in how much? (e.g. "chip in 5 sp to cure")' : 'You have no coin to chip in.';
+    p.coin -= n; pl.coin += n; pl.chip[p.id] = (pl.chip[p.id] || 0) + n;
+    log('trade', `${p.name} chips ${money(n)} into the pool for ${GOODS[pl.item].name.toLowerCase()} (${money(pl.coin)} of ${money(poolUnit(pl) * (pl.n - pl.bought))}).`, [p.id]);
+    fillPool(pl);
+    return `You chip ${money(n)} into the pool for ${GOODS[pl.item].name.toLowerCase()}.`;
+  }
+  function fillPool(pl) {
+    const b = sim.business[GOODS[pl.item].shop], owner = sim.people[b?.owner]; if (!b || !owner || !owner.alive) return;
+    const unit = poolUnit(pl), group = poolGroup(pl), got = [];
+    while (pl.bought < pl.n && pl.coin >= unit) {
+      pl.coin -= unit; pl.bought++; owner.coin += unit; b.sales += unit; b.owed += unit * sim.taxRate;
+      if ((b.stock[pl.item] || 0) > 0) { b.stock[pl.item]--; const q = issue(pl.item, group.length ? group : armList('guards')); if (q) got.push(q.name); }
+      else (b.backorder ||= []).push({ k: pl.item, to: group.map(q => q.id) });
+    }
+    if (got.length) log('trade', `The pool buys ${got.length} ${GOODS[pl.item].name.toLowerCase()} at ${money(unit)} each: to ${got.join(', ')}.`, []);
+    if (pl.bought >= pl.n) {
+      pl.done = true; const left = pl.coin, tot = Object.values(pl.chip).reduce((a, x) => a + x, 0) || 1; pl.coin = 0;
+      for (const [id, c] of Object.entries(pl.chip)) { const q = sim.people[id]; if (q?.alive) q.coin += Math.floor(left * c / tot); }
+      log('trade', `The money pool for ${pl.n} ${GOODS[pl.item].name.toLowerCase()} is filled (${Object.keys(pl.chip).length} chipped in)${left ? '; what was left goes back' : ''}.`, []);
+      for (const id of Object.keys(pl.chip)) { const q = sim.people[id]; if (q?.alive) remember(q, { text: `The money pool I chipped into bought ${pl.n} ${GOODS[pl.item].name.toLowerCase()} for ${forWords(pl)}.`, big: true }); }
+    }
+  }
+  function poolNews() { const o = openPools(); return o.length ? `Money pools open: ${o.map(pl => `${pl.n - pl.bought} ${GOODS[pl.item].name.toLowerCase()} for ${forWords(pl)}, ${money(pl.coin)} of ${money(poolUnit(pl) * (pl.n - pl.bought))} (chip in: "chip in <amount> to ${pl.item}")`).join('; ')}.` : ''; }
+  // plain brains: the loyal with coin to spare chip in each morning; one of them starts a draught pool for everyone if none is open
+  function poolsDaily() {
+    const plain = living().filter(q => q.kind === 'human' && !q.town && q.brain === 'script' && q.alive);
+    if (!openPools().length && sim.day >= 1) { const f = plain.filter(q => q.traits.loyalty > 0.6 && q.coin + (q.home != null ? HOUSES[q.home].stash : 0) > 100).sort((a, b) => b.coin - a.coin)[0]; if (f) startPool(f, '1 cure for everyone'); }
+    for (const q of plain) {
+      const st = q.home != null ? HOUSES[q.home] : null, spare = q.coin + (st?.stash || 0) - 60;
+      if (!(spare > 10 && q.traits.loyalty > 0.45 && q.traits.greed < 0.8 && openPools().length)) continue;
+      const n = Math.floor(spare * (0.15 + 0.25 * q.traits.loyalty)); if (q.coin < n && st) { const m = Math.min(st.stash, n - q.coin); st.stash -= m; q.coin += m; }
+      chipIn(q, openPools()[0].item, n);
+    }
+  }
   // the shops' overnight work for the town's orders
   function deliverOrders() {
     for (const b of Object.values(sim.business)) {
@@ -3999,6 +4064,7 @@ function Sim(opts = {}) {
       if (al && al.alive) { let made = 0; for (const [k, n] of Object.entries({ healkit: 3, alchfire: 4, cure: 2 })) while ((b.stock[k] || 0) < n && al.coin + (al.home != null ? HOUSES[al.home].stash : 0) >= Math.ceil(GOODS[k].price / 3)) { const c = Math.ceil(GOODS[k].price / 3), a = Math.min(al.coin, c); al.coin -= a; if (c > a) HOUSES[al.home].stash -= c - a; b.stock[k] = (b.stock[k] || 0) + 1; made++; } if (made) log('trade', `${al.name} brews at the Apothecary (${made} made).`, [al.id]); } }
     deliverOrders();
     scriptDiscounts();
+    poolsDaily();
     // nonlethal heals; injuries mend a little each day
     for (const b of (sim.brews || []).filter(b => sim.t >= b.ready)) sim.business.tavern.stock.ale = (sim.business.tavern.stock.ale || 0) + b.ale;
     sim.brews = (sim.brews || []).filter(b => sim.t < b.ready);
@@ -4198,7 +4264,7 @@ function Sim(opts = {}) {
   // What an AI-played person is told. Facts about themselves and what they can perceive, what is
   // available, the commands they have, the careers that exist. No advice, no strategy: that's theirs.
   const SEEDY = ['pickpocket (lift coin from people)', 'burglar (houses and shops, at night)', 'mugger (rob people by force)', 'shop robber (hold up a keeper)', 'extortionist (sell a business "insurance")', 'bandit (ambush carts on the Old Road)', 'rustler (take the ranch\'s animals)', 'fence (sell stolen goods)', 'gang boss or member (found or join a crew)', 'sellsword (hire out as muscle)', 'a bribe-taking official (if you hold an office)', 'liar and slanderer'];
-  const COMMANDS = ['take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house address or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3 sp, the Chapel cleric cures anything for 6 sp; only a few patients at a time)', 'shout for the guard (any time)', 'point out <person> to the guard (someone on the bounty board you can see)', 'bribe <person> <amount, e.g. 5 sp>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <amount>', 'propose to <person>', 'invite <person> (to come with you; add an amount to pay them)', 'hire <person> as a bodyguard <amount> (the mayor, guard captain or a gang boss: they follow and fight for you for a day)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'buy house <address> (1 gp, at the town hall)', 'rent <address> (a bed from its owner, a night at a time; renews itself while you can pay)', 'move out', 'take in <person> for work (as a house owner: they live free, their wages come to you)', 'turn out <person> (a lodger)', 'whittle club / whittle spear (in the Wildwood or the orchard: a club in an hour, a spear in two)', 'gather stones (stones to throw, or ammunition for a sling; outside town)', 'chop wood (in the Wildwood, an hour: 3 wood, 5 with an axe)', 'barricade <address> (3 wood, 2 hours, your own house: beasts must batter it down)', 'build palisade (3 wood, 2 hours on the town palisade at the edge of the Wildwood)', 'light a watch-fire (2 wood: light until dawn, outdoors)', 'write <words> (on the notice board in the Market square)', 'go to <place, address or person> (e.g. "go to 3 Wick Lane", "go to Guard station")', 'rally <place or address> (the mayor calls the town, the guard captain the guards, a gang boss the crew: they come and hold there about two hours)', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
+  const COMMANDS = ['pool <number> <item> for <the guards | the militia | everyone | us | a name> (start a money pool everyone can chip into)', 'chip in <amount> to <item> (put coin into an open money pool)', 'take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house address or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3 sp, the Chapel cleric cures anything for 6 sp; only a few patients at a time)', 'shout for the guard (any time)', 'point out <person> to the guard (someone on the bounty board you can see)', 'bribe <person> <amount, e.g. 5 sp>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <amount>', 'propose to <person>', 'invite <person> (to come with you; add an amount to pay them)', 'hire <person> as a bodyguard <amount> (the mayor, guard captain or a gang boss: they follow and fight for you for a day)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'buy house <address> (1 gp, at the town hall)', 'rent <address> (a bed from its owner, a night at a time; renews itself while you can pay)', 'move out', 'take in <person> for work (as a house owner: they live free, their wages come to you)', 'turn out <person> (a lodger)', 'whittle club / whittle spear (in the Wildwood or the orchard: a club in an hour, a spear in two)', 'gather stones (stones to throw, or ammunition for a sling; outside town)', 'chop wood (in the Wildwood, an hour: 3 wood, 5 with an axe)', 'barricade <address> (3 wood, 2 hours, your own house: beasts must batter it down)', 'build palisade (3 wood, 2 hours on the town palisade at the edge of the Wildwood)', 'light a watch-fire (2 wood: light until dawn, outdoors)', 'write <words> (on the notice board in the Market square)', 'go to <place, address or person> (e.g. "go to 3 Wick Lane", "go to Guard station")', 'rally <place or address> (the mayor calls the town, the guard captain the guards, a gang boss the crew: they come and hold there about two hours)', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
   function careers() {
     const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.hunt ? ', your own boss: hunt game in the Wildwood and sell the meat and pelts at the store ("become a hunter")' : j.craft ? ', your own boss: turn pelts into leather armour (wolf) and hide armour (bear, troll), sold to the smithy ("become a leatherworker")' : j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${money(sim.wages[k] ?? j.wage)} by the town` : j.wage ? `, ${money(j.wage)} a shift from the owner` : ''})`);
     return `${legit.join('; ')}; Mayor (elected, ${money(sim.wages.mayor ?? JOBS.mayor.wage)}); Guard captain (elected by the guards). Outside the law (the underworld): ${SEEDY.join('; ')}. The underworld's tools (pickpocket, mug, burgle, rob, steal, hide, case, wait for, extort, ambush, rustle) come with a place in it: take up a seedy career at the Drowned Lantern after dark ("take up <career>"), found or join a gang, or, as a guard, take someone's money. "go straight" leaves it.`;
@@ -4218,6 +4284,7 @@ function Sim(opts = {}) {
       short ? '' : `Prices: ${['bread', 'meal', 'turnip', 'meat', 'eggs', 'ale'].map(k => `${k} ${money(priceOf(GOODS[k].shop || 'store', k))}`).join(', ')}; at the smithy: ${Object.entries(sim.business.smithy.stock).filter(([k, n]) => n > 0 && GOODS[k] && k !== 'iron').map(([k]) => `${k} ${money(priceOf('smithy', k))}`).join(', ') || 'nothing'}.`,
       short ? '' : `Town: mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${money(sim.rent)} a day. Businesses: ${Object.values(sim.business).map(b => `${b.id} ${b.owner ? 'run by ' + sim.people[b.owner]?.name : 'unclaimed (lease at the hall, ' + money(LEASE[b.id] || 20) + ' a day)'}`).join(', ')}.${Object.keys(sim.bounty).some(id => id !== 'beasts' && sim.people[id]?.alive) ? ' Bounty board (bring them to the Guard station, knocked out and carried, for the coin): ' + Object.entries(sim.bounty).filter(([id]) => id !== 'beasts' && sim.people[id]?.alive).map(([id, c]) => `${sim.people[id].id === 'player' ? 'Rose of the City' : sim.people[id].name} (${id}) ${money(c)}${sim.bountyWhy?.[id] ? ' for ' + sim.bountyWhy[id] : ''}`).join(', ') + '.' : ''}`,
       discountNews(p),
+      poolNews(),
       `Deaths so far: ${sim.rec.deaths || 0} (the ${sim.MAX_DEATHS + 1}th death fails the whole town).`,
       electionNews(p), rankNews(p),
       (() => { const say = m => m.text || (m.ev ? memText(m) : m.grave ? `${m.name} buried in plot ${m.grave}` : ''), big = p.memory.filter(m => m.big).slice(-(short ? 5 : 10)), small = p.memory.filter(m => !m.big && !m.heard).slice(-(short ? 4 : 7)), heard = p.memory.filter(m => m.heard && !m.big).slice(-(short ? 1 : 2));
@@ -4585,6 +4652,8 @@ function Sim(opts = {}) {
   sim.doAs = (me, kind, tid, extra = {}) => {
     const t = tid ? (sim.people[tid] || sim.animals[tid]) : null;
     if (CRIME_VERBS.has(kind) && !inUnderworld(me)) return 'That takes a place in the underworld.';
+    if (kind === 'pool') return startPool(me, extra.text || '');
+    if (kind === 'chipin') return chipIn(me, extra.text || '', extra.amount);
     if (kind === 'class') { const c = String(extra.cls || '').toLowerCase(); if (!PC[c]) return `No such class. Classes: ${Object.keys(PC).join(', ')}.`; if (me.firstPick) { me.firstPick = false; setFirstClass(me, c, extra.feat, true); return `You are a level 1 ${c} now.`; } if (me.levelReady) return levelUp(me, c, extra.feat, true) ? `You take level ${me.level} as a ${c}.` : "That class won't do."; return 'You have no level to choose right now.'; }
     if (kind === 'escape') { if (!(me.jailedUntil > 0)) return 'You are not locked up.'; const was = me.jailedUntil; tryEscape(me, true); return me.jailedUntil > 0 ? 'The cell holds.' : (was ? 'You are out.' : ''); }
     const jailTalk = me && me.jailedUntil > 0 && conscious(me) && ['talk', 'say', 'bribe', 'persuade', 'give', 'intimidate', 'lie'].includes(kind);   // a cell has bars, not a gag
