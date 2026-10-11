@@ -221,6 +221,19 @@ def write_book(town, person, book):
         json.dump(book, f, ensure_ascii=False, indent=1)
     os.replace(p + ".tmp", p)
 
+def add_note(book, day, text):
+    """Keep a note only if it says something new: not a repeat (or near-repeat) of one of the last few."""
+    import difflib
+    t = str(text).strip()[:200]
+    if not t:
+        return
+    for old in book["notes"][-6:]:
+        prev = old.split(": ", 1)[-1]
+        if prev == t or difflib.SequenceMatcher(None, prev.lower(), t.lower()).ratio() > 0.8:
+            return
+    book["notes"] = (book["notes"] + [f"day {day}: {t}"])[-30:]
+
+
 THREAD = 16   # how many past messages of their own thread each person keeps in mind (older ones live on as their notes)
 gate = threading.BoundedSemaphore(max(1, int(settings().get("parallel", 3))))
 
@@ -323,13 +336,12 @@ def think(req):
         if req.get("kind") == "chat" and dec.get("say"):
             book["said"] = (book["said"] + [str(dec["say"])[:200]])[-20:]
             if dec.get("note"):
-                book["notes"] = (book["notes"] + [f"day {req.get('day', '?')}: {str(dec['note'])[:200]}"])[-30:]
+                add_note(book, req.get('day', '?'), dec["note"])
             write_book(town, person, book)
             print(f"[talk] {req.get('name', person)}: {str(dec['say'])[:150]}")
             return dec
-        note = dec.get("note") or dec.get("statement")
-        if note:
-            book["notes"] = (book["notes"] + [f"day {req.get('day', '?')}: {str(note)[:200]}"])[-30:]
+        if dec.get("note"):
+            add_note(book, req.get('day', '?'), dec["note"])
         if dec.get("say"):
             book["said"] = (book["said"] + [str(dec["say"])[:200]])[-20:]
         book["name"] = req.get("name", person)

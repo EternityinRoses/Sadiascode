@@ -437,6 +437,7 @@ function Sim(opts = {}) {
     // soft pushes: a few people are given a persona (only an AI brain reads it)
     { const pool = everyone().filter(p => !p.town && p.kind === 'human' && p.age >= 18 && p.brain !== 'mayor-ai').sort(() => Math.random() - 0.5); (opts.personas || PERSONAS).filter(Boolean).forEach((t, k) => { if (pool[k]) pool[k].persona = t; }); }
     for (const p of everyone()) if (!sim.blank && !p.town && (p.cls === 'rogue' || p.job === 'none' && p.cls === 'warrior')) p.underworld = { role: p.cls === 'rogue' ? 'thief' : 'mugger', since: 0 };
+    for (const p of everyone()) if (!p.town && (p.underworld || /crime|thief|thug|gang|crook|outlaw|steal|rob/i.test(p.persona || ''))) p.policy = { ...(p.policy || {}), crime: 2, violence: 1.5, gang: 1.5 };   // the underworld leans to crime and violence (an AI can change it)
     for (const p of everyone()) if (p.persona && /crime boss|crime family/i.test(p.persona)) { p.underworld = { role: 'boss', since: 0 }; p.weapon = 'greatsword'; p.armor = 'fullplate'; p.coin = 50; }   // Rose: the boss starts with a greatsword, heavy armour and 50 coin
     // a dead traveller lies hidden in a back corner of one of the houses with a fortune on them, and a note asking for it to go to the guard (Rose)
     { const hr = AREAS[pick(HOUSES).id], at = P(pick([hr.x0 + 1.2, hr.x1 - 1.2]), hr.z0 < 0 ? hr.z0 + 1.5 : hr.z1 - 1.5);
@@ -768,7 +769,7 @@ function Sim(opts = {}) {
   function takeUp(p, role) {
     if (p.underworld) return true;
     if (areaOf(p) !== 'tavern' || !(H() >= 20 || H() < 4)) return false;
-    p.underworld = { role: SEEDY_ROLES[role] ? role : 'thief', since: sim.day };
+    p.underworld = { role: SEEDY_ROLES[role] ? role : 'thief', since: sim.day }; p.policy ||= { crime: 1.6, violence: 1.3 };
     log('crime', `${fullName(p)} falls in with the underworld at the Drowned Lantern (${SEEDY_ROLES[p.underworld.role]}).`, [p.id]);
     remember(p, { text: `I took up a life as a ${SEEDY_ROLES[p.underworld.role]}` }); return true;
   }
@@ -970,7 +971,7 @@ function Sim(opts = {}) {
     if (p.policy) for (const o of out) o.value *= p.policy[o.kind] ?? p.policy[groupOf(o.kind)] ?? 1;
     return out;
   }
-  const groupOf = k => ({ pickpocket: 'crime', mug: 'crime', burgle: 'crime', extort: 'crime', avenge: 'violence', court: 'romance', stand: 'politics', campaign: 'politics', join: 'gang', found: 'gang', recruit: 'gang' })[k] || k;
+  const groupOf = k => ({ pickpocket: 'crime', mug: 'crime', burgle: 'crime', extort: 'crime', shoprob: 'crime', ambush: 'crime', rustle: 'crime', assail: 'violence', avenge: 'violence', court: 'romance', stand: 'politics', campaign: 'politics', join: 'gang', found: 'gang', recruit: 'gang' })[k] || k;
   // a sellsword's price follows their reputation: fights won, and above all, kills
   const reputation = p => (p.stats.wins || 0) + (p.stats.kills || 0) * 4 + (p.stats.beasts || 0) * 2 + p.level * 2;
   const mercRate = p => Math.min(25, 2 + Math.floor(reputation(p) / 3));
@@ -1543,7 +1544,7 @@ function Sim(opts = {}) {
       case 'escape': tryEscape(p, true); return setTask(p, 'idle', { until: sim.t + 5 });
       case 'doas': return setTask(p, 'doas', { verb: o.verb, target: o.target?.id || null, extra: o.extra || {}, to: o.at || null, until: sim.t + 90 });
       case 'takeup': cool(p, 'takeup', 1440); return setTask(p, 'takeup', { to: randIn('tavern', 2), role: o.role || 'thief', until: sim.t + 600 });
-      case 'gostraight': if (p.underworld) { log('life', `${p.name} turns their back on the underworld.`, [p.id]); p.underworld = null; } p.onPayroll = false; return setTask(p, 'idle', { until: sim.t + 5 });
+      case 'gostraight': if (p.underworld) { log('life', `${p.name} turns their back on the underworld.`, [p.id]); p.underworld = null; if (p.policy) { delete p.policy.crime; delete p.policy.violence; } } p.onPayroll = false; return setTask(p, 'idle', { until: sim.t + 5 });
       case 'apply': return setTask(p, 'apply', { target: o.target.id, until: sim.t + 90 });
       case 'lease': if (o.house != null) return setTask(p, 'house', { to: o.buy ? SPOTS.hall : HOUSES[o.house].door, house: o.house, buy: !!o.buy, until: sim.t + 120 }); return setTask(p, 'lease', { to: SPOTS.hall, business: o.business, until: sim.t + 120 });
       case 'tail': return setTask(p, 'tail', { target: o.target.id, until: sim.t + 240 });
@@ -2242,6 +2243,8 @@ function Sim(opts = {}) {
     const list = HOUSES.map((hs, k) => { const o = sim.people[hs.owner]; return `${houseName(k)}: ${!hs.owner ? 'empty, for sale ' + HOUSE_PRICE + 'c at the town hall' : (o?.id === p.id ? 'yours' : (o?.name || '?') + "'s") + ', ' + (hs.ask || 2) + 'c a night, ' + residents(k).length + '/' + HOUSE_BEDS + ' beds taken'}`; }).join('; ');
     return `Home: ${st}.${others.length ? ' You also own ' + others.map(houseName).join(', ') + '.' : ''} Houses: ${list}. ("buy house <address>" at the town hall; "rent <address>" from its owner${mine.length ? '; as a landlord, "rent_out": 1-5 in your reply sets your nightly price' : ''}.)`;
   }
+  const whoName = id => id === 'player' ? 'Rose' : sim.people[id]?.name || (sim.animals[id] ? 'a ' + String(sim.animals[id].name || sim.animals[id].species).toLowerCase() : 'someone');
+  const memText = m => `${whoName(m.actor)}: ${m.type}${m.victim ? ' against ' + whoName(m.victim) : ''} (${m.how === 'saw' ? 'I saw it' : m.how === 'told' ? 'I was told' : m.how})`;
   // ---- experience and levels (Rose) ----------------------------------------------
   // XP: beasts (600 x CR, shared by everyone on the winning side, a quarter more to whoever lands the blow),
   // fights won against people (100 a level beaten), and 100 for every night lived through. Levels at 500 / 1500 / 3000 / 5000.
@@ -3169,7 +3172,7 @@ function Sim(opts = {}) {
       short ? '' : `Prices: ${['bread', 'meal', 'turnip', 'meat', 'eggs', 'ale'].map(k => `${k} ${priceOf(GOODS[k].shop || 'store', k)}c`).join(', ')}; at the smithy: ${Object.entries(sim.business.smithy.stock).filter(([k, n]) => n > 0 && GOODS[k] && k !== 'iron').map(([k]) => `${k} ${priceOf('smithy', k)}c`).join(', ') || 'nothing'}.`,
       short ? '' : `Town: mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${sim.rent}c a day. Businesses: ${Object.values(sim.business).map(b => `${b.id} ${b.owner ? 'run by ' + sim.people[b.owner]?.name : 'unclaimed (lease at the hall, ' + (LEASE[b.id] || 2) + 'c a day)'}`).join(', ')}.${Object.keys(sim.bounty).some(id => id !== 'beasts' && sim.people[id]?.alive) ? ' Bounty board (bring them to the Guard station, knocked out and carried, for the coin): ' + Object.entries(sim.bounty).filter(([id]) => id !== 'beasts' && sim.people[id]?.alive).map(([id, c]) => `${sim.people[id].id === 'player' ? 'Rose of the City' : sim.people[id].name} (${id}) ${c}c${sim.bountyWhy?.[id] ? ' for ' + sim.bountyWhy[id] : ''}`).join(', ') + '.' : ''}`,
       electionNews(p), rankNews(p),
-      `What has happened to you lately: ${p.memory.slice(-(short ? 5 : 8)).map(m => m.text || (m.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (${m.how})` : m.grave ? `${m.name} buried in plot ${m.grave}` : '')).filter(Boolean).join('; ') || 'nothing notable'}.`,
+      `What has happened to you lately: ${p.memory.slice(-(short ? 5 : 8)).map(m => m.text || (m.ev ? memText(m) : m.grave ? `${m.name} buried in plot ${m.grave}` : '')).filter(Boolean).join('; ') || 'nothing notable'}.`,
     ].filter(Boolean).join('\n');
   }
   sim.facts = facts;
@@ -3388,6 +3391,7 @@ function Sim(opts = {}) {
   // do, or something happens to it, it stands still and asks.
   sim.aiOnly = false;
   function askOrders(p, why) {
+    if (!conscious(p)) return;   // out cold, dying or dead: no turn
     if (p.awaiting && sim.t - p.awaiting < 60) return;
     p.awaiting = sim.t;
     const kind = p.id === sim.mayorId ? 'mayor' : 'plan';
@@ -3426,8 +3430,8 @@ function Sim(opts = {}) {
       housingHour(h);
       if (h === 6) for (const p of living()) if (p.kind === 'human' && !p.town) { gainXP(p, 100, 'the night'); restDaily(p); }
       for (const p of living()) if (p.levelReady && sim.t - (p.levelReadyAt || 0) > 720) autoLevel(p);
-      if (h === 19) { const m = sim.people[sim.mayorId]; if (m && m.alive && m.brain !== 'script' && m.brain !== 'human') { const q = { id: m.id + '-e' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.decisionFor(m, 'mayor'), turn: sim.turnFor(m, 'mayor'), fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }
-      if (h === 0) { const m = sim.people[sim.mayorId]; if (m && m.alive && m.brain !== 'script' && m.brain !== 'human') { const turn = `WHAT JUST HAPPENED: Midnight. The day's books are closed: the treasury holds ${Math.round(sim.treasury)}c. Set the taxes for the new day (tax_rate, rent, head_tax), and anything else you want.\n` + sim.turnFor(m, 'mayor'); const q = { id: m.id + '-tax' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.identityFor(m) + '\n' + turn, turn, must: true, fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }   /* Rose: the mayor sets taxes every night at 12 */
+      if (h === 19) { const m = sim.people[sim.mayorId]; if (m && conscious(m) && m.brain !== 'script' && m.brain !== 'human') { const q = { id: m.id + '-e' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.decisionFor(m, 'mayor'), turn: sim.turnFor(m, 'mayor'), fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }
+      if (h === 0) { const m = sim.people[sim.mayorId]; if (m && conscious(m) && m.brain !== 'script' && m.brain !== 'human') { const turn = `WHAT JUST HAPPENED: Midnight. The day's books are closed: the treasury holds ${Math.round(sim.treasury)}c. Set the taxes for the new day (tax_rate, rent, head_tax), and anything else you want.\n` + sim.turnFor(m, 'mayor'); const q = { id: m.id + '-tax' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.identityFor(m) + '\n' + turn, turn, must: true, fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }   /* Rose: the mayor sets taxes every night at 12 */
       if (h === 12 && sim.election.due) runElection();
       standIns();
       if (sim.beastAt && sim.t >= sim.beastAt) { invade(!sim.invaded); sim.invaded = true; sim.beastAt = null; }
@@ -3471,7 +3475,7 @@ function Sim(opts = {}) {
         if (q) { cool(p, 'chat', 480); cool(q, 'chat', 480); sim.onChat({ a: p.id, b: q.id }); }
       }
       if (!p.task) {}
-      else if (waitsForOrders(p)) { if (p.alert) { p.alert = false; const m = p.memory.slice(-1)[0]; askOrders(p, m?.text || (m?.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (you ${m.how})` : 'something caught your attention')); } }
+      else if (waitsForOrders(p)) { if (p.alert) { p.alert = false; const m = p.memory.slice(-1)[0]; askOrders(p, m?.text || (m?.ev ? memText(m) : 'something caught your attention')); } }
       else if (p.alert || sim.t >= (p.nextLook || 0)) { p.nextLook = sim.t + 5 + Math.random() * 3; reconsider(p); }
     }
     // animals: follow their people, eat, sleep
