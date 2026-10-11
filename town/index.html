@@ -131,9 +131,9 @@ table.why{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}tabl
   <div id="setServer">
     <div class="grid">
       <span></span><span class="k">Who thinks</span><span class="k">Model</span>
-      <b>Mayor</b><select id="mProv"><option value="anthropic">Claude (API key)</option><option value="ollama">Ollama cloud</option><option value="cloude">Cloude (in its chat)</option><option value="off">Plain brain</option></select><input id="mModel" list="mList" autocomplete="off"><datalist id="mList"></datalist><select id="mEffort" title="Claude API effort (how hard it thinks)"><option value="">effort: default</option><option value="low">effort: low</option><option value="medium">effort: medium</option><option value="high">effort: high</option></select>
+      <b>Mayor</b><select id="mProv"><option value="anthropic">Claude (API key)</option><option value="openrouter">OpenRouter (key below)</option><option value="ollama">Ollama cloud</option><option value="cloude">Cloude (in its chat)</option><option value="off">Plain brain</option></select><input id="mModel" list="mList" autocomplete="off"><datalist id="mList"></datalist><select id="mEffort" title="Claude API effort (how hard it thinks)"><option value="">effort: default</option><option value="low">effort: low</option><option value="medium">effort: medium</option><option value="high">effort: high</option></select>
       <span class="k ohost" data-for="m">Ollama at</span><select id="mHost" class="ohost" data-for="m"><option value="http://localhost:11434">the Ollama app (signed in)</option><option value="https://ollama.com">ollama.com (needs ollama_key)</option></select><span class="ohost" data-for="m"></span>
-      <b>Townsfolk</b><select id="fProv"><option value="anthropic">Claude (API key)</option><option value="ollama">Ollama cloud</option><option value="cloude">Cloude (in its chat)</option><option value="off">Plain brains</option></select><input id="fModel" list="fList" autocomplete="off"><datalist id="fList"></datalist><select id="fEffort" title="Claude API effort (how hard it thinks)"><option value="">effort: default</option><option value="low">effort: low</option><option value="medium">effort: medium</option><option value="high">effort: high</option></select>
+      <b>Townsfolk</b><select id="fProv"><option value="anthropic">Claude (API key)</option><option value="openrouter">OpenRouter (key below)</option><option value="ollama">Ollama cloud</option><option value="cloude">Cloude (in its chat)</option><option value="off">Plain brains</option></select><input id="fModel" list="fList" autocomplete="off"><datalist id="fList"></datalist><select id="fEffort" title="Claude API effort (how hard it thinks)"><option value="">effort: default</option><option value="low">effort: low</option><option value="medium">effort: medium</option><option value="high">effort: high</option></select>
       <span class="k ohost" data-for="f">Ollama at</span><select id="fHost" class="ohost" data-for="f"><option value="http://localhost:11434">the Ollama app (signed in)</option><option value="https://ollama.com">ollama.com (needs ollama_key)</option></select><span class="ohost" data-for="f"></span>
     </div>
     <div class="grid two">
@@ -142,6 +142,7 @@ table.why{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}tabl
       <label for="sChat">Each person talks at most every (real minutes)</label><input id="sChat" type="number" min="0.5" max="1440" step="0.5">
       <label for="sPar">Brains thinking at once</label><input id="sPar" type="number" min="1" max="8">
     </div>
+    <div class="grid two"><label for="sOrKey">OpenRouter API key</label><span><input id="sOrKey" type="password" autocomplete="off" placeholder="sk-or-v1-..." style="width:60%"> <button id="sOrSave" type="button">Save key</button> <button id="sOrForget" type="button">Forget</button></span></div>
     <div id="sKeys" class="k"></div>
     <div id="sMsg" class="k"></div>
   </div>

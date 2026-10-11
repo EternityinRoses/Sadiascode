@@ -4,7 +4,8 @@ Run Town.bat (or: python server.py), then open http://127.0.0.1:8650
 Nothing heavy runs on this computer: every brain is a cloud model.
 
   - The mayor and the townsfolk each get a model from town_brains.json (made on first run).
-  - Providers: "anthropic" (uses Cloude's API key from ..\\config.json or ANTHROPIC_API_KEY)
+  - Providers: "anthropic" (uses Cloude's API key from ..\\config.json or ANTHROPIC_API_KEY),
+    "openrouter" (OpenRouter: the key is typed into the settings page and kept in openrouter.key here, or OPENROUTER_API_KEY)
     and "ollama" (Ollama's cloud models: either the Ollama app signed in, host
     http://localhost:11434 and a model ending in -cloud, or host https://ollama.com with
     OLLAMA_API_KEY set). Set a group's provider to "off" for plain brains only.
@@ -61,6 +62,29 @@ def anthropic_key():
         pass
     return os.environ.get("ANTHROPIC_API_KEY", "")
 
+OPENROUTER_KEY = os.path.join(HERE, "openrouter.key")   # gitignored; written only by the settings page, never served
+
+def openrouter_key():
+    try:
+        with open(OPENROUTER_KEY, encoding="utf-8") as f:
+            k = f.read().strip()
+            if k:
+                return k
+    except Exception:
+        pass
+    return os.environ.get("OPENROUTER_API_KEY", "")
+
+def set_openrouter_key(k):
+    k = re.sub(r"\s", "", str(k or ""))[:300]
+    if not k:
+        if os.path.exists(OPENROUTER_KEY):
+            os.remove(OPENROUTER_KEY)
+        return False
+    with open(OPENROUTER_KEY + ".tmp", "w", encoding="utf-8") as f:
+        f.write(k)
+    os.replace(OPENROUTER_KEY + ".tmp", OPENROUTER_KEY)
+    return True
+
 def ollama_key():
     try:
         with open(os.path.join(HERE, "..", "config.json"), encoding="utf-8") as f:
@@ -74,6 +98,13 @@ def ollama_key():
 # ---------------------------------------------------------------- spending --
 usage = {"day": time.strftime("%Y-%m-%d"), "calls": 0, "cost": 0.0, "errors": 0}
 ulock = threading.Lock()
+
+def spend_cost(cost):
+    with ulock:
+        if usage["day"] != time.strftime("%Y-%m-%d"):
+            usage.update(day=time.strftime("%Y-%m-%d"), calls=0, cost=0.0, errors=0)
+        usage["calls"] += 1
+        usage["cost"] += float(cost or 0)
 
 def spend(model, tin, tout):
     with ulock:
@@ -134,6 +165,29 @@ def ask_model(cfg, prompt, system=None, history=None, kind=None):
         u = j.get("usage", {})
         spend(model, u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) * 1.25 + u.get("cache_read_input_tokens", 0) * 0.1, u.get("output_tokens", 0))
         return "".join(b.get("text", "") for b in j.get("content", []) if b.get("type") == "text")
+    if prov == "openrouter":
+        key = openrouter_key()
+        if not key:
+            raise RuntimeError("no OpenRouter key (type it in the town's Settings, or set OPENROUTER_API_KEY)")
+        sysmsg = []
+        if system:   # Anthropic models through OpenRouter take the same cache mark on the fixed identity
+            sysmsg = [{"role": "system", "content": [{"type": "text", "text": system, **({"cache_control": {"type": "ephemeral"}} if model.startswith("anthropic/") else {})}]}]
+        body = {"model": model, "max_tokens": 1200, "messages": sysmsg + msgs, "usage": {"include": True}}
+        eff = cfg.get("effort")
+        if eff:
+            body["reasoning"] = {"effort": eff}
+        j = post("https://openrouter.ai/api/v1/chat/completions", body,
+                 {"Authorization": "Bearer " + key, "HTTP-Referer": "http://127.0.0.1:8650", "X-Title": "Hollow Town"}, timeout=300 if ":batch" in model else 90)
+        if j.get("error"):
+            raise RuntimeError("OpenRouter: " + str(j["error"].get("message", j["error"]))[:200])
+        u = j.get("usage") or {}
+        if u.get("cost") is not None:
+            spend_cost(u.get("cost"))
+        else:
+            spend(model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
+        msg = ((j.get("choices") or [{}])[0].get("message") or {})
+        c = msg.get("content", "")
+        return "".join(p.get("text", "") for p in c if isinstance(p, dict)) if isinstance(c, list) else (c or "")
     if prov == "ollama":
         host = cfg.get("host", "http://localhost:11434").rstrip("/")
         cloud = host == "https://ollama.com"
@@ -241,7 +295,7 @@ gate = threading.BoundedSemaphore(max(1, int(settings().get("parallel", 3))))
 # The page's settings menu reads and writes town_brains.json. Keys are never sent to the page:
 # it only learns whether one was found. Ollama hosts are limited to this computer or ollama.com,
 # so a changed setting can never send the Ollama key anywhere else.
-PROVIDERS = ("anthropic", "ollama", "cloude", "off")
+PROVIDERS = ("anthropic", "openrouter", "ollama", "cloude", "off")
 
 def ok_host(h):
     return bool(re.fullmatch(r"(http://(localhost|127\.0\.0\.1)(:\d+)?|https://ollama\.com)", h or ""))
@@ -283,6 +337,12 @@ def list_models(provider, host):
             req = urllib.request.Request("https://api.anthropic.com/v1/models?limit=100", headers={"x-api-key": key, "anthropic-version": "2023-06-01"})
             with urllib.request.urlopen(req, timeout=15) as r:
                 return [m["id"] for m in json.loads(r.read()).get("data", [])]
+        if provider == "openrouter":
+            req = urllib.request.Request("https://openrouter.ai/api/v1/models", headers={"Authorization": "Bearer " + openrouter_key()} if openrouter_key() else {})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                ids = [m["id"] for m in json.loads(r.read()).get("data", [])]
+            want = "anthropic/claude-haiku-5.5:batch"
+            return [want] + [i for i in ids if i != want and i.startswith("anthropic/")] + [i for i in ids if i != want and not i.startswith("anthropic/")]
         if provider == "ollama" and ok_host(host):
             key = ollama_key() if host.rstrip("/") == "https://ollama.com" else ""
             req = urllib.request.Request(host.rstrip("/") + "/api/tags", headers={"Authorization": "Bearer " + key} if key else {})
@@ -379,7 +439,7 @@ class H(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/settings":
             st = settings()
-            return self.send(200, json.dumps({**{k: st[k] for k in ("mayor", "folk", "daily_dollar_cap", "folk_every_minutes", "chat_every_minutes", "parallel")}, "keys": {"anthropic": bool(anthropic_key()), "ollama": bool(ollama_key())}}))
+            return self.send(200, json.dumps({**{k: st[k] for k in ("mayor", "folk", "daily_dollar_cap", "folk_every_minutes", "chat_every_minutes", "parallel")}, "keys": {"anthropic": bool(anthropic_key()), "openrouter": bool(openrouter_key()), "ollama": bool(ollama_key())}}))
         if path == "/settings/models":
             q = dict(p.split("=", 1) for p in (self.path.split("?", 1) + [""])[1].split("&") if "=" in p)
             return self.send(200, json.dumps({"models": list_models(q.get("provider"), urllib.parse.unquote(q.get("host", "")))}))
@@ -432,6 +492,16 @@ class H(BaseHTTPRequestHandler):
                 return self.send(400, "{}")
             print(f"[settings] mayor {st['mayor']} | folk {st['folk']} | cap ${st['daily_dollar_cap']} | every {st['folk_every_minutes']} min")
             return self.send(200, json.dumps({"ok": True}))
+        if self.path == "/settings/key":   # the OpenRouter key, typed into the page: stored here, never sent back
+            if not self.same_page():
+                return self.send(403, "{}")
+            try:
+                b = json.loads(self.body() or b"{}")
+                have = set_openrouter_key(b.get("openrouter", ""))
+            except Exception:
+                return self.send(400, "{}")
+            print(f"[settings] OpenRouter key {'saved' if have else 'forgotten'}")
+            return self.send(200, json.dumps({"ok": True, "openrouter": have}))
         if self.path == "/brain":
             try:
                 req = json.loads(self.body() or b"{}")

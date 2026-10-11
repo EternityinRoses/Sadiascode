@@ -366,12 +366,12 @@ S.onChat = async c => {
   for (const x of [sp, to]) if (x && x.brain !== 'human' && x.task?.kind === 'talk') x.task = null;   // conversation over: back to their day
 };
 // --------------------------------------------------------------- settings --
-const PROV_DEFAULT = { anthropic: { mayor: 'claude-sonnet-5-5', folk: 'claude-haiku-5-5' }, ollama: { mayor: 'gpt-oss:120b-cloud', folk: 'gpt-oss:20b-cloud' }, off: { mayor: '', folk: '' } };
+const PROV_DEFAULT = { anthropic: { mayor: 'claude-sonnet-5-5', folk: 'claude-haiku-5-5' }, openrouter: { mayor: 'anthropic/claude-haiku-5.5:batch', folk: 'anthropic/claude-haiku-5.5:batch' }, cloude: { mayor: 'mayor', folk: '' }, ollama: { mayor: 'gpt-oss:120b-cloud', folk: 'gpt-oss:20b-cloud' }, off: { mayor: '', folk: '' } };
 function showHosts() { for (const x of ['m', 'f']) document.querySelectorAll(`.ohost[data-for="${x}"]`).forEach(e => e.hidden = $(x + 'Prov').value !== 'ollama'); for (const x of ['m', 'f']) $(x + 'Model').disabled = $(x + 'Prov').value === 'off'; }
 async function fillModels(x) {
   const prov = $(x + 'Prov').value; $(x + 'List').innerHTML = '';
   if (prov === 'off') return;
-  try { const r = await fetch(`/settings/models?provider=${prov}&host=${encodeURIComponent($(x + 'Host').value)}`); const j = await r.json(); $(x + 'List').innerHTML = (j.models || []).map(m => `<option value="${m}">`).join(''); if (j.models?.length) $('sMsg').textContent = ''; else $('sMsg').textContent = prov === 'ollama' ? 'Couldn’t list Ollama models: is the Ollama app running and signed in? You can still type a model name.' : 'Couldn’t list Claude models (no key found?). You can still type a model name.'; }
+  try { const r = await fetch(`/settings/models?provider=${prov}&host=${encodeURIComponent($(x + 'Host').value)}`); const j = await r.json(); $(x + 'List').innerHTML = (j.models || []).map(m => `<option value="${m}">`).join(''); if (j.models?.length) $('sMsg').textContent = ''; else $('sMsg').textContent = prov === 'ollama' ? 'Couldn’t list Ollama models: is the Ollama app running and signed in? You can still type a model name.' : prov === 'openrouter' ? 'Couldn’t list OpenRouter models. You can still type a model name (e.g. anthropic/claude-haiku-5.5:batch).' : 'Couldn’t list Claude models (no key found?). You can still type a model name.'; }
   catch (e) {}
 }
 async function openSettings() {
@@ -384,7 +384,7 @@ async function openSettings() {
   const st = await (await fetch('/settings')).json();
   for (const [x, k] of [['m', 'mayor'], ['f', 'folk']]) { $(x + 'Prov').value = st[k].provider; $(x + 'Model').value = st[k].model || ''; $(x + 'Host').value = st[k].host || 'http://localhost:11434'; if ($(x + 'Effort')) $(x + 'Effort').value = st[k].effort || ''; }
   $('sCap').value = st.daily_dollar_cap; $('sEvery').value = st.folk_every_minutes; $('sChat').value = st.chat_every_minutes ?? 3; $('sPar').value = st.parallel;
-  $('sKeys').textContent = `Claude API key: ${st.keys.anthropic ? 'found (Cloude’s)' : 'not found'} · Ollama key: ${st.keys.ollama ? 'found' : 'none (fine if you use the Ollama app)'}. Keys stay in Cloude’s config.json; this page never sees them.`;
+  $('sKeys').textContent = `Claude API key: ${st.keys.anthropic ? 'found (Cloude’s)' : 'not found'} · OpenRouter key: ${st.keys.openrouter ? 'saved' : 'none'} · Ollama key: ${st.keys.ollama ? 'found' : 'none (fine if you use the Ollama app)'}. Keys stay in Cloude’s config.json; this page never sees them.`;
   showHosts(); fillModels('m'); fillModels('f');
 }
 for (const [x, k] of [['m', 'mayor'], ['f', 'folk']]) {
@@ -426,6 +426,15 @@ if (evolving()) setTimeout(runGeneration, 1500);
 $('ff1').onclick = () => fastForward(1); $('ff7').onclick = () => fastForward(7);
 $('newTown').onclick = () => { saveSetup(); if (!$('newTown').dataset.sure) { $('newTown').dataset.sure = 1; $('newTown').textContent = 'Sure? Start over'; return; } saveLore(); setTimeout(() => location.reload(), 300); };
 $('gear').onclick = openSettings;
+// the OpenRouter key: sent once to the town server, which keeps it in town/openrouter.key; the page never gets it back
+async function saveOrKey(k) {
+  const r = await fetch('/settings/key', { method: 'POST', headers: { 'X-Town': '1' }, body: JSON.stringify({ openrouter: k }) });
+  const j = r.ok ? await r.json() : null; $('sOrKey').value = '';
+  $('sMsg').textContent = !j ? 'Couldn’t save the key.' : j.openrouter ? 'OpenRouter key saved (kept on this PC only).' : 'OpenRouter key forgotten.';
+  if (j) openSettings();
+}
+$('sOrSave').onclick = () => { const k = $('sOrKey').value.trim(); if (k) saveOrKey(k); };
+$('sOrForget').onclick = () => saveOrKey('');
 let mindTab = 'words';
 // the scoreboard (Rose only): who lived, by home, weapon, work and class; the last generation and the last six together
 function scoreHtml(H) {
