@@ -292,7 +292,7 @@ def think(req):
         book["chatted"] = time.time()
     elif req.get("brain") != "mayor-ai" and time.time() - book.get("asked", 0) < (20 if req.get("waiting") else 60 * float(st.get("folk_every_minutes", 10))):
         return None
-    elif cfg.get("provider") == "cloude" and time.time() - book.get("asked", 0) < 60 * float(st.get("cloude_every_minutes", 5)):
+    elif cfg.get("provider") == "cloude" and not req.get("must") and time.time() - book.get("asked", 0) < 60 * float(st.get("cloude_every_minutes", 5)):
         return None       # Cloude plays in its own chat: a plan every few minutes, not every tick
     else:
         book["asked"] = time.time()

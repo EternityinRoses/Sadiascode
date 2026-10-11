@@ -139,3 +139,5 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **(Hollow Town) Sales tax up to 200% (Nimbus):** sim.js applyDecision clamps tax_rate to 0-2 (was 0-0.4); the mayor's prompt says so. Backup .backups\20261011-043000__town__sim.js.
 
 - **(Hollow Town) Claude effort setting (Nimbus):** server.py: each brain may carry effort low/medium/high (clean_brain keeps it); Anthropic calls send output_config.effort, and if a model answers 400 to it, that model is asked without it from then on (NO_EFFORT). index.html/view.js: an effort box beside each brain's model in Settings. Local town_brains.json: folk set to claude-haiku-5-5, effort low. Needs a Town.bat restart. Backups .backups\20261011-044500__town__*.
+
+- **(Hollow Town) Midnight tax turn (Nimbus):** sim.js: at 00:00 the AI mayor gets a 'must' turn (the day's books closed, treasury shown, set tax_rate/rent/head_tax); view.js sends must; server.py doesn't throttle a must turn for the cloude mayor. Needs a Town.bat restart. Backups .backups\20261011-045500__town__*.

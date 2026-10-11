@@ -3098,6 +3098,7 @@ function Sim(opts = {}) {
       payWages(h);
       if (h === 7) morning();
       if (h === 19) { const m = sim.people[sim.mayorId]; if (m && m.alive && m.brain !== 'script' && m.brain !== 'human') { const q = { id: m.id + '-e' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.decisionFor(m, 'mayor'), turn: sim.turnFor(m, 'mayor'), fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }
+      if (h === 0) { const m = sim.people[sim.mayorId]; if (m && m.alive && m.brain !== 'script' && m.brain !== 'human') { const turn = `WHAT JUST HAPPENED: Midnight. The day's books are closed: the treasury holds ${Math.round(sim.treasury)}c. Set the taxes for the new day (tax_rate, rent, head_tax), and anything else you want.\n` + sim.turnFor(m, 'mayor'); const q = { id: m.id + '-tax' + sim.day, person: m.id, kind: 'mayor', brain: m.brain, prompt: sim.identityFor(m) + '\n' + turn, turn, must: true, fallback: () => {} }; sim.decisionsPending.push(q); sim.onDecision?.(q); } }   /* Rose: the mayor sets taxes every night at 12 */
       if (h === 12 && sim.election.due) runElection();
       standIns();
       if (sim.beastAt && sim.t >= sim.beastAt) { invade(!sim.invaded); sim.invaded = true; sim.beastAt = null; }
