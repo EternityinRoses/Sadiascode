@@ -282,7 +282,7 @@ $('aLie').onclick = () => {
 $('lieGo').onclick = () => { const c = $('lieCrime').value; doTo('lie', c === 'liar' ? { about: $('lieAbout').value, liar: true } : { about: $('lieAbout').value, crime: c, victim: selected }); $('liebox').hidden = true; };
 // context actions where you stand
 $('cWork').onclick = () => note(S.playerDo('work')); $('cStudy').onclick = () => note(S.playerDo('study'));
-$('cStand').onclick = () => note(S.playerDo('stand')); $('cEscape').onclick = () => note(S.playerDo('escape')); $('cEat').onclick = () => note(S.playerDo('eat'));
+$('cStand').onclick = () => note(S.playerDo('stand')); $('cEscape').onclick = () => note(S.playerDo('escape')); $('cCure').onclick = () => note(S.playerDo('cure')); $('cEat').onclick = () => note(S.playerDo('eat'));
 $('cBurgle').onclick = () => note(S.playerDo('burgle')); $('cLoot').onclick = () => note(S.playerDo('loot')); $('cDig').onclick = () => note(S.playerDo('dig'));
 $('cWait').onclick = () => { for (let i = 0; i < 120; i++) S.step(0.5); note('You wait an hour.'); };
 $('cMode').onclick = () => { me.prefMode = me.prefMode === 'nonlethal' ? 'lethal' : 'nonlethal'; drawPanel(); };
@@ -334,19 +334,27 @@ const bubbles = {};
 S.onChat = async c => {
   if (!server || server.folk === 'off' && c.a !== 'player') return;
   let sp = c.a === 'player' ? S.people[c.b] : S.people[c.a], to = c.a === 'player' ? S.people.player : S.people[c.b], heard = c.heard || null;
-  for (let turn = 0; turn < (c.a === 'player' ? 1 : 3); turn++) {
+  // how many replies follow the opening line (Rose, 2026-10-10): sometimes none, usually one or two, now and then three or four.
+  // Answering Rose is one line (she replies herself).
+  const replies = c.a === 'player' ? 0 : [0, 1, 1, 2, 2, 2, 3, 4][Math.floor(Math.random() * 8)];
+  for (let turn = 0; turn <= replies; turn++) {
     if (!sp?.alive || !to?.alive || !S.conscious(sp) || sp.fight) break;
-    let dec = null;
-    try { const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: sp.brain, kind: 'chat', system: S.identityFor(sp), prompt: S.chatTurn(sp, to, heard), town: townId, day: S.day, person: sp.id, name: S.fullName(sp), player: c.a === 'player', reply: turn > 0 || !!heard }) }); dec = (await r.json()).decision; } catch (e) {}
-    if (dec) sp.lastTalk = { day: S.day, clock: S.clock(), to: to.id === 'player' ? 'Rose' : to.name, dec };
-    const said = S.applyChat(sp, to, dec); if (!said) break;
+    const last = turn === replies && c.a !== 'player';
+    let said = null;
+    if (S.thinks(sp)) {
+      let dec = null;
+      const prompt = S.chatTurn(sp, to, heard) + (last ? '\n(This is your last line in this exchange: say it and let them go.)' : turn > 0 ? '\n(They spoke to you: answer them. Keep it to a line or two.)' : '');
+      try { const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: sp.brain, kind: 'chat', system: S.identityFor(sp), prompt, town: townId, day: S.day, person: sp.id, name: S.fullName(sp), player: c.a === 'player', reply: turn > 0 || !!heard }) }); dec = (await r.json()).decision; } catch (e) {}
+      if (dec) { sp.lastTalk = { day: S.day, clock: S.clock(), to: to.id === 'player' ? 'Rose' : to.name, dec }; if (!last) dec.end = false; }
+      said = S.applyChat(sp, to, dec);
+    } else said = S.plainSay(sp, to, heard);   // a plain brain answers in its own words
+    if (!said) break;
     bubbles[sp.id] = { text: said, until: performance.now() + 7000 };
-    if (dec.end || to.id === 'player' || !S.thinks(to)) break;
+    if (to.id === 'player') break;
     heard = said; [sp, to] = [to, sp];
   }
   for (const x of [sp, to]) if (x && x.brain !== 'human' && x.task?.kind === 'talk') x.task = null;   // conversation over: back to their day
 };
-
 // --------------------------------------------------------------- settings --
 const PROV_DEFAULT = { anthropic: { mayor: 'claude-sonnet-5-5', folk: 'claude-haiku-5-5' }, ollama: { mayor: 'gpt-oss:120b-cloud', folk: 'gpt-oss:20b-cloud' }, off: { mayor: '', folk: '' } };
 function showHosts() { for (const x of ['m', 'f']) document.querySelectorAll(`.ohost[data-for="${x}"]`).forEach(e => e.hidden = $(x + 'Prov').value !== 'ollama'); for (const x of ['m', 'f']) $(x + 'Model').disabled = $(x + 'Prov').value === 'off'; }
@@ -565,7 +573,7 @@ function loop() {
   // context buttons
   const where = S.areaOf(me);
   $('cShop').hidden = !(S.business[where] && S.shopOpen(where)); $('cWork').hidden = !['bakery', 'store', 'smithy', 'tavern', 'fields', 'ranch'].includes(where);
-  $('cStudy').hidden = where !== 'school'; $('cStand').hidden = where !== 'hall'; $('cReport').hidden = where !== 'station'; $('cEscape').hidden = !(me.jailedUntil > 0);
+  $('cStudy').hidden = where !== 'school'; $('cStand').hidden = where !== 'hall'; $('cReport').hidden = where !== 'station'; $('cEscape').hidden = !(me.jailedUntil > 0); $('cCure').hidden = !(me.sick && (where === 'healer' || where === 'chapel'));
   $('cBurgle').hidden = !(S.AREAS[where]?.house && me.home !== S.HOUSES.findIndex(h => h.id === where));
   { const an = selected && S.animals[selected]; $('cFeed').hidden = !(an && an.alive && !an.game && S.dist(me, an) < 2.5); }
   $('cQuit').hidden = me.job === 'none'; $('cDismiss').hidden = !me.party; $('cFish').hidden = S.dist(me, S.SPOTS.pond) > 7; $('cForage').hidden = !['orchard', 'wood'].includes(where);

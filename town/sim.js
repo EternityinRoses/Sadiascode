@@ -817,7 +817,8 @@ function Sim(opts = {}) {
     if (['grain', 'meat', 'fish', 'eggs', 'apple'].reduce((n, k) => n + (p.items[k] || 0), 0) > 3 && p.food > 0.4 && p.town !== 'marrow' && !(p.cd?.fence > sim.t) && (sim.people[sim.business.store.owner]?.coin || 0) > 10) add('fence', 3 + p.traits.greed * 2);
     // the hurt go to the doctor (free, paid by taxes)
     if (p.hp < p.maxhp * 0.6 && doctorIn()) add('treat', 5 + (1 - p.hp / p.maxhp) * 6);
-    if (p.sick?.sym && doctorIn()) add('treat', 7);
+    if (p.sick?.sym && !DISEASES[p.sick.key].cleric && doctorIn() && p.coin >= sim.careFee.healer) add('treat', 7);
+    if (p.sick?.sym && careTaker('chapel') && p.coin >= sim.careFee.chapel) add('treat', DISEASES[p.sick.key].cleric ? 9 : 6, { where: 'chapel' });
     // guards: pursue the wanted (bounties make it pay)
     if (isGuard(p) && inShift(p.job, h)) {
       const wanted = living().filter(q => q !== p && q.jailedUntil <= 0 && openRecord(q).length && hasEvidence(q) && dist2(p, q) < 60);
@@ -937,6 +938,7 @@ function Sim(opts = {}) {
       // falls through: go to <place>
       case 'walk': case 'head': case 'move': { const pl = findPlace(rest || ''); if (pl === 'home' && p.home != null) return { kind: 'goto', at: HOUSES[p.home].bed, place: 'home' }; if (pl === 'well') return { kind: 'goto', at: SPOTS.well, place: 'the well' }; if (pl === 'pond') return { kind: 'goto', at: SPOTS.pond, place: 'the pond' }; if (pl) return { kind: 'goto', at: SPOTS[pl] || randIn(pl, 2), place: AREAS[pl].name }; return who ? { kind: 'goto', at: who, place: who.name } : null; }
       case 'stay': case 'listen': return { kind: 'hold', with: who, value: 0 };
+      case 'get': case 'cure': case 'heal': if (!/cur|heal|treat|well/.test(kind + ' ' + (rest || ''))) return null; { const ch = /chapel|cleric|pray/.test(rest || '') || (p.sick && DISEASES[p.sick.key].cleric); return { kind: 'doas', verb: 'cure', at: ch ? randIn('chapel', 2) : pick(SPOTS.beds), value: 0 }; }
       case 'wait': case 'lurk': return who ? { kind: 'lurkfor', target: who, value: 0 } : { kind: 'hold', value: 0 };
       case 'talk': case 'visit': case 'approach': case 'meet': return who ? { kind: 'visit', target: who, value: 0 } : null;
       case 'court': case 'flirt': return who ? { kind: 'court', target: who, value: 0 } : null;
@@ -1408,7 +1410,7 @@ function Sim(opts = {}) {
       case 'ambush': { cool(p, 'ambush', 720); if (!p.party) gatherParty(p, 'bandit', 3, true); return setTask(p, 'ambush', { to: P(rnd(-280, -160), rnd(-3, 3)), until: sim.t + 240 }); }
       case 'signon': { p.job = 'mercenary'; log('life', `${fullName(p)} signs on as a sellsword (${mercRate(p)}c a day).`, [p.id]); return setTask(p, 'idle', { until: sim.t + 10 }); }
       case 'study': return setTask(p, 'study', { to: randIn('school', 2), until: sim.t + 120 });
-      case 'treat': return setTask(p, 'treat', { to: pick(SPOTS.beds), until: sim.t + 240 });
+      case 'treat': return setTask(p, 'treat', { to: o.where === 'chapel' ? randIn('chapel', 2) : pick(SPOTS.beds), where: o.where || 'healer', until: sim.t + 240 });
       default: return setTask(p, 'idle', { until: sim.t + 20 });
     }
   }
@@ -1595,7 +1597,7 @@ function Sim(opts = {}) {
         if (p.studied >= 480) { p.studied = 0; const k = pick(['diplomacy', 'sense', 'heal', 'spot', 'bluff', 'intimidate', 'openlock']); p.skills[k]++; log('life', `${fullName(p)} finishes a course of lessons: ${k} +1.`, [p.id]); }
         return;
       }
-      case 'treat': { if (!arrive(p, tk.to, dt)) return; p.state = 'patient'; if (p.hp >= p.maxhp * 0.9 && !p.sick?.sym || !doctorIn()) p.task = null; return; }
+      case 'treat': { if (!arrive(p, tk.to, dt)) return; p.state = 'patient'; if (p.sick && !tk.tried) { tk.tried = true; const said = sim.doAs(p, 'cure'); if (p.sick && /full|wants \d+c|No (doctor|cleric)/.test(said || '')) { (p.failed ||= []).push('get cured: ' + said); p.task = null; return; } } if (p.hp >= p.maxhp * 0.9 && !p.sick?.sym || !doctorIn()) p.task = null; return; }
       case 'arrest': {
         const q = target(tk.target); if (!q || !q.alive || q.jailedUntil > 0) { p.task = null; return; }
         if (!conscious(q)) { return setTask(p, 'haul', { target: q.id, until: sim.t + 240 }); }
@@ -2098,6 +2100,12 @@ function Sim(opts = {}) {
     slimy:    { name: 'Slimy doom', via: 'contact', dc: 14, inc: [1, 1], dmg: { con: [1, 4] }, drain: true },
   };
   sim.DISEASES = DISEASES;
+  // paid care (Rose): the Infirmary's doctor tries a cure (Heal vs the DC), the Chapel's cleric drives out anything.
+  // Each takes only so many patients at a time; a place stays yours for 4 hours.
+  sim.careSlots = { healer: 3, chapel: 2 }; sim.careFee = { healer: 3, chapel: 6 };
+  const careTaker = where => living().find(q => q.job === (where === 'chapel' ? 'cleric' : 'doctor') && free(q) && areaOf(q) === where && q.task?.kind === 'work');
+  function inCare(where) { sim.care ||= {}; return (sim.care[where] = (sim.care[where] || []).filter(e => e.until > sim.t && sim.people[e.id]?.alive)); }
+  sim.careTaker = careTaker; sim.inCare = inCare;
   const fortSave = p => d(20) + mod(p.st.con) + (p.cls === 'warrior' ? 2 + Math.floor((p.level || 1) / 2) : Math.floor((p.level || 1) / 3));
   function expose(p, key, why) {
     if (!p || !p.alive || p.kind !== 'human' || p.sick || !DISEASES[key]) return false;
@@ -2692,7 +2700,7 @@ function Sim(opts = {}) {
   // What an AI-played person is told. Facts about themselves and what they can perceive, what is
   // available, the commands they have, the careers that exist. No advice, no strategy: that's theirs.
   const SEEDY = ['pickpocket (lift coin from people)', 'burglar (houses and shops, at night)', 'mugger (rob people by force)', 'shop robber (hold up a keeper)', 'extortionist (sell a business "insurance")', 'bandit (ambush carts on the Old Road)', 'rustler (take the ranch\'s animals)', 'fence (sell stolen goods)', 'gang boss or member (found or join a crew)', 'sellsword (hire out as muscle)', 'a bribe-taking official (if you hold an office)', 'liar and slanderer'];
-  const COMMANDS = ['take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house number or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'shout for the guard', 'bribe <person> <coins>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <coins>', 'propose to <person>', 'invite <person> (to come with you; add coins to pay them)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body beside you)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'go to <place or person>', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
+  const COMMANDS = ['take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house number or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'get cured (when sick: the Infirmary doctor tries for 3c, the Chapel cleric cures anything for 6c; only a few patients at a time)', 'shout for the guard', 'bribe <person> <coins>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <coins>', 'propose to <person>', 'invite <person> (to come with you; add coins to pay them)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body beside you)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'go to <place or person>', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
   function careers() {
     const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${sim.wages[k] ?? j.wage}c by the town` : j.wage ? `, ${j.wage}c a shift from the owner` : ''})`);
     return `${legit.join('; ')}; Mayor (elected, ${sim.wages.mayor ?? JOBS.mayor.wage}c); Guard captain (elected by the guards). Outside the law (the underworld): ${SEEDY.join('; ')}. The underworld's tools (pickpocket, mug, burgle, rob, steal, hide, case, wait for, extort, ambush, rustle) come with a place in it: take up a seedy career at the Drowned Lantern after dark ("take up <career>"), found or join a gang, or, as a guard, take someone's money. "go straight" leaves it.`;
@@ -3204,6 +3212,23 @@ function Sim(opts = {}) {
       case 'stand': { if (areaOf(me) !== 'hall') return 'Stand for mayor at the town hall.'; if (sim.election.candidates.includes(me.id)) return 'You are already standing.'; if (pay(me, 'town', 5) < 5) return 'The fee is 5c.'; sim.election.candidates.push(me.id); log('politics', `${fullName(me)} stands for mayor.`, [me.id]); return 'You are a candidate.'; }
       case 'report': { if (areaOf(me) !== 'station') return 'Report crimes at the guard station desk.'; const subj = sim.people[extra.about]; if (!subj) return 'Report whom?'; const ev = sim.events.filter(e => e.actor === subj.id && (e.victim === me.id || sees(me, e.at))).slice(-1)[0] || { id: 'pr' + Math.random(), type: extra.crime || 'theft', actor: subj.id, victim: me.id, lie: true }; fileReport(me, ev); return `It's on the record against ${subj.name}.`; }
       case 'carry': { if (!t || t.kind !== 'human' || conscious(t) || !near(1.6)) return 'There\'s nobody down here to carry.'; me.carrying = me.carrying === t.id ? null : t.id; if (!me.carrying) drop(t); return me.carrying ? `You pick up ${t.name}.` : `You set ${t.name} down.`; }
+      case 'cure': {
+        const where = areaOf(me); if (!['healer', 'chapel'].includes(where)) return 'Go to the Infirmary (doctor) or the Chapel (cleric).';
+        if (!me.sick) return 'You are not sick.';
+        const D = DISEASES[me.sick.key], carer = careTaker(where);
+        if (!carer) return `No ${where === 'chapel' ? 'cleric' : 'doctor'} is working here right now.`;
+        if (D.cleric && where !== 'chapel') return `${carer.name} shakes their head: ${D.name.toLowerCase()} needs a cleric.`;
+        const list = inCare(where), mine = list.find(e => e.id === me.id), fee = sim.careFee[where];
+        if (!mine && list.length >= sim.careSlots[where]) return `The ${AREAS[where].name} is full (${sim.careSlots[where]} at a time). Come back later.`;
+        if (me.coin < fee) return `${carer.name} wants ${fee}c for it. You have ${me.coin}c.`;
+        pay(me, carer, fee, 'care');
+        if (mine) mine.until = sim.t + 240; else list.push({ id: me.id, until: sim.t + 240 });
+        const done = () => { const i = list.findIndex(e => e.id === me.id); if (i >= 0) list.splice(i, 1); };   // cured: the place frees up
+        if (where === 'chapel') { me.sick = null; done(); log('life', `${carer.name} takes ${fee}c and drives the ${D.name.toLowerCase()} out of ${fullName(me)}.`, [carer.id, me.id]); return `${carer.name} prays over you: the ${D.name.toLowerCase()} is gone. (${fee}c)`; }
+        const r = d(20) + (carer.skills.heal || 0);
+        if (r >= D.dc) { me.sick = null; done(); log('life', `${carer.name} cures ${fullName(me)} of ${D.name.toLowerCase()} (${fee}c).`, [carer.id, me.id]); return `${carer.name} treats you: cured. (Heal ${r} vs DC ${D.dc}, ${fee}c)`; }
+        return `${carer.name} does what they can, but it holds on. (Heal ${r} vs DC ${D.dc}, ${fee}c) Rest here: their care helps your daily save.`;
+      }
       case 'loot': { const b = sim.bodies.find(b => !b.buried && dist2(me, b) < 1.6); if (!b) return 'No body here.'; const n = b.coin; b.coin = 0; me.coin += n; if (Math.random() < 0.25) expose(me, 'slimy', 'a corpse'); deed('theft', me, null, me); return `You go through ${b.name}'s pockets: ${n}c.`; }
       case 'dig': { const gr = sim.graves.find(g => dist2(me, g.at) < 1.5 && !g.robbed); if (!gr) return 'No grave here.'; gr.robbed = true; me.coin += gr.coin || 0; if (Math.random() < 0.3) expose(me, 'mummy', 'an opened grave'); deed('desecration', me, null, me); return `You dig up ${gr.name}: ${gr.coin || 0}c.`; }
     }
