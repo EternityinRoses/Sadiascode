@@ -143,3 +143,5 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **(Hollow Town) Midnight tax turn (Nimbus):** sim.js: at 00:00 the AI mayor gets a 'must' turn (the day's books closed, treasury shown, set tax_rate/rent/head_tax); view.js sends must; server.py doesn't throttle a must turn for the cloude mayor. Needs a Town.bat restart. Backups .backups\20261011-045500__town__*.
 
 - **(Hollow Town) Mayor turns never dropped (Nimbus):** view.js: every scheduled mayor turn (07:00, 19:00, 00:00) is sent as must, so the 5-minute cloude limit no longer drops them (at speed it dropped nearly all of them, and the office ran on autopilot). Backup .backups\20261011-051500__town__view.js.
+
+- **(Hollow Town) No autopilot for an AI mayor (Nimbus):** sim.js: when an AI mayor's turn gets no answer, the office keeps the mayor's own policy instead of running scriptedMayor (which was setting taxes and posting guards in Cloude's name). Only a plain-brain mayor uses the script. Backup .backups\20261011-052500__town__sim.js.

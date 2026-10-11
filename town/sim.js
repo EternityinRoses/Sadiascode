@@ -3076,7 +3076,7 @@ function Sim(opts = {}) {
     for (const p of living()) {
       if (p.brain === 'script' || p.brain === 'human') { if (p.id === sim.mayorId && p.brain === 'script') scriptedMayor(p); continue; }
       const kind = p.id === sim.mayorId ? 'mayor' : 'plan';
-      const q = { id: p.id + '-' + sim.day, person: p.id, kind, brain: p.brain, prompt: sim.decisionFor(p, kind), turn: sim.turnFor(p, kind), fallback: () => { if (kind === 'mayor') scriptedMayor(p); } };
+      const q = { id: p.id + '-' + sim.day, person: p.id, kind, brain: p.brain, prompt: sim.decisionFor(p, kind), turn: sim.turnFor(p, kind), fallback: () => { if (kind === 'mayor' && p.brain === 'script') scriptedMayor(p); } };   /* an AI mayor whose answer doesn't come keeps their own policy: the computer never decides for them (Rose) */
       sim.decisionsPending.push(q);
       if (sim.onDecision) sim.onDecision(q);
     }
