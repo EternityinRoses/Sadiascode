@@ -193,3 +193,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - HT three barracks (guardbarracks/artybarracks/magebarracks by the fields gate), jobs artillery + mageguard, enlist is voluntary (CORPS, enlist, corpsOpen). Smoke: .backups/smoke_barracks.mjs.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT class features (classfx block: classActs/classAct/classTurn/classRound/classTurnStart; flatNow/stunnedIn/shieldUp are top-level near clvl because acOf is module-level). Smoke: .backups/smoke_classfx.mjs.
