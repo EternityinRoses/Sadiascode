@@ -764,7 +764,7 @@ function Sim(opts = {}) {
   const CRIME_KINDS = new Set(['pickpocket', 'mug', 'burgle', 'shoprob', 'extort', 'rustle', 'ambush', 'lurkfor']);
   const CRIME_VERBS = new Set(['hide', 'case', 'steal']);
   const SEEDY_ROLES = { thief: 'thief (pickpocket, shoplifter)', burglar: 'burglar', mugger: 'mugger', robber: 'shop robber', extortionist: 'extortionist', bandit: 'bandit', rustler: 'rustler', fence: 'fence', smuggler: 'smuggler' };
-  const inUnderworld = p => p.brain === 'human' || !!(p.underworld || p.gang || p.onPayroll);
+  const inUnderworld = p => p.brain === 'human' || !!(p.underworld || p.gang || p.onPayroll) || (p.kind === 'human' && p.home == null && !p.town);   // Rose: the homeless have the underworld's tools within reach too (temptation)
   sim.inUnderworld = inUnderworld; sim.SEEDY_ROLES = SEEDY_ROLES;
   function takeUp(p, role) {
     if (p.underworld) return true;
@@ -2239,7 +2239,7 @@ function Sim(opts = {}) {
   function housingText(p) {
     const i = p.home, h = i != null ? HOUSES[i] : null, mine = housesOf(p), others = mine.filter(x => x !== i);
     const st = h ? (h.owner === p.id ? `You own ${houseName(i)} and live there` : h.tenants?.[p.id] > sim.t ? `You rent a bed at ${houseName(i)} from ${sim.people[h.owner]?.name || 'nobody'} (${h.ask || 2}c a night, paid by itself every 24 hours while you can)` : `You live at ${houseName(i)} with family`)
-      : `You have NO HOME. From 21:00 to 6:00 you may not be anywhere in town (Wick Lane, the houses, the square, the shops, the tavern): a guard who sees you takes you in for vagrancy. Outside town (the fields, the orchard, the ranch, the Wildwood) is allowed, but that's where the beasts come from`;
+      : `You have NO HOME. From 21:00 to 6:00 you may not be anywhere in town (Wick Lane, the houses, the square, the shops, the tavern): a guard who sees you takes you in for vagrancy. Outside town (the fields, the orchard, the ranch, the Wildwood) is allowed, but that's where the beasts come from. With no roof, the underworld's tools are within your reach too (pickpocket, mug, burgle, steal, hide, case, wait for, extort, ambush, rustle), no seedy career needed`;
     const list = HOUSES.map((hs, k) => { const o = sim.people[hs.owner]; return `${houseName(k)}: ${!hs.owner ? 'empty, for sale ' + HOUSE_PRICE + 'c at the town hall' : (o?.id === p.id ? 'yours' : (o?.name || '?') + "'s") + ', ' + (hs.ask || 2) + 'c a night, ' + residents(k).length + '/' + HOUSE_BEDS + ' beds taken'}`; }).join('; ');
     return `Home: ${st}.${others.length ? ' You also own ' + others.map(houseName).join(', ') + '.' : ''} Houses: ${list}. ("buy house <address>" at the town hall; "rent <address>" from its owner${mine.length ? '; as a landlord, "rent_out": 1-5 in your reply sets your nightly price' : ''}.)`;
   }
