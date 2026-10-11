@@ -480,7 +480,7 @@ function Sim(opts = {}) {
   }
   function invade(first) {
     const day = sim.day + 20, pool = first ? ['bear'] : Object.keys(BEASTS).filter(k => BEASTS[k].from <= day && (k !== 'ogre' || day >= 35));
-    // the last night of every generation brings a troll and two bears (Rose)
+    // every 7th night (the 'troll night' setting) brings a troll and two bears (Rose)
     const finale = !first && sim.day % (sim.genDays || 7) === 0;
     const kind = pick(pool.length ? pool : ['bear']), b = BEASTS[kind], n = first ? 1 : irnd(b.pack[0], b.pack[1] + Math.floor((day - 21) / 14));
     const at = pick([P(-104, rnd(-15, 15)), P(-104, rnd(-15, 15)), P(-66, -48), P(-66, 48)]);
@@ -529,7 +529,9 @@ function Sim(opts = {}) {
   sim.BEASTS = BEASTS;
 
   // ---- the player ---------------------------------------------------------
-  sim.addPlayer = (name = 'Rose', gender = 'f') => {
+  sim.addPlayer = (name = 'Rose', gender = 'f', opts = {}) => {
+    // a ghost (Rose, watching): a camera body that is not in the town at all; nobody sees, hears or hunts it
+    if (opts.ghost) { const g = makePerson(sim, { id: 'ghost', name, gender, brain: 'human', tags: ['ghost'] }); g.surname = 'of the City'; g.ghost = true; place(g, P(-14, 0)); return g; }
     const p = makePerson(sim, { id: 'player', name, gender, cls: 'rogue', level: 2, job: 'none', coin: 15, weapon: 'dagger', focus: ['bluff', 'diplomacy', 'sense', 'sleight', 'hide'], brain: 'human', tags: ['outsider', 'human'] });
     p.surname = 'of the City'; p.st = { str: 12, dex: 14, con: 13, int: 13, wis: 12, cha: 15 }; p.hp = p.maxhp = 14; p.skills = skillsFor('rogue', p.st, 2, ['bluff', 'diplomacy', 'sense', 'sleight', 'hide']);
     sim.people.player = p; sim.playerId = 'player'; sim.peopleAdded = (sim.peopleAdded || 0) + 1;
@@ -541,6 +543,7 @@ function Sim(opts = {}) {
 
   // ---- perception -----------------------------------------------------------
   const night = () => { const h = H(); return h < 6 || h >= 20; };
+  sim.townDead = () => !living().some(q => q.kind === 'human' && !q.town && q.id !== 'player');   // Rose: the generation ends when the whole town is dead
   // ---- sight and hearing ----------------------------------------------------
   // Everyone has a vision radius (Wisdom and Spot) and looks one way (a 140-degree cone);
   // close by (2.5 m) you notice anyone. Light matters: at night, outdoors, a dark figure is

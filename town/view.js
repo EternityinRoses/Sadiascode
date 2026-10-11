@@ -2,12 +2,13 @@
 (function () {
 'use strict';
 const $ = id => document.getElementById(id);
-let townSetup = { start: 'blank', personas: null, studentMode: 'blend', genDays: 7, aiBodies: 'orders' };
+let townSetup = { start: 'blank', personas: null, studentMode: 'blend', genDays: 7, aiBodies: 'orders', spectate: true };
 try { townSetup = { ...townSetup, ...JSON.parse(localStorage.getItem('hollow-setup') || '{}') }; } catch (e) {}
 if (!townSetup.gen7) { townSetup.genDays = 7; townSetup.gen7 = true; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }   // Rose: generations are a week (ending with a troll and two bears)
 const S = TownSim.Sim({ start: townSetup.start, personas: townSetup.personas || undefined });
 S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays;
-const me = S.addPlayer('Rose', 'f');
+const me = S.addPlayer('Rose', 'f', { ghost: townSetup.spectate !== false });   // Rose watches by default: an invisible camera, not a person in the town
+if (me.ghost) setTimeout(() => { for (const id of ['meBox', 'acts', 'say']) { const e = document.getElementById(id); if (e) e.style.display = 'none'; } }, 0);
 window.town = S;      // for poking at it from the console
 
 // ------------------------------------------------------------------ scene --
@@ -260,7 +261,7 @@ function drawPanel() {
   const t = selected && (S.people[selected] || S.animals[selected]);
   $('sel').innerHTML = t ? personPanel(t) : 'Click someone to study them.';
   $('acts').hidden = !t || t === me || t.kind !== 'human' || !t.alive;
-  $('me').innerHTML = `<b>${me.name} of the City</b> <span class="k">(${S.rankOf(me)}, believed ~${Math.round(S.standing(me))}c)</span> · hp ${Math.max(0, me.hp)}/${me.maxhp} · <b>${me.coin}c</b> · AC ${S.acOf(me)} · ${S.WEAPONS[me.weapon].name.toLowerCase()}${me.armor !== 'none' ? ', ' + S.ARMOR[me.armor].name.toLowerCase() : ''}${me.shield && me.shield !== 'none' ? ', ' + me.shield.replace('shield', ' shield') : ''} · blows: <b>${me.prefMode || 'lethal'}</b><br>
+  if (!me.ghost) $('me').innerHTML = `<b>${me.name} of the City</b> <span class="k">(${S.rankOf(me)}, believed ~${Math.round(S.standing(me))}c)</span> · hp ${Math.max(0, me.hp)}/${me.maxhp} · <b>${me.coin}c</b> · AC ${S.acOf(me)} · ${S.WEAPONS[me.weapon].name.toLowerCase()}${me.armor !== 'none' ? ', ' + S.ARMOR[me.armor].name.toLowerCase() : ''}${me.shield && me.shield !== 'none' ? ', ' + me.shield.replace('shield', ' shield') : ''} · blows: <b>${me.prefMode || 'lethal'}</b><br>
     <span class="k">${S.AREAS[S.areaOf(me) || me.area]?.name || ''}${me.jailedUntil > 0 ? ' · IN JAIL until ' + Math.round((me.jailedUntil - S.t) / 60) + 'h' : ''}${me.gang ? ' · ' + S.gangs[me.gang]?.name : ''}${me.spouse ? ' · married to ' + S.people[me.spouse]?.name : ''}</span>
     ${Object.entries(me.items).filter(([, n]) => n > 0).length ? '<br><span class="k">pack:</span> ' + Object.entries(me.items).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${S.GOODS[k]?.name.toLowerCase() || k}`).join(', ') : ''}
     ${S.openRecord(me).length ? `<br><span class="sig">On the record: ${S.openRecord(me).length}${S.hasEvidence(me) ? ' (wanted)' : ''}</span>` : ''}`;
@@ -402,15 +403,15 @@ function fastForward(days) {
 const evolving = () => { try { return sessionStorage.getItem('hollow-evolve') === '1'; } catch (e) { return false; } };
 function runGeneration() {
   $('ffNote').textContent = 'Evolving…';
-  const left = Math.max(0, S.genDays - (S.day - 1)) * 1440;
-  ffLeft = left; paused = true; drawSpeed(); S.aiOnly = false;
+  ffLeft = 1e9;   // until the whole town is dead (or 60 days, a safety stop) paused = true; drawSpeed(); S.aiOnly = false;
   const chunk = () => {
     if (!evolving()) { $('ffNote').textContent = 'Stopped.'; return; }
     const end = Math.min(ffLeft, 60);
     for (let m = 0; m < end; m += 0.5) { S.step(0.5); for (const f of S.fights.slice()) { if (f.sides.has('player')) { S.act(f, me, { id: 'end' }); S.playerDone(f); } S.fightStep(f); } for (const q of S.decisionsPending.splice(0)) { q.done = true; q.fallback?.(); } }
     pending.length = 0; ffLeft -= end;
-    $('ffNote').textContent = `Generation ${S.netOf().gen + 1}: day ${S.day} of ${S.genDays}`;
-    if (ffLeft > 0) return setTimeout(chunk, 0);
+    $('ffNote').textContent = `Generation ${S.netOf().gen + 1}: day ${S.day}, ${S.living().filter(p => p.kind === 'human' && !p.town).length} alive`;
+    if (!S.townDead() && S.day <= 60) return setTimeout(chunk, 0);
+    ffLeft = 0;
     const st = S.endGeneration(); saveLore();
     $('ffNote').textContent = `Generation ${st.gen} done: average fitness ${st.avgFit}, best ${st.bestFit}. Next town…`;
     setTimeout(() => { if (evolving()) location.reload(); }, 900);
@@ -575,7 +576,7 @@ function loop() {
   controls.target.add(delta); camera.position.add(delta); controls.update();
   panelAcc += dt; if (panelAcc > 0.5) { panelAcc = 0; drawPanel(); drawCouncil(); drawLore(); }
   // the generation ends after its last day: everyone learns (plain brains evolve, AI brains get the town's memory), and a new town starts
-  if (!genEnding && !evolving() && !(ffLeft > 0) && (S.day > S.genDays + 1 || S.day > S.genDays && S.hour() >= 6)) { /* the last night (ogres) runs till dawn, then the reset */ genEnding = true; paused = true; drawSpeed(); const st = S.endGeneration(); saveLore(); note(`Day ${S.genDays} is over: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...`); setTimeout(() => location.reload(), 5000); }
+  if (!genEnding && !evolving() && !(ffLeft > 0) && (S.townDead() || S.day > 60)) { /* Rose: the generation ends when everyone in town is dead (60 days at most) */ genEnding = true; paused = true; drawSpeed(); const days = S.day; const st = S.endGeneration(); saveLore(); note(S.townDead() ? `Everyone in Hollow Town is dead after ${days} days: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...` : `Sixty days and the town still stands: generation ${st.gen} ends. A new town begins in a moment...`); setTimeout(() => location.reload(), 5000); }
   // context buttons
   const where = S.areaOf(me);
   $('cShop').hidden = !(S.business[where] && S.shopOpen(where)); $('cWork').hidden = !['bakery', 'store', 'smithy', 'tavern', 'fields', 'ranch'].includes(where);

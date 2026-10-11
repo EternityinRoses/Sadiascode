@@ -153,7 +153,7 @@ table.why{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}tabl
   <h3>Training</h3>
   <div class="grid two"><label for="setBodies">AI bodies</label><select id="setBodies"><option value="orders">Wait for orders (only the LLM moves them)</option><option value="habits">LLM plans, habits fill the gaps</option></select>
   <label for="setBrain">Plain brains</label><select id="setBrain"><option value="habit">Habits (my hand-made scores)</option><option value="blend">Blend: habits and the student</option><option value="student">Student only (learned)</option></select>
-  <label for="setGen">Days per generation</label><select id="setGen"><option>3</option><option>7</option><option>14</option><option>21</option><option>30</option></select></div>
+  <label for="setGen" title="a generation now lasts until everyone in town is dead">Troll and two bears every N nights</label><select id="setGen"><option>3</option><option>7</option><option>14</option><option>21</option><option>30</option></select></div>
   <div class="row"><button id="evolveGo">Evolve non-stop</button><span class="k">Runs town after town at full speed (no AI calls), evolving the student between them. Keep the tab open.</span></div>
   <div class="row" style="align-items:center"><button id="ff1">Run 1 day</button><button id="ff7">Run 7 days</button><button id="newTown">New town</button><span id="ffNote" class="k">Fast, no drawing, plain brains only. A new town keeps what the town mind learned.</span></div>
   <h3>The town mind</h3>
