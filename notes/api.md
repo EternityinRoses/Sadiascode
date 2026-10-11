@@ -169,3 +169,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - HT OpenRouter provider: key typed in Settings -> town/openrouter.key (gitignored); default anthropic/claude-haiku-5.5:batch.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT small wins: genLog save/beast/night entries feed the generation wisdom (what worked, safest places at 23:00).
