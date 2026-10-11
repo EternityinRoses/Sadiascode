@@ -248,7 +248,7 @@ function townPanel() {
     <span class="k">Gangs</span> ${gangs}<br>
     <span class="k">Crimes so far</span> ${(() => { const c = {}; for (const e of S.events) if (S.CRIMES[e.type] && !e.lie && e.type !== 'warrant') c[e.type] = (c[e.type] || 0) + 1; return Object.entries(c).sort((x, y) => y[1] - x[1]).map(([k, n]) => k + ' ' + n).join(', ') || 'none yet'; })()}<br>
     <span class="k">Standing</span> ${['gentry', 'freeholder', 'commoner', 'lowborn'].map(r => r + ' ' + S.living().filter(p => p.kind === 'human' && !p.town && S.rankOf(p) === r).length).join(' · ')}<br>
-    <span class="k">People</span> ${S.living().filter(p => p.kind === 'human').length} · <span class="k">jailed</span> ${S.living().filter(p => p.jailedUntil > 0).length} · <span class="k">dead</span> ${S.rec.deaths} · <span class="k">graves</span> ${S.graves.length} · <span class="k">inequality</span> ${h.gini}`;
+    <span class="k">People</span> ${S.living().filter(p => p.kind === 'human' && !p.town).length} · <span class="k">jailed</span> ${S.living().filter(p => p.jailedUntil > 0).length} · <span class="k">dead</span> ${S.rec.deaths} · <span class="k">graves</span> ${S.graves.length} · <span class="k">inequality</span> ${h.gini}`;
 }
 function drawChart() {
   const c = $('chart'), x = c.getContext('2d'), H = S.history; x.clearRect(0, 0, c.width, c.height);
