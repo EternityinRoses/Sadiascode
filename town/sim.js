@@ -2107,16 +2107,16 @@ function Sim(opts = {}) {
   // (SRD long-term care); mummy rot never yields to saves, only to a cleric. Ability damage comes back 1 a day.
   // Con 0 kills; Str or Dex 0 leaves you helpless; Int, Wis or Cha 0 knocks you out.
   const DISEASES = {
-    blinding: { name: 'Blinding sickness', via: 'ingested', dc: 16, inc: [1, 3], dmg: { str: [1, 4] }, blind: true },
-    cackle:   { name: 'Cackle fever', via: 'inhaled', dc: 16, inc: [1, 1], dmg: { wis: [1, 6] }, spreads: 2.5 },
-    demon:    { name: 'Demon fever', via: 'injury', dc: 18, inc: [1, 1], dmg: { con: [1, 6] }, drain: true },
-    chills:   { name: 'Devil chills', via: 'injury', dc: 14, inc: [1, 4], dmg: { str: [1, 4] }, saves: 3 },
-    filth:    { name: 'Filth fever', via: 'injury', dc: 12, inc: [1, 3], dmg: { dex: [1, 3], con: [1, 3] } },
-    mindfire: { name: 'Mindfire', via: 'inhaled', dc: 12, inc: [1, 1], dmg: { int: [1, 4] }, spreads: 2.5 },
-    mummy:    { name: 'Mummy rot', via: 'contact', dc: 20, inc: [1, 1], dmg: { con: [1, 6] }, cleric: true },
-    redache:  { name: 'Red ache', via: 'injury', dc: 15, inc: [1, 3], dmg: { str: [1, 6] } },
-    shakes:   { name: 'Shakes', via: 'contact', dc: 13, inc: [1, 1], dmg: { dex: [1, 8] }, spreads: 1.5 },
-    slimy:    { name: 'Slimy doom', via: 'contact', dc: 14, inc: [1, 1], dmg: { con: [1, 4] }, drain: true },
+    blinding: { name: 'Blinding sickness', via: 'ingested', dc: 16, inc: [1, 3], dmg: { str: [1, 4] }, blind: true, looks: 'aching limbs and clouding eyes' },
+    cackle:   { name: 'Cackle fever', via: 'inhaled', dc: 16, inc: [1, 1], dmg: { wis: [1, 6] }, spreads: 2.5, chance: 0.15, looks: 'a fever and fits of laughter' },
+    demon:    { name: 'Demon fever', via: 'injury', dc: 18, inc: [1, 1], dmg: { con: [1, 6] }, drain: true, looks: 'a burning fever and wracking pain' },
+    chills:   { name: 'Devil chills', via: 'injury', dc: 14, inc: [1, 4], dmg: { str: [1, 4] }, saves: 3, looks: 'shivering and a creeping weakness' },
+    filth:    { name: 'Filth fever', via: 'injury', dc: 12, inc: [1, 3], dmg: { dex: [1, 3], con: [1, 3] }, looks: 'a fever and a festering wound' },
+    mindfire: { name: 'Mindfire', via: 'inhaled', dc: 12, inc: [1, 1], dmg: { int: [1, 4] }, spreads: 2.5, chance: 0.12, looks: 'a burning head and muddled talk' },
+    mummy:    { name: 'Mummy rot', via: 'contact', dc: 20, inc: [1, 1], dmg: { con: [1, 6] }, cleric: true, spreads: 1.0, chance: 0.04, looks: 'skin flaking away like dust' },
+    redache:  { name: 'Red ache', via: 'injury', dc: 15, inc: [1, 3], dmg: { str: [1, 6] }, looks: 'red, swollen joints' },
+    shakes:   { name: 'Shakes', via: 'contact', dc: 13, inc: [1, 1], dmg: { dex: [1, 8] }, spreads: 1.5, chance: 0.1, looks: 'hands that will not stop trembling' },
+    slimy:    { name: 'Slimy doom', via: 'contact', dc: 14, inc: [1, 1], dmg: { con: [1, 4] }, drain: true, spreads: 1.2, chance: 0.08, looks: 'skin turning grey and slimy' },
   };
   sim.DISEASES = DISEASES;
   // paid care (Rose): the Infirmary's doctor tries a cure (Heal vs the DC), the Chapel's cleric drives out anything.
@@ -2169,11 +2169,20 @@ function Sim(opts = {}) {
   function diseaseHour() {   // the catching kinds pass to whoever is close to the sick
     for (const p of living()) {
       const D = p.sick?.sym && DISEASES[p.sick.key]; if (!D?.spreads) continue;
-      for (const q of living()) if (q !== p && q.kind === 'human' && !q.sick && dist2(p, q) < D.spreads && sameSpace(p, q) && Math.random() < 0.15) expose(q, p.sick.key, p.name);
+      for (const q of living()) if (q !== p && q.kind === 'human' && !q.sick && dist2(p, q) < D.spreads && sameSpace(p, q) && Math.random() < (D.chance ?? 0.1)) expose(q, p.sick.key, p.name);
     }
   }
+  function identifies(obs, q) {   // only a trained healer (Heal +4 or better, or a doctor or cleric) can name it: Heal check vs the DC, once per illness
+    if (!q.sick) return false;
+    const k = q.id + ':' + q.sick.key + ':' + q.sick.day; obs.idd ||= {};
+    if (!(k in obs.idd)) obs.idd[k] = ((obs.skills?.heal || 0) >= 4 || ['doctor', 'cleric'].includes(obs.job)) && d(20) + (obs.skills?.heal || 0) + (['doctor', 'cleric'].includes(obs.job) ? 4 : 0) >= DISEASES[q.sick.key].dc;
+    return obs.idd[k];
+  }
+  sim.identifies = identifies;
+  const illLook = (obs, q) => { const D = DISEASES[q.sick.key]; return identifies(obs, q) ? `ill with ${D.name.toLowerCase()}${D.spreads ? ', catching' : ''}` : `looks ill: ${D.looks}`; };
+  sim.illLook = illLook;
   function sickText(p) {
-    const s = p.sick?.sym ? ` Sick with ${DISEASES[p.sick.key].name.toLowerCase()}${p.sick.key === 'mummy' ? ' (only a cleric can cure it: go to the Chapel or Infirmary while one is working)' : ' (rest at the Infirmary while a doctor is in, to fight it off)'}.` : '';
+    const s = p.sick?.sym ? (identifies(p, p) ? ` Sick with ${DISEASES[p.sick.key].name.toLowerCase()}${DISEASES[p.sick.key].spreads ? ' (it passes to people near you)' : ''}` : ` You feel ill: ${DISEASES[p.sick.key].looks} (you can't tell what it is; a doctor could)`) + `${p.sick.key === 'mummy' ? ' (only a cleric can cure it: go to the Chapel or Infirmary while one is working)' : ' (rest at the Infirmary while a doctor is in, to fight it off)'}.` : '';
     const w = p.abDmg ? Object.entries(p.abDmg).filter(([, v]) => v > 0).map(([k, v]) => `${k} -${v}`) : [];
     return s + (w.length ? ` Weakened: ${w.join(', ')}.` : '') + (p.blind ? ' Blind.' : '');
   }
@@ -2813,7 +2822,7 @@ function Sim(opts = {}) {
   function inView(p, max = 8) {
     const out = [];
     for (const q of [...living(), ...Object.values(sim.animals)]) if (q !== p && q.alive && sees(p, q)) out.push(q);
-    return out.sort((a, b) => dist2(a, p) - dist2(b, p)).slice(0, max).map(q => q.kind === 'animal' ? `a ${q.species}` : `${q.id === 'player' ? 'Rose of the City' : q.name} (${!conscious(q) ? 'on the ground' : q.fight ? 'fighting' : q.task?.kind || q.state}${q.items?.finery ? ', finely dressed' : ''}${q.items?.torch && night() ? ', carrying a torch' : ''}, ~${Math.round(dist2(q, p))}m)`).join(', ');
+    return out.sort((a, b) => dist2(a, p) - dist2(b, p)).slice(0, max).map(q => q.kind === 'animal' ? `a ${q.species}` : `${q.id === 'player' ? 'Rose of the City' : q.name} (${!conscious(q) ? 'on the ground' : q.fight ? 'fighting' : q.task?.kind || q.state}${q.sick?.sym ? ', ' + illLook(p, q) : ''}${q.items?.finery ? ', finely dressed' : ''}${q.items?.torch && night() ? ', carrying a torch' : ''}, ~${Math.round(dist2(q, p))}m)`).join(', ');
   }
   sim.inView = inView;
   function electionNews(p) {
@@ -3087,11 +3096,13 @@ function Sim(opts = {}) {
       }
       case 'say': {
         const text = String(extra.text || '').slice(0, 200); if (!text) return '';
-        log('talk', `${me.name}: "${text}"`, ['player']);
+        const to = extra.to && sim.people[extra.to], aimed = !!(to && to !== me && to.alive && to.kind === 'human' && dist2(to, me) < 8);
+        log('talk', aimed ? `${me.name} to ${to.name}: "${text}"` : `${me.name}: "${text}"`, aimed ? ['player', to.id] : ['player']);
         for (const q of living()) if (q !== me && hears(q, me)) remember(q, { text: `${me.name} said: "${text}"` });
         remember(me, { said: (text.toLowerCase().match(/[a-z']{4,}/g) || []).pop() });
-        const listener = living().filter(q => q !== me && thinks(q) && conscious(q) && !q.fight && dist2(q, me) < 5 && hears(q, me)).sort((a, b) => dist2(a, me) - dist2(b, me))[0];
+        const listener = aimed ? (thinks(to) && conscious(to) && !to.fight ? to : null) : living().filter(q => q !== me && thinks(q) && conscious(q) && !q.fight && dist2(q, me) < 5 && hears(q, me)).sort((a, b) => dist2(a, me) - dist2(b, me))[0];
         if (listener && sim.onChat) sim.onChat({ a: 'player', b: listener.id, heard: text });
+        else if (aimed) { if (conscious(to) && !to.fight && !thinks(to)) plainSay(to, me, text); }
         else { const plain = living().filter(q => q !== me && !thinks(q) && q.kind === 'human' && conscious(q) && !q.fight && dist2(q, me) < 5 && hears(q, me)).sort((a, b) => dist2(a, me) - dist2(b, me))[0]; if (plain) plainSay(plain, me, text); }
         hearWords(me, text);
         return '';
