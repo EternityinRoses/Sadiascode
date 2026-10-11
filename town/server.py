@@ -87,8 +87,20 @@ def capped():
 # ------------------------------------------------------------------ models --
 def post(url, body, headers, timeout=60):
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json", **headers})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:   # say what the far side said, not just the number
+        try:
+            said = e.read().decode("utf-8", "replace")[:200]
+        except Exception:
+            said = ""
+        hint = ""
+        if e.code == 401 and "ollama.com" in url:
+            hint = " (ollama.com needs an API key from ollama.com/settings/keys as ollama_key in config.json; the app's sign-in doesn't count there)"
+        elif e.code == 401 and "11434" in url:
+            hint = " (the Ollama app on this PC isn't signed in for cloud models: open a terminal, run `ollama signin`, then restart the Ollama app)"
+        raise RuntimeError(f"HTTP {e.code} from {url.split('/api')[0]}: {said}{hint}") from None
 
 def ask_model(cfg, prompt, system=None, history=None):
     """One turn for one person's instance: their fixed identity (system), their own past turns, and now."""
@@ -108,7 +120,10 @@ def ask_model(cfg, prompt, system=None, history=None):
         return "".join(b.get("text", "") for b in j.get("content", []) if b.get("type") == "text")
     if prov == "ollama":
         host = cfg.get("host", "http://localhost:11434").rstrip("/")
-        key = ollama_key()
+        cloud = host == "https://ollama.com"
+        key = ollama_key() if cloud else ""   # the local app signs in by itself; a key is only for ollama.com
+        if cloud and model.endswith("-cloud"):   # ollama.com names the same model without "-cloud"
+            model = model[:-len("-cloud")]
         j = post(host + "/api/chat", {"model": model, "stream": False, "format": "json", "messages": ([{"role": "system", "content": system}] if system else []) + msgs},
                  {"Authorization": "Bearer " + key} if key else {}, timeout=90)
         spend(model, j.get("prompt_eval_count", 0), j.get("eval_count", 0))
@@ -193,7 +208,7 @@ def list_models(provider, host):
             with urllib.request.urlopen(req, timeout=15) as r:
                 return [m["id"] for m in json.loads(r.read()).get("data", [])]
         if provider == "ollama" and ok_host(host):
-            key = ollama_key()
+            key = ollama_key() if host.rstrip("/") == "https://ollama.com" else ""
             req = urllib.request.Request(host.rstrip("/") + "/api/tags", headers={"Authorization": "Bearer " + key} if key else {})
             with urllib.request.urlopen(req, timeout=15) as r:
                 return [m.get("name") or m.get("model") for m in json.loads(r.read()).get("models", [])]
