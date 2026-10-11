@@ -1321,10 +1321,15 @@ function Sim(opts = {}) {
       for (const b of sim.bodies) { const k = b.killer && sim.animals[b.killer] ? 'beasts' : b.killer ? 'people' : /starv/.test(b.how || '') ? 'starvation' : Object.values(DISEASES).some(D => D.name.toLowerCase() === b.how) ? 'disease' : 'other'; cause[k]++; }
       const dead = Object.entries(cause).filter(([, n]) => n).map(([k, n]) => `${n} by ${k}`).join(', ') || 'none';
       const lines = [`Generation ${stat.gen} (${sim.day - 1} days): ${lived.length} of ${ppl.length} lived. Richest: ${ranked.slice(0, 3).map(p => role(p) + ' ~' + Math.round(trueWorth(p)) + 'c').join('; ') || 'nobody'}. Poorest: ${ranked.slice(-2).map(role).join('; ') || 'nobody'}. Deaths: ${dead}. ${sim.rec.arrests} arrests for ${sim.rec.crimes} crimes.`];
-      if (cause.beasts) lines.push('Beasts came out of the Wildwood every night at 22:00 and killed whoever they caught out.');
+      if (cause.beasts) lines.push('Beasts came out of the Wildwood every night at 22:00 and hunted people by scent, even asleep in their houses; on the last night of a generation it is an ogre.');
+      const gl = sim.genLog || [], top = (arr, k, n = 3) => { const c = {}; for (const x of arr) if (x[k]) c[x[k]] = (c[x[k]] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, n).map(([w, m]) => w + ' ' + m).join(', '); };
+      const nights = {}; for (const d of gl) if (d.t === 'death' && d.killer && d.killer !== 'a person') { const key = (d.hr < 6 ? d.day - 1 : d.day) + '|' + d.killer; (nights[key] ||= []).push(d); }
+      for (const [key, ds] of Object.entries(nights)) { const [day, who] = key.split('|'); lines.push(`Night of day ${day}: ${/^[aeiou]/i.test(who) ? 'an' : 'a'} ${who} killed ${ds.length} (${top(ds, 'who')}). Where they were caught: ${top(ds, 'where')}. What they were doing: ${top(ds, 'doing')}.`); }
+      const byPeople = gl.filter(d => d.t === 'death' && d.killer === 'a person'); if (byPeople.length) lines.push(`Killed by people: ${byPeople.length} (${top(byPeople, 'who')}).`);
+      const votes = gl.filter(v => v.t === 'vote'); if (votes.length) lines.push('Elections: ' + votes.map(v => `day ${v.day} with sales tax ${Math.round(v.tax * 100)}% and rent ${v.rent}c, ${v.kept ? 'the mayor kept office' : 'the mayor was voted out'} (${v.tally})`).join('; ') + '.');
       if (cause.disease) lines.push('Sickness killed people; the ones who rested at the Infirmary with the doctor in mostly lived.');
       if (cause.starvation) lines.push('People starved: food and coin for it mattered.');
-      sim.lore.wisdom = [...(sim.lore.wisdom || []), ...lines].slice(-8);
+      sim.lore.wisdom = [...(sim.lore.wisdom || []), lines.join(' ')].slice(-6); sim.genLog = [];
     } catch (e) {}
     sim.onGeneration?.(stat); return stat;
   }
@@ -2084,6 +2089,7 @@ function Sim(opts = {}) {
   // ---- death and the graveyard ---------------------------------------------------
   function die(p, killer, how) {
     if (!p.alive) return;
+    try { (sim.genLog ||= []).push({ t: 'death', day: sim.day, hr: Math.floor(H()), who: p.id === sim.mayorId ? 'the mayor' : p.job === 'none' ? 'a jobless one' : 'a ' + (JOBS[p.job]?.title || 'townsperson').toLowerCase(), killer: killer ? (sim.animals[killer.id] ? (killer.name || 'a beast') : 'a person') : null, how: how || '', where: AREAS[areaOf(p)]?.name || 'the road', doing: p.lastChoice?.kind || p.state || '' }); } catch (e) {}
     if (p.lastChoice && sim.lore) { if (p.lastChoice.x && sim.studentMode !== 'habit') nudge(p.lastChoice.x, p.lastChoice.kind, -1, 0.05); lesson(p.lastChoice.key, p.lastChoice.kind, -40, false); (sim.dataRows ||= []).push({ type: 'death', day: sim.day, sit: p.lastChoice.key, choice: p.lastChoice.kind, how: how || '' }); p.lastChoice = null; }   // the worst outcome there is
     p.deathWorth = worth(p);
     p.alive = false; p.deadAt = sim.t; p.state = 'dead'; p.task = null; p.dying = false; sim.rec.deaths++;
@@ -2723,6 +2729,7 @@ function Sim(opts = {}) {
     const winner = ranked[0], old = sim.people[sim.mayorId];
     sim.election = { candidates: [], last: { day: sim.day, tally: Object.fromEntries(cands.map(c => [c.name, tally[c.id]])), winner: winner.id } };
     log('politics', `Election: ${cands.map(c => `${c.name} ${tally[c.id]}`).join(', ')}. ${fullName(winner)} ${winner === old ? 'keeps the office' : 'is the new mayor'}.`, cands.map(c => c.id));
+    (sim.genLog ||= []).push({ t: 'vote', day: sim.day, tax: sim.taxRate, rent: sim.rent, kept: winner === old, tally: cands.map(c => `${c === old ? 'the mayor' : 'a challenger'} ${tally[c.id]}`).join(' to ') });
     if (winner !== old) {
       if (old && old.alive) { old.job = 'none'; log('politics', `${fullName(old)} is a private citizen again.`, [old.id]); }
       winner.job = 'mayor'; sim.mayorId = winner.id;
