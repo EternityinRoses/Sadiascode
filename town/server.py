@@ -106,7 +106,7 @@ def post(url, body, headers, timeout=60):
 
 NO_EFFORT = {}   # models that refused an effort setting
 
-def ask_model(cfg, prompt, system=None, history=None):
+def ask_model(cfg, prompt, system=None, history=None, kind=None):
     """One turn for one person's instance: their fixed identity (system), their own past turns, and now."""
     prov, model = cfg.get("provider", "off"), cfg.get("model", "")
     msgs = list(history or []) + [{"role": "user", "content": prompt}]
@@ -145,7 +145,9 @@ def ask_model(cfg, prompt, system=None, history=None):
         spend(model, j.get("prompt_eval_count", 0), j.get("eval_count", 0))
         return (j.get("message") or {}).get("content", "")
     if prov == "cloude":
-        return ask_cloude(model or "mayor", msgs, system)
+        # Cloude may be busy in its chat: the turn queues until it is free (Rose). A plan can wait half an hour;
+        # a line of talk is only worth 5 minutes.
+        return ask_cloude(model or "mayor", msgs, system, wait=300 if kind == "chat" else 1800)
     return None
 
 # The "cloude" provider: the person is played by Cloude itself, through a mailbox folder, the
@@ -166,7 +168,7 @@ def ask_cloude(seat, msgs, system, wait=150):
     req = os.path.join(box, f"request_{rid}.json")
     rep = os.path.join(box, f"reply_{rid}.txt")
     body = {"seat": seat, "wake": False, "awaiting_reply": True, "reply_to": f"reply_{rid}.txt",
-            "ts": int(time.time() * 1000), "deadline_s": wait,
+            "ts": int(time.time() * 1000), "deadline_s": wait, "queue": True,
             "messages": ([{"role": "system", "content": system}] if system else []) + msgs}
     with open(req + ".part", "w", encoding="utf-8") as f:
         json.dump(body, f, ensure_ascii=False)
@@ -306,9 +308,10 @@ def think(req):
     hist = [m for m in book.get("history", []) if m.get("role") in ("user", "assistant")][-THREAD:]
     while hist and hist[0]["role"] != "user":
         hist.pop(0)
-    with gate:
+    slot = gate if cfg.get("provider") != "cloude" else threading.Lock()   # a queued Cloude turn doesn't block the townsfolk
+    with slot:
         try:
-            raw = ask_model(cfg, prompt, system, hist)
+            raw = ask_model(cfg, prompt, system, hist, kind=req.get("kind"))
             dec = parse(raw)
         except Exception as e:
             with ulock:

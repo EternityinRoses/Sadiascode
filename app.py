@@ -1985,7 +1985,7 @@ def answer_request(folder, req_file, rid):
         timeout = 150.0 if wake else 85.0
         if isinstance(req.get("ts"), (int, float)) and isinstance(req.get("deadline_s"), (int, float)):
             ts = req["ts"] / 1000 if req["ts"] > 1e11 else req["ts"]   # the game may stamp in ms
-            timeout = min(ts + req["deadline_s"] - time.time() - 2, 300.0)
+            timeout = min(ts + req["deadline_s"] - time.time() - 2, 3600.0 if req.get("queue") else 300.0)   # a queued turn waits for the chat to be free
             if timeout < 3 and not wake:
                 seat_log(f"{seat}  {rid}  skipped, deadline already gone")
                 return
