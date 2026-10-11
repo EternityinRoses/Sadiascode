@@ -58,6 +58,8 @@ for (const [id, r] of Object.entries(S.AREAS)) {
 // furniture, so each place reads as what it is
 for (const h of S.HOUSES) box(1.9, 0.35, 0.95, 0x4a3a2a, h.bed.x, 0.18, h.bed.z);
 for (let i = 0; i < 6; i++) box(0.9, 0.3, 1.9, 0x5a4a38, -63.5 + (i % 3) * 3, 0.15, i < 3 ? 9.5 : 13.5);   // shelter cots
+for (const [x0, z0] of [[-65, 16], [-65, -26], [-55, 16]]) for (let i = 0; i < 4; i++) box(0.9, 0.3, 1.9, 0x4a4038, x0 + 2 + (i % 2) * 6, 0.15, z0 + (i < 2 ? 3 : 7.5));   // barracks bunks
+box(0.6, 1.6, 0.6, 0x6a5a8a, -50, 0.8, 21).material.emissive = new THREE.Color(0x201040); box(3, 1.2, 0.6, 0x5a4a30, -60, 0.6, -25);   // the mages' focus stone, the artillery's bolt rack
 box(2.4, 0.9, 1.4, 0x2a1e16, 38, 0.45, -3); box(0.4, 0.5, 0.4, 0xffb040, 38, 1.15, -3).material.emissive = new THREE.Color(0x603000);   // the Cellar table and its lamp
 box(3, 1.4, 1.2, 0x6a5444, -12, 0.7, -22.5); const oven = box(1.2, 0.5, 0.2, 0xff7a2a, -12, 0.5, -21.8); oven.material.emissive = new THREE.Color(0xff5010);
 box(1.2, 0.9, 0.8, 0x3a3a40, 0, 0.45, -21); box(2, 1, 0.8, 0x2a2420, 2.5, 0.5, -23);
@@ -302,6 +304,7 @@ $('cMode').onclick = () => { me.prefMode = me.prefMode === 'nonlethal' ? 'lethal
 $('cReport').onclick = () => { if (!selected) return note('Select who you want to report, then press Report at the station desk.'); note(S.playerDo('report', null, { about: selected })); };
 $('say').onsubmit = e => { e.preventDefault(); const t = $('sayText').value.trim(); if (!t) return; $('sayText').value = ''; { const w = /^(wake|ring|sleep|stay (?:awake|up))\b(.*)$/i.exec(t); if (w) { const k = w[1].toLowerCase(); note(S.playerDo(k === 'wake' ? 'wake' : k === 'ring' ? 'ring' : k === 'sleep' ? 'sleep' : 'stayup', k === 'wake' ? selected : null, { text: w[2] })); drawPanel(); return; } }
   { const g = /^(?:give|donate)\s+(.+)$/i.exec(t); if (g) { const nm = g[1].toLowerCase(); const who = Object.values(S.people).find(q => q.alive && q.id !== 'player' && new RegExp('\\b' + q.name.toLowerCase() + '\\b').test(nm)); const tid = who ? who.id : selected; note(tid ? S.playerDo('give', tid, { text: nm }) : 'Pick someone first (click them) or name them.'); drawPanel(); return; } }
+  if (/^enlist\b/i.test(t)) { note(S.playerDo('enlist', null, { text: t.toLowerCase() })); drawPanel(); return; }
   if (/^(busk|sing|perform)\b/i.test(t)) { note(S.playerDo('busk', null, {})); drawPanel(); return; }
   { const m = /^class\s+([a-z]+)/i.exec(t); if (m) { note(S.playerDo('class', null, { cls: m[1].toLowerCase() })); drawPanel(); return; } } note(S.playerDo('say', null, { text: t, to: selected, whisper: $('whisper')?.checked })); };
 

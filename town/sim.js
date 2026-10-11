@@ -33,6 +33,9 @@ const AREAS = {
   apothecary: { name: 'Apothecary', x0: 15, x1: 27, z0: 8, z1: 12, indoor: true, shop: 'apothecary' },
   shelter: { name: 'The shelter', x0: -65, x1: -55, z0: 6, z1: 16, indoor: true },
   cellar:  { name: 'The Cellar', x0: 33, x1: 43, z0: -8, z1: 2, indoor: true },
+  guardbarracks: { name: 'Guard barracks', x0: -65, x1: -55, z0: 16, z1: 26, indoor: true },
+  artybarracks:  { name: 'Artillery barracks', x0: -65, x1: -55, z0: -26, z1: -16, indoor: true },
+  magebarracks:  { name: 'Mage barracks', x0: -55, x1: -45, z0: 16, z1: 26, indoor: true },
   graves:  { name: 'Graveyard', x0: 15, x1: 33, z0: -24, z1: -8 },
   lane:    { name: 'Wick Lane', x0: -65, x1: -15, z0: -6, z1: 6 },
   fields:  { name: 'The fields', x0: -105, x1: -65, z0: -22, z1: 22 },
@@ -55,6 +58,7 @@ const DOORS = [
   { a: 'square', b: 'lane', at: P(-15, 0), wide: true }, { a: 'lane', b: 'fields', at: P(-65, 0), wide: true }, { a: 'fields', b: 'wood', at: P(-105, 0), wide: true }, { a: 'wood', b: 'road', at: P(-140, 0), wide: true }, { a: 'fields', b: 'ranch', at: P(-85, 22), wide: true }, { a: 'fields', b: 'orchard', at: P(-85, -22), wide: true }, { a: 'road', b: 'marrow', at: P(-300, 0), wide: true },
   { a: 'graves', b: 'chapel', at: P(33, -16) }, { a: 'lane', b: 'school', at: P(-60, -6) },
   { a: 'lane', b: 'shelter', at: P(-60, 6) }, { a: 'tavern', b: 'cellar', at: P(33, -3) },
+  { a: 'fields', b: 'guardbarracks', at: P(-65, 19) }, { a: 'fields', b: 'artybarracks', at: P(-65, -19) }, { a: 'guardbarracks', b: 'magebarracks', at: P(-55, 21) },
   ...HOUSES.map(h => ({ a: 'lane', b: h.id, at: h.door })),
 ];
 for (const dr of DOORS) {          // a step either side of each door
@@ -167,6 +171,8 @@ const JOBS = {
   captain:    { title: 'Guard captain', place: 'station', from: 7, to: 19, wage: 50, payer: 'town', guard: true },
   guard:      { title: 'Guard', place: 'square', from: 6, to: 18, wage: 30, payer: 'town', guard: true },
   nightguard: { title: 'Night guard', place: 'square', from: 18, to: 6, wage: 30, payer: 'town', guard: true },
+  artillery:  { title: 'Artillery guard', place: 'artybarracks', from: 16, to: 4, wage: 30, payer: 'town', guard: true, ranged: true },   // Rose: crossbows and bows, the watch at the fields gate
+  mageguard:  { title: 'Mage guard', place: 'magebarracks', from: 18, to: 6, wage: 40, payer: 'town', guard: true },   // Rose: only those who cast
   jailer:     { title: 'Jailer', place: 'station', from: 6, to: 22, wage: 30, payer: 'town', guard: true },
   clerk:      { title: 'Town clerk', place: 'hall', from: 9, to: 17, wage: 30, payer: 'town' },
   undertaker: { title: 'Undertaker', place: 'chapel', from: 7, to: 19, wage: 30, payer: 'town' },
@@ -334,7 +340,7 @@ const PERSONAS = [
 function Sim(opts = {}) {
   const sim = {
     t: 7 * 60, day: 1, people: {}, animals: {}, bodies: [], graves: [], log: [], events: [],
-    treasury: 1200, taxRate: 0.15, wages: { guard: 30, captain: 50, mayor: 100, clerk: 30, undertaker: 30, cleric: 30, doctor: 50, teacher: 30, laborer: 10, jailer: 30, nightguard: 30 }, headTax: 0, rent: 10,
+    treasury: 1200, taxRate: 0.15, wages: { guard: 30, captain: 50, mayor: 100, clerk: 30, undertaker: 30, cleric: 30, doctor: 50, teacher: 30, laborer: 10, jailer: 30, nightguard: 30, artillery: 30, mageguard: 40 }, headTax: 0, rent: 10,
     bounty: {}, curfew: false, bail: 60, mayorId: null, captainId: null, gangs: {}, fights: [], election: { candidates: [], day: 7, last: null, votes: null },
     business: {}, history: [], decisionsPending: [], onDecision: null, onLog: null, playerId: null, rules: opts.rules || {},
     flow: { in: {}, out: {} }, rec: { deaths: 0, crimes: 0, arrests: 0, marriages: 0, newcomers: 0, leavers: 0 },
@@ -948,6 +954,10 @@ function Sim(opts = {}) {
       }
       const wantWood = (p.home != null && (HOUSES[p.home].barricade || 0) < 60) || sim.palisade.hp < sim.palisade.max * 0.6;
       if (wantWood && (p.items.wood || 0) < 3) add('forage', 0.8 + p.traits.caution * 2 + wild + (sim.beastsSeen ? 0.5 : 0) + (sim.t < 1440 ? 1 : 0), { craft: 'wood' });   // the town knows the beasts come at 22:00: build from day one
+      if (!CORPS[p.job] && !JOBS[p.job]?.owner && !['mayor', 'captain', 'jailer'].includes(p.job) && (p.job === 'none' || wageCp(p) < 30) && h >= 7 && h < 18 && sim.treasury >= 200 && !openRecord(p).length) {   // the barracks take volunteers
+        const job = casts(p) && corpsOpen('mageguard') ? 'mageguard' : corpsOpen('artillery') && (p.st?.dex || 10) >= 12 ? 'artillery' : corpsOpen('guard') ? 'guard' : corpsOpen('nightguard') ? 'nightguard' : corpsOpen('artillery') ? 'artillery' : null;
+        if (job) add('doas', 0.5 + p.traits.loyalty * 2 + p.traits.aggression - p.traits.caution + (p.job === 'none' ? 1.5 : 0) + (job === 'mageguard' ? 1 : 0), { verb: 'enlist', extra: { text: job === 'mageguard' ? 'mage' : job === 'nightguard' ? 'night guard' : job }, at: randIn(CORPS[job].barracks, 2) });
+      }
       if (p.coin < 60 && (p.home == null || p.job === 'none') && h >= 9) add('busk', 0.8 + (p.coin < SHELTER_FEE ? 1.5 : 0) + (p.home == null ? 0.7 : 0) - p.traits.caution * 0.5);
       if (p.coin > 150 && p.traits.greed < 0.5 && !(p.cd?.give > sim.t)) { const poor = living().filter(q => q !== p && q.kind === 'human' && !q.town && conscious(q) && q.coin < 15 && dist2(q, p) < 30 && R(p, q).like > -0.2).sort((x, y) => R(p, y).like - R(p, x).like)[0]; if (poor) add('doas', (1 - p.traits.greed) * 2 + R(p, poor).like * 2 + (poor.home == null ? 0.5 : 0) - 0.8, { verb: 'give', target: poor, extra: { amount: irnd(1, 10) } }); }
       if ((p.items.wood || 0) >= 3) {
@@ -1186,7 +1196,7 @@ function Sim(opts = {}) {
       case 'shout': case 'yell': case 'cry': if (who && sim.bounty[who.id]) return { kind: 'doas', verb: 'tipoff', target: who, value: 0 }; return { kind: 'doas', verb: 'shout', value: 0 };
       case 'point': case 'rat': case 'tip': case 'betray': return who && sim.bounty[who.id] ? { kind: 'doas', verb: 'tipoff', target: who, value: 0 } : null;
       case 'shelter': return who ? { kind: 'doas', verb: 'takein', target: who, extra: { work: /\bwork|labou?r|wage/.test(rest || '') }, value: 0 } : null;
-      case 'take': case 'become': case 'join': case 'hunter': { if (kind === 'take' && /^in\b/.test(rest || '')) return who ? { kind: 'doas', verb: 'takein', target: who, extra: { work: /\bwork|labou?r|wage/.test(rest) }, value: 0 } : null; if (/hunt/.test(kind + ' ' + (rest || '')) && !/underworld/.test(rest || '')) return p.job === 'none' ? { kind: 'doas', verb: 'becomehunter', value: 0 } : null; if (/leather|tann/.test(rest || '')) return p.job === 'none' ? { kind: 'doas', verb: 'becomeleather', value: 0 } : null; }
+      case 'enlist': case 'take': case 'become': case 'join': case 'hunter': { if (['enlist', 'join', 'become'].includes(kind) && (kind === 'enlist' || /artill|archer|crossbow|mage guard|mage barracks|barracks|the guard|the watch|night guard/.test(rest || '')) && !/gang|crew|underworld/.test(rest || '')) { const job = corpsWord(rest || ''); return { kind: 'doas', verb: 'enlist', extra: { text: job }, at: randIn(CORPS[job].barracks, 2), value: 0 }; } if (kind === 'take' && /^in\b/.test(rest || '')) return who ? { kind: 'doas', verb: 'takein', target: who, extra: { work: /\bwork|labou?r|wage/.test(rest) }, value: 0 } : null; if (/hunt/.test(kind + ' ' + (rest || '')) && !/underworld/.test(rest || '')) return p.job === 'none' ? { kind: 'doas', verb: 'becomehunter', value: 0 } : null; if (/leather|tann/.test(rest || '')) return p.job === 'none' ? { kind: 'doas', verb: 'becomeleather', value: 0 } : null; }
       // falls through
       case 'takeup_': { if (/underworld|thief|burglar|mugger|robber|extort|bandit|rustler|fence|smuggl|crook|crim/.test(rest)) { const role = Object.keys(SEEDY_ROLES).find(r => rest.includes(r.slice(0, 5))) || 'thief'; return { kind: 'takeup', role, value: 0 }; } if (kind === 'join' && who?.gang) return { kind: 'join', gang: who.gang, value: 0 }; return null; }
       case 'size': case 'sizeup': case 'study': case 'watch': return who ? { kind: 'doas', verb: 'sizeup', target: who, value: 0, reach: 8 } : (kind === 'study' ? { kind: 'study', value: 0 } : null);
@@ -1699,6 +1709,7 @@ function Sim(opts = {}) {
         if (j.guard && p.post && sim.t < (p.postUntil || 0) && AREAS[p.post]) at = randIn(p.post, 2);
         if (j.place === 'square') at = randIn(sim.curfew && night() ? 'lane' : pick(['square', 'square', 'lane']));
         if (p.job === 'jailer') at = SPOTS.jailer;
+        if ((p.job === 'artillery' || p.job === 'mageguard') && night() && !(p.post && sim.t < (p.postUntil || 0))) at = P(-67.5, (p.job === 'artillery' ? -19 : 19) + rnd(-3, 3));   // after dark they hold the fields gate
         return setTask(p, 'work', { to: at, until: sim.t + 60 });
       }
       case 'eat': return setTask(p, 'eat', { until: sim.t + 10 });
@@ -2656,6 +2667,7 @@ function Sim(opts = {}) {
   const crewish = p => !!p && p.kind === 'human' && (isBoss(p) || !!(p.gang && sim.gangs?.[p.gang]));   // the Cellar is the boss's and those who joined his gang, nobody else's
   function bedFor(p) {
     if (p.home != null) return HOUSES[p.home].bed;
+    if (barracksOf(p)) return randIn(barracksOf(p), 1.2);   // a free bunk with your corps
     if (crewish(p)) return randIn('cellar', 1.2);
     if (p.shelterNight === nightKey() || p.coin >= SHELTER_FEE) return randIn('shelter', 1.2);
     return randIn('fields', 4);
@@ -2666,7 +2678,7 @@ function Sim(opts = {}) {
     pay(p, 'town', SHELTER_FEE, 'shelter'); p.shelterNight = nightKey();
     remember(p, { text: `I paid ${money(SHELTER_FEE)} for a cot at the shelter.` }); return true;
   }
-  const roofed = p => { const a = areaOf(p), b = p.task?.kind === 'sleep' ? areaOf(p.task.to) : null; return a === 'shelter' || b === 'shelter' || ((a === 'cellar' || b === 'cellar') && crewish(p)); };
+  const roofed = p => { const a = areaOf(p), b = p.task?.kind === 'sleep' ? areaOf(p.task.to) : null; return a === 'shelter' || b === 'shelter' || (barracksOf(p) && (a === barracksOf(p) || b === barracksOf(p))) || ((a === 'cellar' || b === 'cellar') && crewish(p)); };
   sim.bedFor = bedFor;
 
   // busking: play or sing in the square; those who hear may toss a coin (d20 + Charisma + half Diplomacy)
@@ -2714,6 +2726,38 @@ function Sim(opts = {}) {
     if (me.brain !== 'human') cool(me, 'give', 480);
     return `You give ${t.name} ${money(n)}.`;
   }
+
+  // ---- the three barracks by the fields gate (Rose): nobody is put in them; whoever wants to, enlists ----
+  // Guard barracks (day and night guards), Artillery barracks (crossbows and bows), the Mage barracks (those who cast).
+  // Members bunk there free. The town pays; openings follow the guard numbers plus the mayor's extra hires.
+  const CORPS = {
+    guard: { barracks: 'guardbarracks', want: 2 }, nightguard: { barracks: 'guardbarracks', want: 2 },
+    artillery: { barracks: 'artybarracks', want: 3 }, mageguard: { barracks: 'magebarracks', want: 2 },
+  };
+  const casts = p => !!(p.slotMax && ((p.slotMax.missiles || 0) + (p.slotMax.cures || 0) + (p.slotMax.rays || 0)) > 0);
+  const barracksOf = p => p.job === 'captain' || p.job === 'jailer' ? 'guardbarracks' : CORPS[p.job]?.barracks || null;
+  const corpsWord = t => /artill|archer|\bbow|crossbow|marks/.test(t) ? 'artillery' : /mage|wizard|sorcer|spell|magic/.test(t) ? 'mageguard' : /night/.test(t) ? 'nightguard' : 'guard';
+  function corpsOpen(job) { const c = CORPS[job]; return c ? Math.max(0, c.want + (sim.extraHires?.[job] || 0) - living().filter(q => q.job === job).length) : 0; }
+  function enlist(p, job) {
+    const c = CORPS[job]; if (!c) return 'Enlist as a guard, night guard, artillery guard or mage guard.';
+    if (p.job === job) return `You already serve as ${JOBS[job].title.toLowerCase()}.`;
+    if (areaOf(p) !== c.barracks) return `Go to the ${AREAS[c.barracks].name} to enlist.`;
+    if (JOBS[p.job]?.owner) return 'You run a business; you can\'t also take the town\'s pay.';
+    if (['mayor', 'captain'].includes(p.job)) return 'Your office keeps you.';
+    if (openRecord(p).length) return 'They won\'t take someone with an open record.';
+    if (job === 'mageguard' && !casts(p)) return 'The Mage barracks takes only those who can cast spells.';
+    if (!corpsOpen(job)) return `The ${AREAS[c.barracks].name} has no place free (the mayor can hire more).`;
+    if (sim.treasury < 200) return 'The town can\'t pay another; the treasury is low.';
+    const was = p.job; p.job = job; p.post = null;
+    let kit = '';
+    if (job === 'artillery' && !WEAPONS[p.weapon]?.range) { if (p.weapon && p.weapon !== 'fists') p.items[p.weapon] = (p.items[p.weapon] || 0) + 1; p.weapon = 'lightxbow'; p.items.bolts = (p.items.bolts || 0) + 20; kit = ' They hand you a light crossbow and 20 bolts.'; }
+    else if (job === 'artillery' && WEAPONS[p.weapon]?.ammo) { const a = WEAPONS[p.weapon].ammo; p.items[a] = (p.items[a] || 0) + 20; kit = ` They give you 20 ${a}.`; }
+    log('life', `${fullName(p)} enlists in the ${AREAS[c.barracks].name} as ${JOBS[job].title.toLowerCase()}${was !== 'none' ? ` (leaving work as ${JOBS[was]?.title.toLowerCase() || was})` : ''}.`, [p.id]);
+    remember(p, { text: `I enlisted as ${JOBS[job].title.toLowerCase()}; I bunk at the ${AREAS[c.barracks].name}` });
+    return `You enlist as ${JOBS[job].title.toLowerCase()} (${money(sim.wages[job] ?? JOBS[job].wage)} a day, ${JOBS[job].from}:00-${JOBS[job].to % 24}:00).${kit} You can bunk here free.`;
+  }
+  const barracksNews = () => { const o = Object.keys(CORPS).filter(j => corpsOpen(j)).map(j => `${JOBS[j].title} x${corpsOpen(j)} (${AREAS[CORPS[j].barracks].name})`); return o.length ? `The barracks by the fields gate are taking volunteers ("enlist <guard | night guard | artillery | mage guard>" there; members bunk free; mage guards must cast spells; artillery get a crossbow): ${o.join(', ')}.` : ''; };
+  sim.enlist = enlist; sim.corpsOpen = corpsOpen;
 
   // ---- the shelter law (Rose) -----------------------------------------------------------
   // Taking someone in for their work is allowed (they live free; their wages go to whoever took them in). Sheltering for
@@ -4363,6 +4407,7 @@ function Sim(opts = {}) {
     return [sim.alarmOn() ? `THE ALARM BELL IS RINGING (rung by ${sim.people[sim.alarm.by]?.name || 'someone'} at ${String(Math.floor((sim.alarm.t % 1440) / 60)).padStart(2, '0')}:00).` : '',
       p.id === sim.captainId ? `You command the guard ("orders" in your plan): ${living().filter(q => isGuard(q) && q !== p).map(q => `${q.name} (${q.id}${q.post ? ', posted at ' + (AREAS[q.post]?.name || q.post) : ''})`).join('; ') || 'nobody'}.` : '',
       isBoss(p) ? `Your crew ("crew_orders" in your plan): ${crewOf(p).map(q => `${q.name} (${q.id}${q.crewPost ? ', at ' + AREAS[q.crewPost]?.name : ''})`).join('; ') || 'nobody'}.` : '',
+      !CORPS[p.job] && !JOBS[p.job]?.owner ? barracksNews() : '',
       p.sleptMin > 0 ? `You have slept ${Math.floor(p.sleptMin / 60)} of the 8 hours that restore your spells and heal you.` : ''].filter(Boolean).join(' ');
   }
   sim.applyMayor = (who, dec) => {
@@ -4418,7 +4463,7 @@ function Sim(opts = {}) {
   // What an AI-played person is told. Facts about themselves and what they can perceive, what is
   // available, the commands they have, the careers that exist. No advice, no strategy: that's theirs.
   const SEEDY = ['pickpocket (lift coin from people)', 'burglar (houses and shops, at night)', 'mugger (rob people by force)', 'shop robber (hold up a keeper)', 'extortionist (sell a business "insurance")', 'bandit (ambush carts on the Old Road)', 'rustler (take the ranch\'s animals)', 'fence (sell stolen goods)', 'gang boss or member (found or join a crew)', 'sellsword (hire out as muscle)', 'a bribe-taking official (if you hold an office)', 'liar and slanderer'];
-  const COMMANDS = ['give <name> <amount | item> | donate <amount> to <name> (any sum: 1 cp, a silver, 2 gp; or something you carry)', 'busk (sing or play in the Market square for tossed coins)', 'wake <name> | wake the neighbours (rouse those asleep near you)', 'ring the alarm (the bell in the Market square: wakes the whole town; guards and militia run at the beasts)', 'sleep [N hours] (any time of day; 8 hours of sleep restores your spells and heals you)', 'stay awake [N hours] (even at night)', 'pool <number> <item> for <the guards | the militia | everyone | us | a name> (start a money pool everyone can chip into)', 'chip in <amount> to <item> (put coin into an open money pool)', 'take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house address or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3 sp, the Chapel cleric cures anything for 6 sp; only a few patients at a time)', 'shout for the guard (any time)', 'point out <person> to the guard (someone on the bounty board you can see)', 'bribe <person> <amount, e.g. 5 sp>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <amount>', 'propose to <person>', 'invite <person> (to come with you; add an amount to pay them)', 'hire <person> as a bodyguard <amount> (the mayor, guard captain or a gang boss: they follow and fight for you for a day)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'buy house <address> (1 gp, at the town hall)', 'rent <address> (a bed from its owner, a night at a time; renews itself while you can pay)', 'move out', 'take in <person> for work (as a house owner: they live free, their wages come to you)', 'turn out <person> (a lodger)', 'whittle club / whittle spear (in the Wildwood or the orchard: a club in an hour, a spear in two)', 'gather stones (stones to throw, or ammunition for a sling; outside town)', 'chop wood (in the Wildwood, an hour: 3 wood, 5 with an axe)', 'barricade <address> (3 wood, 2 hours, your own house: beasts must batter it down)', 'build palisade (3 wood, 2 hours on the town palisade at the edge of the Wildwood)', 'light a watch-fire (2 wood: light until dawn, outdoors)', 'write <words> (on the notice board in the Market square)', 'go to <place, address or person> (e.g. "go to 3 Wick Lane", "go to Guard station")', 'rally <place or address> (the mayor calls the town, the guard captain the guards, a gang boss the crew: they come and hold there about two hours)', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
+  const COMMANDS = ['enlist <guard | night guard | artillery | mage guard> (walks you to its barracks by the fields gate and joins if there is a place; town pay; members bunk free; artillery get a crossbow; mage guards must cast spells)', 'give <name> <amount | item> | donate <amount> to <name> (any sum: 1 cp, a silver, 2 gp; or something you carry)', 'busk (sing or play in the Market square for tossed coins)', 'wake <name> | wake the neighbours (rouse those asleep near you)', 'ring the alarm (the bell in the Market square: wakes the whole town; guards and militia run at the beasts)', 'sleep [N hours] (any time of day; 8 hours of sleep restores your spells and heals you)', 'stay awake [N hours] (even at night)', 'pool <number> <item> for <the guards | the militia | everyone | us | a name> (start a money pool everyone can chip into)', 'chip in <amount> to <item> (put coin into an open money pool)', 'take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house address or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3 sp, the Chapel cleric cures anything for 6 sp; only a few patients at a time)', 'shout for the guard (any time)', 'point out <person> to the guard (someone on the bounty board you can see)', 'bribe <person> <amount, e.g. 5 sp>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <amount>', 'propose to <person>', 'invite <person> (to come with you; add an amount to pay them)', 'hire <person> as a bodyguard <amount> (the mayor, guard captain or a gang boss: they follow and fight for you for a day)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'buy house <address> (1 gp, at the town hall)', 'rent <address> (a bed from its owner, a night at a time; renews itself while you can pay)', 'move out', 'take in <person> for work (as a house owner: they live free, their wages come to you)', 'turn out <person> (a lodger)', 'whittle club / whittle spear (in the Wildwood or the orchard: a club in an hour, a spear in two)', 'gather stones (stones to throw, or ammunition for a sling; outside town)', 'chop wood (in the Wildwood, an hour: 3 wood, 5 with an axe)', 'barricade <address> (3 wood, 2 hours, your own house: beasts must batter it down)', 'build palisade (3 wood, 2 hours on the town palisade at the edge of the Wildwood)', 'light a watch-fire (2 wood: light until dawn, outdoors)', 'write <words> (on the notice board in the Market square)', 'go to <place, address or person> (e.g. "go to 3 Wick Lane", "go to Guard station")', 'rally <place or address> (the mayor calls the town, the guard captain the guards, a gang boss the crew: they come and hold there about two hours)', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
   function careers() {
     const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.hunt ? ', your own boss: hunt game in the Wildwood and sell the meat and pelts at the store ("become a hunter")' : j.craft ? ', your own boss: turn pelts into leather armour (wolf) and hide armour (bear, troll), sold to the smithy ("become a leatherworker")' : j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${money(sim.wages[k] ?? j.wage)} by the town` : j.wage ? `, ${money(j.wage)} a shift from the owner` : ''})`);
     return `${legit.join('; ')}; Mayor (elected, ${money(sim.wages.mayor ?? JOBS.mayor.wage)}); Guard captain (elected by the guards). Outside the law (the underworld): ${SEEDY.join('; ')}. The underworld's tools (pickpocket, mug, burgle, rob, steal, hide, case, wait for, extort, ambush, rustle) come with a place in it: take up a seedy career at the Drowned Lantern after dark ("take up <career>"), found or join a gang, or, as a guard, take someone's money. "go straight" leaves it.`;
@@ -4814,6 +4859,7 @@ function Sim(opts = {}) {
     if (kind === 'wake') return wakeNear(me, t && t.kind === 'human' ? t : null, 15, extra.why);
     if (kind === 'ring') return ringAlarm(me);
     if (kind === 'stayup') { const hh = parseFloat(String(extra.text || '').match(/\d+(\.\d+)?/)?.[0]); me.stayUpUntil = sim.t + (hh > 0 ? Math.min(24, hh) : 8) * 60; if (me.task?.kind === 'sleep') me.task = null; if (me.state === 'sleep') me.state = 'idle'; return 'You stay awake.'; }
+    if (kind === 'enlist') return enlist(me, corpsWord(String(extra.text || '').toLowerCase()));
     if (kind === 'sleep') { if (!free(me) || me.fight) return 'You can\'t sleep right now.'; const hh = parseFloat(String(extra.text || '').match(/\d+(\.\d+)?/)?.[0]); startTask(me, { kind: 'sleep', hours: hh > 0 ? Math.min(12, hh) : null }); return me.home != null ? 'You head to bed.' : 'You find a spot to lie down.'; }
     if (kind === 'pool') return startPool(me, extra.text || '');
     if (kind === 'chipin') return chipIn(me, extra.text || '', extra.amount);
