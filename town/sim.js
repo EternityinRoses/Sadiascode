@@ -447,7 +447,7 @@ function Sim(opts = {}) {
   sim.invade = invade; sim.BEASTS = BEASTS;
   // a beast hunts: the nearest person or animal it can see, otherwise toward the houses
   function prowl(an, dtMin) {
-    if (an.hp < an.maxhp * 0.3) { an.goal = P(-125, rnd(-20, 20)); stepToward(an, an.goal, 1.6, dtMin); if (areaOf(an) === 'wood' && Math.random() < dtMin / 30) { an.alive = false; an.left = true; log('life', `The wounded ${an.name.toLowerCase()} slinks back into the Wildwood.`, [an.id]); } return; }
+    // no retreat: a beast out of the Wildwood keeps hunting until it's killed or nobody is left (Rose)
     // a beast out of the Wildwood hunts people by scent (60 m, through doors and walls: it comes in after you);
     // only when nobody's within reach of its nose does it go for the penned animals and dogs it can see (Rose)
     const SCENT = 60;
@@ -1253,7 +1253,7 @@ function Sim(opts = {}) {
       case 'approach': case 'beg': { const q = nearHuman(); if (q && dist2(q, an) > 1.8) stepToward(an, q, spd * 0.8, dtMin); else if (q && an.act === 'beg' && (an.bond?.[q.id] || 0) > 0.2 && Math.random() < dtMin / 30) { const k = Object.keys(q.items).find(k => GOODS[k]?.food && q.items[k] > 0); if (k && q.brain !== 'human') { q.items[k]--; an.full = Math.min(1, an.full + 0.25); an.bond[q.id] = Math.min(an.maxBond ?? 1, (an.bond[q.id] || 0) + 0.03); log('life', `${q.name} tosses ${an.name} a scrap.`, [q.id, an.id]); } } break; }
       case 'flee': { const t = an.fleeAt && sim.t - an.fleeAt < 2 ? an.fleeFrom : (an.fleeAt = sim.t, an.fleeFrom = [...Object.values(sim.animals).filter(a => a.alive && a.monster && a !== an), ...living().filter(q => q.kind === 'human' && conscious(q) && (an.hurtBy === q.id || an.monster))].filter(q => dist2(q, an) < 18).sort((a, b) => dist2(a, an) - dist2(b, an))[0]);
         if (t && t.alive) { const dx = an.x - t.x, dz = an.z - t.z, l = Math.hypot(dx, dz) || 1; stepToward(an, P(an.x + dx / l * 4, an.z + dz / l * 4), spd * 1.4, dtMin); } else stepToward(an, an.goal ||= randIn(home, 2), spd, dtMin);
-        if (an.monster && areaOf(an) === 'wood' && an.hp < an.maxhp * 0.6 && Math.random() < dtMin / 30) { an.alive = false; an.left = true; log('life', `The ${an.name.toLowerCase()} slinks back into the Wildwood.`, [an.id]); }
+        // (beasts no longer slink back into the Wildwood)
         break; }
       case 'attack': {
         if (an.monster) { prowl(an, dtMin); break; }
