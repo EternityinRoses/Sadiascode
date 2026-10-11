@@ -153,3 +153,5 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - Hollow Town: the hidden dead traveller (Aldous Merrow, Longsword +1, elven chain, 200c) now lies in a back corner of a random house instead of the Wildwood.
 
 - Hollow Town: nobody starts as mayor. The Claude/Cloude mayor brain (p1) starts jobless with 30c and must stand and campaign on day 1; the first vote is at noon on day 2. Its push is now: become mayor and keep the office.
+
+- Hollow Town: houses have street addresses (1-8 Wick Lane, odd and even on opposite sides). 'go to', 'case' and 'rally' accept an address, 'house 3' or '#3'. People are told where they live. New command 'rally <place>': the mayor calls the town, the guard captain calls the guards, a gang boss calls the crew; they come and hold there about 2 hours (AI folk are asked). New mayor guard order 'go to <place or address>' rushes guards there now. In a blank start the mayor brain gets no head start either (only crime bosses do).
