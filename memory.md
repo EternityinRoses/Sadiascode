@@ -187,6 +187,10 @@ A fixed copy is at `fixed/minds.js` on the branch.
 
 - HT wake/alarm bell/captain+boss orders/sleep any time; 8h sleep (sleptMin) restores spells+HP, no dawn reset. Humans run doTask only for sleep. Smoke: .backups/smoke_watch.mjs.
 
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT giving (giveTo), shelter 1 sp/night (bedFor/settleBed, roofed vs vagrancy), the Cellar (crew sleep free), busking (buskRound), wood from day one; craft progress kept (p.craftProg). Smoke: .backups/smoke_shelter.mjs.
+
 # From the ☁️ cloud brain (Claude Code cloud sessions): notes/cloud.md
 
 - Oct 10: a 📨 reply now gets a turn in the receiving chat (API or Code), shown live, so it acts on the reply where Rose can watch; that answer stays put and is never sent back (no loops).
@@ -212,4 +216,3 @@ A fixed copy is at `fixed/minds.js` on the branch.
 - Oct 11: Rose: "give them the tools to find the most efficient way to win". New verbs for everyone (doAs + commands): size up <person> (Sense/Spot vs Bluff: purse estimate, gear, gang, home), case <house n | business> (who lives there, who's in, savings, lock), hide (Hide vs Spot even in daylight at -5, armour check penalty), wait for <person> (hidden lurk until they come near, then the next step), steal <item> (shoplift: Sleight vs keeper's Spot; caught = fight or hue and cry), escape (from a cell: bribe the jailer or Open Lock/Escape vs 22; jailed AI bodies get asked what to do). AIs could already attack anyone. BUG FIXED: a guard winning any nonlethal fight jailed the loser, even his own mugging victim; now only for arrests, the one who started it, or an open charge (fights record f.by).
 - Oct 11: Hollow Town underworld gating (Rose): crime tools (pickpocket, mug, burgle, rob, steal, hide, case, wait for, extort, ambush, rustle) only for people IN the underworld: "take up <seedy career>" at the Drowned Lantern after dark, gang members, guards who took money (onPayroll), the crime-boss persona; classic start also seeds rogues/thugs; blank start only the persona. "go straight" leaves. Others' crime steps fail with "that takes a place in the underworld". Plain brains tempted by crime get a "takeup" option. Rose (player) is not gated. Job tools were already job-gated.
 - Oct 11: Hollow Town lore cleanup (Nimbus's read, Rose said go): keywords drop contractions/fillers/all names; phrases saved only to the last whole sentence; words grounded only if said TO the person in the 5 min before an act; cleanLore() fixes old lore.json on load. changes.md has it. Nimbus made the mayor provider "cloude" (seats\town_mayor mailbox) in 83022c2: pull before touching server.py.
-- HT giving (giveTo), shelter 1 sp/night (bedFor/settleBed, roofed vs vagrancy), the Cellar (crew sleep free), busking (buskRound), wood from day one; craft progress kept (p.craftProg). Smoke: .backups/smoke_shelter.mjs.
