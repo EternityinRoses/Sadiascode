@@ -393,6 +393,8 @@ function Sim(opts = {}) {
     }
     // soft pushes: a few people are given a persona (only an AI brain reads it)
     { const pool = everyone().filter(p => !p.town && p.kind === 'human' && p.age >= 18 && p.brain !== 'mayor-ai').sort(() => Math.random() - 0.5); (opts.personas || PERSONAS).filter(Boolean).forEach((t, k) => { if (pool[k]) pool[k].persona = t; }); }
+    for (const p of everyone()) if (!sim.blank && !p.town && (p.cls === 'rogue' || p.job === 'none' && p.cls === 'warrior')) p.underworld = { role: p.cls === 'rogue' ? 'thief' : 'mugger', since: 0 };
+    for (const p of everyone()) if (p.persona && /crime boss|crime family/i.test(p.persona)) p.underworld = { role: 'boss', since: 0 };
     sim.lore && mutateAll();
     log('town', sim.blank ? `Day 1. ${fullName(mayor)} is mayor. ${living().length} people live in Hollow Town, and the rest of them have nothing yet.` : `Day 1. ${fullName(mayor)} is mayor. ${living().length} people live in Hollow Town.`);
   }
@@ -646,6 +648,22 @@ function Sim(opts = {}) {
   const shopOpen = shop => living().some(q => free(q) && JOBS[q.job]?.place === shop && q.task?.kind === 'work' && areaOf(q) === shop);
   sim.shopOpen = shopOpen;
 
+  // ======================================================== the underworld ==
+  // The tools of crime come with a role you take on: a seedy career taken up where the underworld
+  // meets (the Drowned Lantern, after dark), a gang, or (for a guard) being on someone's payroll.
+  const CRIME_KINDS = new Set(['pickpocket', 'mug', 'burgle', 'shoprob', 'extort', 'rustle', 'ambush', 'lurkfor']);
+  const CRIME_VERBS = new Set(['hide', 'case', 'steal']);
+  const SEEDY_ROLES = { thief: 'thief (pickpocket, shoplifter)', burglar: 'burglar', mugger: 'mugger', robber: 'shop robber', extortionist: 'extortionist', bandit: 'bandit', rustler: 'rustler', fence: 'fence', smuggler: 'smuggler' };
+  const inUnderworld = p => p.brain === 'human' || !!(p.underworld || p.gang || p.onPayroll);
+  sim.inUnderworld = inUnderworld; sim.SEEDY_ROLES = SEEDY_ROLES;
+  function takeUp(p, role) {
+    if (p.underworld) return true;
+    if (areaOf(p) !== 'tavern' || !(H() >= 20 || H() < 4)) return false;
+    p.underworld = { role: SEEDY_ROLES[role] ? role : 'thief', since: sim.day };
+    log('crime', `${fullName(p)} falls in with the underworld at the Drowned Lantern (${SEEDY_ROLES[p.underworld.role]}).`, [p.id]);
+    remember(p, { text: `I took up a life as a ${SEEDY_ROLES[p.underworld.role]}` }); return true;
+  }
+  sim.takeUp = takeUp;
   function options(p) {
     const h = H(), out = [], j = JOBS[p.job];
     if (p.town === 'marrow') { if (p.food < 0.5) p.food = 1; if ((p.water ?? 1) < 0.5) p.water = 1; return [{ kind: 'work', value: 5 }]; }
@@ -803,6 +821,11 @@ function Sim(opts = {}) {
     const laid = sim.bodies.find(b => b.collected && !b.buried && R(p, b.id).like > 0.4);
     if (laid) add('mourn', 2.5, { grave: { at: SPOTS.chapel } });
     // AI brains steer with a daily policy: weights per kind of action
+    if (!inUnderworld(p)) {
+      const tempted = out.filter(o => CRIME_KINDS.has(o.kind)).reduce((m, o) => Math.max(m, o.value), 0);
+      for (let i = out.length - 1; i >= 0; i--) if (CRIME_KINDS.has(out[i].kind)) out.splice(i, 1);
+      if (tempted > 0 && p.kind === 'human' && !p.town && !(p.cd?.takeup > sim.t)) out.push({ kind: 'takeup', value: tempted * 0.6, role: 'thief' });
+    }
     if (p.policy) for (const o of out) o.value *= p.policy[o.kind] ?? p.policy[groupOf(o.kind)] ?? 1;
     return out;
   }
@@ -902,7 +925,9 @@ function Sim(opts = {}) {
     const who = rest ? findPerson(p, rest) : null;
     switch (kind) {
       case 'follow': case 'accompany': return who && who.alive ? { kind: 'tail', target: who, value: 0 } : null;
-      case 'go': case 'walk': case 'head': case 'move': { const pl = findPlace(rest || ''); if (pl === 'home' && p.home != null) return { kind: 'goto', at: HOUSES[p.home].bed, place: 'home' }; if (pl === 'well') return { kind: 'goto', at: SPOTS.well, place: 'the well' }; if (pl === 'pond') return { kind: 'goto', at: SPOTS.pond, place: 'the pond' }; if (pl) return { kind: 'goto', at: SPOTS[pl] || randIn(pl, 2), place: AREAS[pl].name }; return who ? { kind: 'goto', at: who, place: who.name } : null; }
+      case 'go': if (/straight/.test(rest)) return { kind: 'gostraight', value: 0 };
+      // falls through: go to <place>
+      case 'walk': case 'head': case 'move': { const pl = findPlace(rest || ''); if (pl === 'home' && p.home != null) return { kind: 'goto', at: HOUSES[p.home].bed, place: 'home' }; if (pl === 'well') return { kind: 'goto', at: SPOTS.well, place: 'the well' }; if (pl === 'pond') return { kind: 'goto', at: SPOTS.pond, place: 'the pond' }; if (pl) return { kind: 'goto', at: SPOTS[pl] || randIn(pl, 2), place: AREAS[pl].name }; return who ? { kind: 'goto', at: who, place: who.name } : null; }
       case 'stay': case 'listen': return { kind: 'hold', with: who, value: 0 };
       case 'wait': case 'lurk': return who ? { kind: 'lurkfor', target: who, value: 0 } : { kind: 'hold', value: 0 };
       case 'talk': case 'visit': case 'approach': case 'meet': return who ? { kind: 'visit', target: who, value: 0 } : null;
@@ -913,6 +938,7 @@ function Sim(opts = {}) {
       case 'hunt': { const sp = Object.keys(GAME).find(k => rest.includes(k)) || 'rabbit'; return { kind: 'hunt', species: sp, value: 0 }; }
       case 'fish': return { kind: 'fish', value: 0 };
       case 'shout': case 'yell': case 'cry': return { kind: 'doas', verb: 'shout', value: 0 };
+      case 'take': case 'become': case 'join': { if (/underworld|thief|burglar|mugger|robber|extort|bandit|rustler|fence|smuggl|crook|crim/.test(rest)) { const role = Object.keys(SEEDY_ROLES).find(r => rest.includes(r.slice(0, 5))) || 'thief'; return { kind: 'takeup', role, value: 0 }; } if (kind === 'join' && who?.gang) return { kind: 'join', gang: who.gang, value: 0 }; return null; }
       case 'size': case 'sizeup': case 'study': case 'watch': return who ? { kind: 'doas', verb: 'sizeup', target: who, value: 0, reach: 8 } : (kind === 'study' ? { kind: 'study', value: 0 } : null);
       case 'case': { const n = +(rest.match(/\d+/) || [0])[0]; const bid = Object.keys(sim.business).find(b => rest.includes(b)); const owner = who; const hi = n ? n - 1 : owner?.home; if (bid) return { kind: 'doas', verb: 'case', at: SPOTS[bid], extra: { business: bid }, value: 0 }; return hi != null && HOUSES[hi] ? { kind: 'doas', verb: 'case', at: HOUSES[hi].door, extra: { house: hi }, value: 0 } : null; }
       case 'hide': return { kind: 'doas', verb: 'hide', value: 0 };
@@ -955,6 +981,7 @@ function Sim(opts = {}) {
   }
   function matchStep(step, opts, p) {
     const want = String(step.do || step).toLowerCase().trim(), kind = want.split(/[\s:]+/)[0], rest = want.slice(kind.length).trim();
+    if (p && !inUnderworld(p) && ['pickpocket', 'mug', 'burgle', 'rob', 'steal', 'shoplift', 'hide', 'case', 'extort', 'ambush', 'rustle', 'wait', 'lurk'].includes(kind) && !(kind === 'wait' && !/^for\b/.test(rest))) { (p.failed ||= []).push(want + ' (that takes a place in the underworld)'); return { kind: 'hold', value: 0, refused: true }; }
     const same = opts.filter(o => o.kind === kind);
     if (!same.length) return p ? synthStep(p, kind, rest) : null;
     if (!rest) return same.sort((a, b) => b.value - a.value)[0];
@@ -1321,6 +1348,8 @@ function Sim(opts = {}) {
       case 'lurkfor': p.hiding = sim.t + 240; return setTask(p, 'lurkfor', { target: o.target.id, until: sim.t + 240 });
       case 'escape': tryEscape(p, true); return setTask(p, 'idle', { until: sim.t + 5 });
       case 'doas': return setTask(p, 'doas', { verb: o.verb, target: o.target?.id || null, extra: o.extra || {}, to: o.at || null, until: sim.t + 90 });
+      case 'takeup': cool(p, 'takeup', 1440); return setTask(p, 'takeup', { to: randIn('tavern', 2), role: o.role || 'thief', until: sim.t + 600 });
+      case 'gostraight': if (p.underworld) { log('life', `${p.name} turns their back on the underworld.`, [p.id]); p.underworld = null; } p.onPayroll = false; return setTask(p, 'idle', { until: sim.t + 5 });
       case 'apply': return setTask(p, 'apply', { target: o.target.id, until: sim.t + 90 });
       case 'lease': return setTask(p, 'lease', { to: SPOTS.hall, business: o.business, until: sim.t + 120 });
       case 'tail': return setTask(p, 'tail', { target: o.target.id, until: sim.t + 240 });
@@ -1383,6 +1412,7 @@ function Sim(opts = {}) {
       case 'fish': { if (!arrive(p, tk.to, dt)) return; if (Math.random() < dt / 30 * 0.5 * (sim.fish / 40)) { sim.fish--; p.items.fish = (p.items.fish || 0) + 1; if (p.items.fish >= 3) { eatFrom(p); p.task = null; } } return; }
       case 'hunt': return doHunt(p, dt);
       case 'lease': { if (!arrive(p, tk.to, dt)) return; leaseTo(p, tk.business); p.task = null; return; }
+      case 'takeup': { if (!arrive(p, tk.to, dt)) return; if (takeUp(p, tk.role)) p.task = null; else if (H() >= 6 && H() < 18) { p.task = null; remember(p, { text: 'the underworld only meets at the Drowned Lantern after dark' }); } return; }
       case 'lurkfor': { const t = sim.people[tk.target]; if (!t || !t.alive) { p.task = null; p.hiding = 0; return; } if (dist2(p, t) < 4 && sees(p, t)) { p.task = null; remember(p, { text: `${t.name} came by where I was waiting` }); p.alert = true; } return; }
       case 'doas': {
         const t = tk.target && (sim.people[tk.target] || sim.animals[tk.target]);
@@ -1891,7 +1921,7 @@ function Sim(opts = {}) {
   sim.confrontArrest = confrontArrest;
   function acceptsBribe(off, amt) {
     const greedy = off.traits.greed * amt * 0.5, risk = witnesses(off, [off]).length * 2 + off.traits.honesty * 6 + (off.id === sim.mayorId ? 2 : 0);
-    return greedy + rnd(-1, 1) > risk;
+    const yes = greedy + rnd(-1, 1) > risk; if (yes && isGuard(off)) off.onPayroll = true; return yes;
   }
   sim.acceptsBribe = acceptsBribe;
   function jail(q, g) {
@@ -2545,10 +2575,10 @@ function Sim(opts = {}) {
   // What an AI-played person is told. Facts about themselves and what they can perceive, what is
   // available, the commands they have, the careers that exist. No advice, no strategy: that's theirs.
   const SEEDY = ['pickpocket (lift coin from people)', 'burglar (houses and shops, at night)', 'mugger (rob people by force)', 'shop robber (hold up a keeper)', 'extortionist (sell a business "insurance")', 'bandit (ambush carts on the Old Road)', 'rustler (take the ranch\'s animals)', 'fence (sell stolen goods)', 'gang boss or member (found or join a crew)', 'sellsword (hire out as muscle)', 'a bribe-taking official (if you hold an office)', 'liar and slanderer'];
-  const COMMANDS = ['size up <person> (judge their purse, gear and gang)', 'case <house number or business> (savings, lock, who is in)', 'hide (keep out of sight)', 'wait for <person> (hidden, until they come near)', 'steal <item> (shoplift)', 'escape (from a cell)', 'shout for the guard', 'bribe <person> <coins>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <coins>', 'propose to <person>', 'invite <person> (to come with you; add coins to pay them)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body beside you)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'go to <place or person>', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
+  const COMMANDS = ['take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house number or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'shout for the guard', 'bribe <person> <coins>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <coins>', 'propose to <person>', 'invite <person> (to come with you; add coins to pay them)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body beside you)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'go to <place or person>', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
   function careers() {
     const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${sim.wages[k] ?? j.wage}c by the town` : j.wage ? `, ${j.wage}c a shift from the owner` : ''})`);
-    return `${legit.join('; ')}; Mayor (elected, ${sim.wages.mayor ?? JOBS.mayor.wage}c); Guard captain (elected by the guards). Outside the law: ${SEEDY.join('; ')}.`;
+    return `${legit.join('; ')}; Mayor (elected, ${sim.wages.mayor ?? JOBS.mayor.wage}c); Guard captain (elected by the guards). Outside the law (the underworld): ${SEEDY.join('; ')}. The underworld's tools (pickpocket, mug, burgle, rob, steal, hide, case, wait for, extort, ambush, rustle) come with a place in it: take up a seedy career at the Drowned Lantern after dark ("take up <career>"), found or join a gang, or, as a guard, take someone's money. "go straight" leaves it.`;
   }
   sim.careers = careers;
   // What an AI-played person knows each moment: their own body, purse and kit, where they are and
@@ -2559,7 +2589,7 @@ function Sim(opts = {}) {
     return [
       `You: ${p.name} ${p.surname} (id ${p.id}), ${p.age}, ${p.gender === 'nb' ? 'nonbinary' : p.gender === 'm' ? 'man' : 'woman'}. Health ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${p.nl} bruising)` : ''}. ${p.food < 0.3 ? 'Hungry.' : 'Fed.'}${(p.water ?? 1) < 0.3 ? ' Thirsty.' : ''} Purse ${p.coin}c${p.home != null ? `, savings at home ${HOUSES[p.home].stash}c` : ''}. Carrying ${WEAPONS[p.weapon].name.toLowerCase()} (${WEAPONS[p.weapon].dmg[0]}d${WEAPONS[p.weapon].dmg[1]}${WEAPONS[p.weapon].range ? ', ranged' : ''}), ${(ARMOR[p.armor] || ARMOR.none).name.toLowerCase()} (AC ${acOf(p)}${(ARMOR[p.armor] || ARMOR.none).dr ? ', soaks ' + ARMOR[p.armor].dr : ''})${p.shield && p.shield !== 'none' ? ', ' + SHIELDS[p.shield].name.toLowerCase() : ''}; pack: ${Object.entries(p.items).filter(([, n]) => n > 0).map(([k, n]) => n + ' ' + k).join(', ') || 'empty'}.`,
       `What you're good at: ${Object.entries(p.skills).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => k + ' +' + v).join(', ')}; attack +${babOf(p) + Math.max(mod(p.st.str), mod(p.st.dex))}.`,
-      `Job: ${JOBS[p.job].title}${p.id === sim.mayorId ? ' (mayor)' : ''}${p.rank ? ', ' + p.rank : ''}.${p.spouse ? ' Married to ' + sim.people[p.spouse]?.name + '.' : ''}${g ? ` In ${g.name}${g.boss === p.id ? ' (boss)' : ''}.` : ''}${openRecord(p).length ? ` The guard has ${openRecord(p).length} charge(s) on you.` : ''}${p.jailedUntil > 0 ? ' You are in a jail cell.' : ''}`,
+      `Job: ${JOBS[p.job].title}${p.id === sim.mayorId ? ' (mayor)' : ''}${p.rank ? ', ' + p.rank : ''}.${inUnderworld(p) ? ` You are in the underworld${p.underworld?.role ? ' (' + (SEEDY_ROLES[p.underworld.role] || p.underworld.role) + ')' : p.onPayroll ? ' (on the take)' : ''}.` : ''}${p.spouse ? ' Married to ' + sim.people[p.spouse]?.name + '.' : ''}${g ? ` In ${g.name}${g.boss === p.id ? ' (boss)' : ''}.` : ''}${openRecord(p).length ? ` The guard has ${openRecord(p).length} charge(s) on you.` : ''}${p.jailedUntil > 0 ? ' You are in a jail cell.' : ''}`,
       `Now: day ${sim.day}, ${sim.clock()}${night() ? ' (night)' : ''}, at ${AREAS[areaOf(p)]?.name || 'the road'}. You can see: ${inView(p) || 'nobody'}.`,
       short ? '' : `Prices: ${['bread', 'meal', 'turnip', 'meat', 'eggs', 'ale'].map(k => `${k} ${priceOf(GOODS[k].shop || 'store', k)}c`).join(', ')}; at the smithy: ${Object.entries(sim.business.smithy.stock).filter(([k, n]) => n > 0 && GOODS[k] && k !== 'iron').map(([k]) => `${k} ${priceOf('smithy', k)}c`).join(', ') || 'nothing'}.`,
       short ? '' : `Town: mayor ${sim.people[sim.mayorId]?.name || 'none'}, captain ${sim.people[sim.captainId]?.name || 'none'}, sales tax ${Math.round(sim.taxRate * 100)}%, rent ${sim.rent}c a day. Businesses: ${Object.values(sim.business).map(b => `${b.id} ${b.owner ? 'run by ' + sim.people[b.owner]?.name : 'unclaimed (lease at the hall, ' + (LEASE[b.id] || 2) + 'c a day)'}`).join(', ')}.`,
@@ -2890,6 +2920,7 @@ function Sim(opts = {}) {
   sim.playerDo = (kind, tid, extra = {}) => sim.doAs(sim.people.player, kind, tid, extra);
   sim.doAs = (me, kind, tid, extra = {}) => {
     const t = tid ? (sim.people[tid] || sim.animals[tid]) : null;
+    if (CRIME_VERBS.has(kind) && !inUnderworld(me)) return 'That takes a place in the underworld.';
     if (kind === 'escape') { if (!(me.jailedUntil > 0)) return 'You are not locked up.'; const was = me.jailedUntil; tryEscape(me, true); return me.jailedUntil > 0 ? 'The cell holds.' : (was ? 'You are out.' : ''); }
     if (!me || !free(me)) return 'You can\'t do that right now.';
     const near = (r = 2) => t && dist2(me, t) <= r;
@@ -2918,7 +2949,7 @@ function Sim(opts = {}) {
         if (!near(3) || t.kind !== 'human') return 'Get closer first.';
         const n = Math.min(me.coin, extra.amount || 3); if (n < 1) return 'You have nothing to offer.';
         const r = d20r() + me.skills.diplomacy + Math.min(10, n * 2), dc = 10 + Math.round(t.traits.honesty * 15);
-        if (r >= dc) { pay(me, t, n); bump(t, me, 'like', 0.15); bump(t, me, 'trust', 0.1); (t.voteBribes ||= {})[me.id] = n; if (extra.forWhat === 'record') { openRecord(me).filter(x => x.by.includes(t.id)).forEach(x => x.by = x.by.filter(y => y !== t.id)); } return `${t.name} takes your ${n}c. (Diplomacy ${r} vs ${dc})`; }
+        if (r >= dc) { pay(me, t, n); if (isGuard(t)) t.onPayroll = true; bump(t, me, 'like', 0.15); bump(t, me, 'trust', 0.1); (t.voteBribes ||= {})[me.id] = n; if (extra.forWhat === 'record') { openRecord(me).filter(x => x.by.includes(t.id)).forEach(x => x.by = x.by.filter(y => y !== t.id)); } return `${t.name} takes your ${n}c. (Diplomacy ${r} vs ${dc})`; }
         if (r <= dc - 5) { const { seen } = deed('bribery', me, t, me); return `${t.name} refuses, loudly. (Diplomacy ${r} vs ${dc})${seen.length ? ' People heard.' : ''}`; }
         return `${t.name} won't take it. (Diplomacy ${r} vs ${dc})`;
       }
