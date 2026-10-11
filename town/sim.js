@@ -1011,7 +1011,14 @@ function Sim(opts = {}) {
     // report what you saw
     if (p.toReport?.length) add('report', 1 + (1 - p.traits.caution) + p.traits.honesty * 2 - (sim.people[p.toReport[0].actor]?.gang ? 2 * p.traits.caution : 0));
     // the cleric answers the fallen; the undertaker collects and buries the dead
-    if (p.job === 'cleric' && inShift(p.job, h)) { const pt = patients()[0]; if (pt) add('rescue', pt.dying ? 12 : 5, { target: pt }); }
+    { const pt = patients().filter(q => q !== p)[0];
+      if (pt) {
+        const healer = p.job === 'cleric' || p.job === 'doctor', caster = (p.cures || 0) + (p.layPool || 0) > 0, draught = (p.items.cure || 0) > 0, far = dist2(pt, p);
+        const close = pt.spouse === p.id || household(p).includes(pt) || R(p, pt).like > 0.3 || isGuard(p) || p.militia;
+        const w = (healer && (inShift(p.job, h) || pt.dying) ? (pt.dying ? 12 : 5) : 0) || (caster && pt.dying && far < 900 ? 9 : 0) || (draught && pt.dying && close && far < 400 ? 6 + p.traits.loyalty * 3 : 0) || (pt.dying && close && p.skills.heal >= 2 && far < 200 ? 4 : 0);
+        const beasts = Object.values(sim.animals).some(a => a.monster && a.alive && dist2(a, pt) < 12);
+        if (w) add('rescue', w - (beasts ? p.traits.caution * 6 : 0), { target: pt });
+      } }
     if (p.job === 'undertaker' && inShift(p.job, h) && sim.bodies.some(b => !b.buried && !b.collected)) add('collect', 7);
     if (p.job === 'undertaker' && inShift(p.job, h) && sim.bodies.some(b => b.collected && !b.buried && sim.t >= b.layUntil)) add('bury', 6);
     // school: anyone free can sit a lesson while the teacher is in
@@ -1155,7 +1162,8 @@ function Sim(opts = {}) {
       case 'walk': case 'head': case 'move': { const pl = findPlace(rest || ''); if (pl === 'home' && p.home != null) return { kind: 'goto', at: HOUSES[p.home].bed, place: 'home' }; if (pl === 'well') return { kind: 'goto', at: SPOTS.well, place: 'the well' }; if (pl === 'pond') return { kind: 'goto', at: SPOTS.pond, place: 'the pond' }; if (pl) return { kind: 'goto', at: SPOTS[pl] || randIn(pl, 2), place: AREAS[pl].name }; return who ? { kind: 'goto', at: who, place: who.name } : null; }
       case 'stay': case 'listen': return { kind: 'hold', with: who, value: 0 };
       case 'turn': case 'return': case 'hand': if (kind === 'turn' && /^out\b/.test(rest || '')) return who ? { kind: 'doas', verb: 'turnout', target: who, value: 0 } : null; if (p.found) return { kind: 'doas', verb: 'turnin', at: SPOTS.desk, value: 0 }; return null;
-      case 'get': case 'cure': case 'heal': if (!/cur|heal|treat|well/.test(kind + ' ' + (rest || ''))) return null; { const ch = /chapel|cleric|pray/.test(rest || '') || (p.sick && DISEASES[p.sick.key].cleric); return { kind: 'doas', verb: 'cure', at: ch ? randIn('chapel', 2) : pick(SPOTS.beds), value: 0 }; }
+      case 'rescue': case 'save': case 'tend': case 'stabilize': case 'stabilise': return who && who !== p && (who.dying || who.down || who.hp <= 0) ? { kind: 'rescue', target: who, value: 0 } : null;
+      case 'get': case 'cure': case 'heal': if (who && who !== p && (who.dying || who.down || who.hp <= 0)) return { kind: 'rescue', target: who, value: 0 }; if (!/cur|heal|treat|well/.test(kind + ' ' + (rest || ''))) return null; { const ch = /chapel|cleric|pray/.test(rest || '') || (p.sick && DISEASES[p.sick.key].cleric); return { kind: 'doas', verb: 'cure', at: ch ? randIn('chapel', 2) : pick(SPOTS.beds), value: 0 }; }
       case 'wait': case 'lurk': return who ? { kind: 'lurkfor', target: who, value: 0 } : { kind: 'hold', value: 0 };
       case 'talk': case 'visit': case 'approach': case 'meet': return who ? { kind: 'visit', target: who, value: 0 } : null;
       case 'court': case 'flirt': return who ? { kind: 'court', target: who, value: 0 } : null;
@@ -2975,7 +2983,7 @@ function Sim(opts = {}) {
   function treatPatients(dt) {
     for (const q of living()) if (areaOf(q) === 'healer' && q.kind === 'human' && q.hp < q.maxhp) {
       if (q.dying) { q.dying = false; q.down = 'out'; q.downUntil = sim.t + 60; }
-      q.hp = Math.min(q.maxhp, q.hp + dt * 5 / 1440);   // 5 HP a day in the Infirmary (Rose) q.nl = Math.max(0, Math.min(q.nl, q.maxhp - q.hp));
+      q.hp = Math.min(q.maxhp, q.hp + dt * (doctorIn() ? 10 : 5) / 1440);   // 5 HP a day in the Infirmary (Rose) q.nl = Math.max(0, Math.min(q.nl, q.maxhp - q.hp));
     }
   }
   // ---- disease (SRD 3.5, Disease: https://www.dandwiki.com/wiki/SRD:Disease) -------------------
@@ -3067,11 +3075,23 @@ function Sim(opts = {}) {
   sim.sickText = sickText;
   function carry(p, q) { q.carriedBy = p.id; q.x = p.x + 0.3; q.z = p.z + 0.3; }
   function drop(q) { q.carriedBy = null; }
+  // HEALING THE FALLEN where they lie: a cure light wounds (1d8 + caster level, up to +5), lay on hands, or a healing
+  // draught (1d8+1) poured down the throat. Any healing stops the bleeding (SRD; LoH healedOf), and 1 hp or more stands
+  // them up. True when the patient is on their feet again.
+  function healAt(p, q) {
+    if (p.cures > 0) { p.cures--; const h = d(8) + Math.min(5, clvl(p, 'cleric') + clvl(p, 'druid')); healUp(q, h); log('life', `${p.name} casts cure light wounds on ${q.name} (+${h} hp)${q.hp > 0 ? ' and they get back up' : '; the bleeding stops'}.`, [p.id, q.id]); }
+    else if (p.layPool > 0) { const h = Math.min(p.layPool, Math.max(1, 1 - q.hp + 4)); p.layPool -= h; healUp(q, h); log('life', `${p.name} lays hands on ${q.name} (+${h} hp)${q.hp > 0 ? ' and they get back up' : ''}.`, [p.id, q.id]); }
+    else if (p.items?.cure > 0) { p.items.cure--; const h = roll(1, 8) + 1; healUp(q, h); log('life', `${p.name} pours a healing draught down ${q.name}'s throat (+${h} hp)${q.hp > 0 ? ' and they get back up' : '; the bleeding stops'}.`, [p.id, q.id]); }
+    else return false;
+    remember(q, { text: `${p.name} saved my life when I lay dying.`, big: true }); bump(q, p, 'like', 0.4); bump(q, p, 'trust', 0.3);
+    return q.hp > 0 && !q.down;
+  }
   function doRescue(p, dt) {
     const q = target(p.task.target);
     if (!q || !q.alive || q.fight || (!q.dying && !q.down && !p.task.carrying)) { if (q) drop(q); p.task = null; return; }
     if (!p.task.carrying) {
       if (dist2(p, q) > 1.4) { arrive(p, q, dt, 2.0); return; }
+      if (q.dying || q.hp <= 0) { if (healAt(p, q)) { p.task = null; return; } }
       if (q.dying) { const kit = p.items?.healkit > 0 ? 2 : 0; if (kit) p.items.healkit--; const r = d(20) + p.skills.heal + kit; if (r >= 15) { q.dying = false; q.down = 'out'; q.downUntil = sim.t + 120; log('life', `${p.name} stabilizes ${q.name}.`, [p.id, q.id]); } else return; }
       p.task.carrying = q.id; log('life', `${p.name} carries ${q.name} to the infirmary.`, [p.id, q.id]);
     }
@@ -3424,6 +3444,7 @@ function Sim(opts = {}) {
     const thr = threatened(f, p).length;
     if (isDisabled(p)) { const dr = find('drink'), b = find('back'); if (dr) act(f, p, dr); else if (b && thr) act(f, p, b); else act(f, p, { id: 'end' }); return true; }
     if (find('drink') && hpFrac < 0.35 && !thr) { act(f, p, find('drink')); return true; }
+    const fd = acts.find(a => a.id === 'feed'); if (fd && thr < 2) { act(f, p, fd); return true; }
     const st = acts.find(a => a.id === 'stabilize'); if (st && !thr && (p.skills.heal >= 2 || (tr.loyalty || 0) > 0.55)) { act(f, p, st); return true; }
     const pk = find('pickup'); if (pk && p.weapon === 'fists') { act(f, p, pk); if (conscious(p) && p.turnLeft?.standard) npcTurn(f, p); return true; }
     return false;
@@ -3734,6 +3755,7 @@ function Sim(opts = {}) {
       if (p.kind === 'human') for (const q of foes.filter(q => q.kind === 'human' && dist2(q, p) < 9)) acts.push({ id: 'demoralize', target: q.id, label: `Intimidate ${q.name}`, cost: 'standard' });
       if (p.kind === 'human') for (const q of adj.filter(q => q.kind === 'human' || srdOn())) acts.push({ id: 'feint', target: q.id, label: `Feint ${q.name} (Bluff)`, cost: 'standard' });
       if (p.kind === 'human' && p.items.cure) acts.push({ id: 'drink', label: 'Drink a healing draught', cost: 'standard' });
+      if (p.kind === 'human' && p.items?.cure > 0 && tn.move) for (const q of f.order.map(body).filter(q => q && q !== p && q.alive && q.kind === 'human' && (q.dying || (!conscious(q) && q.hp <= 0)) && f.sides.get(q.id) === f.sides.get(p.id) && dist2(q, p) <= 2.1)) acts.push({ id: 'feed', target: q.id, label: `Give ${q.name} a healing draught (full round)`, cost: 'full' });
       for (const q of f.order.map(body).filter(q => q && q.dying && f.sides.get(q.id) === f.sides.get(p.id) && dist2(q, p) <= 2.1)) acts.push({ id: 'stabilize', target: q.id, label: `Stabilize ${q.name} (Heal DC 15)`, cost: 'standard' });
       if (p.kind === 'human' || p.monster) for (const q of helpless) acts.push({ id: 'coup', target: q.id, label: `Coup de grace on ${q.name} (kills)`, cost: 'full' });
       for (const q of helpless) if (p.kind === 'human') acts.push({ id: 'rob', target: q.id, label: `Rob ${q.name}`, cost: 'standard' });
@@ -3759,6 +3781,7 @@ function Sim(opts = {}) {
     if (lohAct(f, p, a, t, spend)) return lohAfter(f, p, a);
     switch (a.id) {
       case 'attack': attack(f, p, t); spend('standard'); break;
+      case 'feed': { if (threatened(f, p).length) provoke(f, p); if (conscious(p) && p.items.cure > 0 && t.alive) { p.items.cure--; const h = roll(1, 8) + 1; healUp(t, h); logF(f, `${p.name} gives ${t.name} a healing draught: +${h} hp. ${status(t) || t.name + ' is back up.'}`); remember(t, { text: `${p.name} saved my life in a fight.`, big: true }); } spend('full'); break; }
       case 'firebomb': lohSaw(f, p, 'ranged', t); firebomb(f, p, t); spend('standard'); break;
       case 'throw': if (p.items.stones > 0) { p.items.stones--; attack(f, p, t, { stone: true }); } spend('standard'); break;
       case 'reload': p.unloaded = false; logF(f, `${p.name} reloads.`); spend(a.cost); break;

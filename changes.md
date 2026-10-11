@@ -223,3 +223,10 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 
 ## 2026-10-11 06:57 Hollow Town: the fail state counts the last 24 hours
 - A beast night runs past midnight, so 4 dead before midnight and 1 after never failed the town. The fail state is now more than 4 townsfolk dead within any 24 hours (sim.deathTimes, sim.deaths24); prompts show deaths in the last 24 hours.
+
+## 2026-10-11 07:02 Hollow Town: healing the dying
+- Before: only the cleric (job), only in shift (6-22, so never during the 22:00 beast nights), and only first aid (Heal DC 15) then carrying to the infirmary; PC-class clerics cured only in fights; nobody used the clergy's draughts on anyone else.
+- Now: the cleric and the doctor answer the dying at any hour; anyone with cure light wounds or lay on hands answers the dying nearby; family, friends, guards and militia carrying a draught (or with Heal 2+) come for the dying near them (less eager with beasts close, by caution). At the body: a cure spell, lay on hands, or a draught poured down the throat (healUp: any healing stops the bleeding, 1+ hp stands them up), else first aid and the infirmary. The saved remember who saved them. AI folk can say rescue/save/tend/heal <name>.
+- In fights: 'Give <name> a healing draught' to an adjacent fallen ally (full round, provokes); NPCs do it when not hard pressed.
+- The infirmary mends twice as fast with a doctor in (SRD long-term care).
+- Smoke: .backups/smoke_heal.mjs.
