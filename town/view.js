@@ -412,10 +412,10 @@ function runGeneration() {
     for (let m = 0; m < end; m += 0.5) { S.step(0.5); for (const f of S.fights.slice()) { if (f.sides.has('player')) { S.act(f, me, { id: 'end' }); S.playerDone(f); } S.fightStep(f); } for (const q of S.decisionsPending.splice(0)) { q.done = true; q.fallback?.(); } }
     pending.length = 0; ffLeft -= end;
     $('ffNote').textContent = `Generation ${S.netOf().gen + 1}: day ${S.day}, ${S.living().filter(p => p.kind === 'human' && !p.town).length} alive`;
-    if (!S.townDead() && !(S.day > S.genDays + 1 || S.day > S.genDays && S.hour() >= 6)) return setTimeout(chunk, 0);
+    if (!S.genOver()) return setTimeout(chunk, 0);
     ffLeft = 0;
     const st = S.endGeneration(); saveLore();
-    $('ffNote').textContent = `Generation ${st.gen} done: average fitness ${st.avgFit}, best ${st.bestFit}. Next town…`;
+    $('ffNote').textContent = `Generation ${st.gen} done (${st.won ? 'WON: the town made it to noon on day ' + S.winDay() : 'lost'}): average fitness ${st.avgFit}, best ${st.bestFit}. Next town…`;
     setTimeout(() => { if (evolving()) location.reload(); }, 900);
   };
   chunk();
@@ -474,7 +474,8 @@ $('learnMode2').onclick = () => { S.learning = S.learning ? 0 : 1; $('learnMode2
 function fightLine() {
   const n = S.fightNet, D = S.dossiers || {}, names = Object.keys(D).filter(k => D[k].profile?.turns).sort((x, y) => D[y].profile.turns - D[x].profile.turns);
   const read = names.slice(0, 2).map(k => { const l = (globalThis.SRD?.readout?.(D[k]) || [])[0]; return l ? `${k}: ${l.s}` : ''; }).filter(Boolean).join(' / ');
-  return `<br>Fights (LoH format): ${n ? `fight net trained on ${n.stats?.turns || 0} turns` : 'no fight net trained yet (TrainBrain.bat)'}${S.netStats?.turns ? `, drove ${S.netStats.turns} turns` : ''}; ${names.length} dossiers${read ? ' (' + read + ')' : ''}`;
+  const h = (S.netOf?.().history || []).filter(s => s.won != null), w = h.filter(s => s.won).length;
+  return (h.length ? `<br>Wins (alive at noon on day ${S.winDay()}): ${w} of the last ${h.length} generations${h.length ? ' (' + h.slice(-10).map(s => s.won ? 'W' : 'L').join('') + ')' : ''}` : '') + `<br>Fights (LoH format): ${n ? `fight net trained on ${n.stats?.turns || 0} turns` : 'no fight net trained yet (TrainBrain.bat)'}${S.netStats?.turns ? `, drove ${S.netStats.turns} turns` : ''}; ${names.length} dossiers${read ? ' (' + read + ')' : ''}`;
 }
 function saveSetup() { townSetup.aiBodies = $('setBodies').value; if (server) S.aiOnly = townSetup.aiBodies === 'orders'; townSetup.studentMode = $('setBrain').value; townSetup.genDays = +$('setGen').value || 7; S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays; townSetup.fightMode = $('setFight').value; S.fightMode = townSetup.fightMode; townSetup.start = $('setStart').value; const ps = $('setPersonas').value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean); townSetup.personas = ps.length ? ps : null; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }
 $('setStart').onchange = saveSetup; $('setBrain').onchange = saveSetup; $('setFight').onchange = saveSetup; $('setBodies').onchange = saveSetup; $('setGen').onchange = saveSetup; $('setPersonas').onchange = saveSetup;
@@ -595,7 +596,7 @@ function loop() {
   controls.target.add(delta); camera.position.add(delta); controls.update();
   panelAcc += dt; if (panelAcc > 0.5) { panelAcc = 0; drawPanel(); drawCouncil(); drawLore(); }
   // the generation ends after its last day: everyone learns (plain brains evolve, AI brains get the town's memory), and a new town starts
-  if (!genEnding && !evolving() && !(ffLeft > 0) && (S.townDead() || S.day > S.genDays + 1 || S.day > S.genDays && S.hour() >= 6)) { /* Rose: a generation is a week: it ends at dawn on day 8, or sooner if everyone in town is dead */ genEnding = true; paused = true; drawSpeed(); const days = S.day; const st = S.endGeneration(); saveLore(); note(S.townDead() ? `Everyone in Hollow Town is dead after ${days} days: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...` : `Day ${S.genDays} is over and ${S.living().filter(p => p.kind === 'human' && !p.town).length} are still standing: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...`); setTimeout(() => location.reload(), 5000); }
+  if (!genEnding && !evolving() && !(ffLeft > 0) && S.genOver()) { /* Rose: the win is the community alive at noon on day 8; the generation ends then, or sooner if everyone in town is dead */ genEnding = true; paused = true; drawSpeed(); const days = S.day; const st = S.endGeneration(); saveLore(); note(S.townDead() ? `Everyone in Hollow Town is dead after ${days} days: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...` : `${st.won ? 'The town WINS: ' : ''}it is noon on day ${S.winDay()} and ${S.living().filter(p => p.kind === 'human' && !p.town).length} are still standing: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...`); setTimeout(() => location.reload(), 5000); }
   // context buttons
   const where = S.areaOf(me);
   $('cShop').hidden = !(S.business[where] && S.shopOpen(where)); $('cWork').hidden = !['bakery', 'store', 'smithy', 'tavern', 'fields', 'ranch'].includes(where);
