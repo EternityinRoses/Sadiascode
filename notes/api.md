@@ -177,3 +177,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - HT money pools (sim.pools; pool/chip in commands; plain brains chip in daily). Smoke: .backups/smoke_pool.mjs.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT wake/alarm bell/captain+boss orders/sleep any time; 8h sleep (sleptMin) restores spells+HP, no dawn reset. Humans run doTask only for sleep. Smoke: .backups/smoke_watch.mjs.
