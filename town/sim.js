@@ -2865,8 +2865,8 @@ function Sim(opts = {}) {
   sim.electionNews = electionNews;
   function rankNews(p) {
     const out = [];
-    if (isGuard(p)) { const cap = sim.people[sim.captainId], sgt = living().find(q => q.rank === 'sergeant'); const left = ((3 - sim.day % 7) + 7) % 7; out.push(`You are ${p.rank || 'a guard'}. Captain: ${cap ? cap.name + (p.rank === 'acting captain' ? ' (you, acting)' : '') : 'none'}${sgt ? ', sergeant ' + sgt.name : ''}${sim.mayorPick ? `; the mayor backs ${sim.people[sim.mayorPick]?.name}` : ''}. The guards vote for their captain ${left === 0 ? 'today at 6pm' : 'in ' + left + ' day(s)'}: say who with "captain_vote": "<id>" (guards: ${living().filter(isGuard).map(q => q.name + ' ' + q.id).join(', ')}).`); }
-    if (p.gang && sim.gangs[p.gang]) { const g = sim.gangs[p.gang], b = sim.people[g.boss], ub = sim.people[g.underboss]; const left = ((5 - sim.day % 7) + 7) % 7; out.push(`You run with ${g.name}. Boss: ${b?.name || 'none'}${g.acting ? ' (acting, the real boss is jailed)' : ''}${b === p ? ' (you)' : ''}${ub ? ', underboss ' + ub.name : ''}. The crew picks its boss ${left === 0 ? 'tonight' : 'in ' + left + ' day(s)'}: "boss_vote": "<id>" (members: ${gangMembers(g.id).map(q => q.name + ' ' + q.id).join(', ')}). A boss can also be taken by force ("coup" in your agenda); the others choose whether to stay loyal.`); }
+    if (isGuard(p)) { const cap = sim.people[sim.captainId], sgt = living().find(q => q.rank === 'sergeant'); const left = nextElectionDay(H() >= 18) - sim.day; out.push(`You are ${p.rank || 'a guard'}. Captain: ${cap ? cap.name + (p.rank === 'acting captain' ? ' (you, acting)' : '') : 'none'}${sgt ? ', sergeant ' + sgt.name : ''}${sim.mayorPick ? `; the mayor backs ${sim.people[sim.mayorPick]?.name}` : ''}. The guards vote for their captain ${left === 0 ? 'today at 6pm' : 'in ' + left + ' day(s)'}: say who with "captain_vote": "<id>" (guards: ${living().filter(isGuard).map(q => q.name + ' ' + q.id).join(', ')}).`); }
+    if (p.gang && sim.gangs[p.gang]) { const g = sim.gangs[p.gang], b = sim.people[g.boss], ub = sim.people[g.underboss]; const left = nextElectionDay(H() >= 21) - sim.day; out.push(`You run with ${g.name}. Boss: ${b?.name || 'none'}${g.acting ? ' (acting, the real boss is jailed)' : ''}${b === p ? ' (you)' : ''}${ub ? ', underboss ' + ub.name : ''}. The crew picks its boss ${left === 0 ? 'tonight' : 'in ' + left + ' day(s)'}: "boss_vote": "<id>" (members: ${gangMembers(g.id).map(q => q.name + ' ' + q.id).join(', ')}). A boss can also be taken by force ("coup" in your agenda); the others choose whether to stay loyal.`); }
     return out.join(' ');
   }
   sim.rankNews = rankNews;
@@ -3033,8 +3033,8 @@ function Sim(opts = {}) {
       // every night at 22:00 something comes out of the Wildwood (Rose, 2026-10-10)
       if (sim.lastBeastNight !== sim.day && sim.t % 1440 >= 22 * 60) { sim.lastBeastNight = sim.day; invade(!sim.invaded); sim.invaded = true; }   // (this block runs on the hour, so: 22:00)
       diseaseHour();
-      if (h === 18 && sim.day % 7 === 3) guardVote('the weekly vote');
-      if (h === 21 && sim.day % 7 === 5) for (const g of Object.values(sim.gangs)) gangVote(g, 'the weekly reckoning');
+      if (h === 18 && isElectionDay(sim.day)) guardVote('the daily vote');
+      if (h === 21 && isElectionDay(sim.day)) for (const g of Object.values(sim.gangs)) gangVote(g, 'the nightly reckoning');
       for (const p of living()) if (!waitsForOrders(p) && p.task && (p.agenda?.length && !['jail', 'flee', 'talk', 'tail'].includes(p.task.kind) || !['jail', 'sleep', 'work', 'flee', 'follow', 'caravan', 'fish', 'tail', 'talk'].includes(p.task.kind)) && sim.t - p.task.t0 > 60) p.task = null;   // replan hourly
     }
     for (const p of living()) {
