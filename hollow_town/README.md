@@ -228,3 +228,86 @@ Nothing tells the townsfolk what is coming any more. They have to see it for the
 - **Plain brains.** The day-one wood bonus ("the town knows the beasts come at
   22:00") and the smith's default fear are gone. Both now depend on beasts
   actually having been seen.
+
+## 13. The work week: XP for work, training, crafting, loans, banks, caravans, aimed shots, orders
+
+**XP (SRD table: level 2 at 1,000, 3 at 3,000, 4 at 6,000, 5 at 10,000).** The AI sees its XP and "+N XP" when it
+grows, never why, and never the thresholds. Rates per hour of doing something (my numbers, tuned against your targets):
+- Training hall, guards and deputies, 6:00-18:00: 375. It gives nothing past 3,000, and nobody is told that.
+  A full day, meals included, reaches 3,000.
+- Building (chopping, barricades, palisades): 350. A barricade from nothing (an hour's chopping, three 40-minute
+  sections) comes to about 1,040, which is level 2.
+- Everything else that isn't idling, crime included: 95. A busy day to 18:00 just reaches 1,000.
+- Caravans: 1,000 for everyone on a trip that comes home whole, 500 if robbed.
+- Giving to the poor earns no XP. The 100 XP for surviving a night is gone ("not just sleeping").
+
+**Wood and building.** Chopping gives 9 wood an hour (15 with an axe). Barricades, the palisade and the
+palisades in front of buildings take 40 minutes a section.
+
+**Training hall** behind the Artillery barracks. **Bank** behind the town hall, plus a counter in Marrowford. Deposits
+earn 1% a day at midnight (my rate). The mayor can bank the treasury.
+
+**Workshops (SRD Craft, by the day).** Each hour of work makes a check: d20 + the best hand's craft + 1 per worker
+(up to 8) against the DC. Fail by 4 or less and the hour is lost; fail by 5 or more and half the materials are
+ruined and paid again. Each worker adds a share of the work. Anyone can "help at the smithy / apothecary".
+- Smithy: every weapon, armour and shield, including the SRD's full shield list. +1 pieces take 3 hours, +2 take 6,
+  at SRD prices (masterwork + enhancement). It starts with 5 of every mundane piece and 10 bundles of each
+  ammunition.
+- Apothecary: brews by the hour too (healing draughts, healer's kits, alchemist's fire), plus potions of bull's
+  strength and cat's grace (+4 for 9 minutes) and cure moderate wounds (2d8+3) at 2 hours each.
+- Fixed: LoH's arrows, bolts and sling bullets had come in as melee weapons.
+
+**Commissions on loan.** The mayor or the guard captain can commission stock from the smithy or the apothecary.
+The finished items go to the Guard station's rack. Anyone can pay toward the debt; the mayor can repay from the
+treasury. Debt left at 12:00 on day 8 (and every 7 days after) fails the town. The only thing the AI is told
+about the deadline is your line: "All commissions have to be paid off by 12:00 on day 8 after each work week."
+SRD prices are huge for this town (a longsword +1 is 2,315 gp).
+
+**Caravans.** "caravan [items]": the smith can load the smithy's stock, and the mayor or captain the town's rack.
+Marrowford pays full price for weapons, armour and shields, and the town taxes the sale. A round trip takes about
+half a day. Bandits from either town may strike on the road (40% a leg, my number; 2-4 of them, most fighting
+nonlethal to take the goods). If they beat the caravan they take the cargo and the purse. The AI isn't told any
+of this.
+
+**The 60 ft rule.** Anyone awake within 60 ft of a fight decides at once whether to join: AI townsfolk are
+asked on the spot, plain ones re-weigh their options. Joining puts them in the initiative order straight away.
+Moving still follows the fight's rules (30 ft a move, 20 ft in medium or heavy armour).
+
+**Aimed shots** (bows, crossbows, slings):
+- Eyes: -8 to hit. Each hit takes an eye; both make the target blind (50% miss, -2 AC) until magically healed.
+- Throat: -6. Silenced: no spells, no shouting.
+- Arms: -4. Spells fail 50% of the time; -4 to hit and damage.
+- Legs: -4. Half speed.
+- Feet: -6. Pinned in place for 1d4 rounds.
+
+Effects other than eyes and feet last a minute (10 rounds). An AI picks "aim" in its fighting style.
+
+**Ready actions.** "Ready" an attack that goes off at the first foe who comes into reach (or a bow's range),
+including against a charge. It lasts until your next turn.
+
+**The captain's orders.**
+- Anyone can choose "follow_captain": true or false.
+- Outside fights, the captain's "barks" become the plans of listeners within 60 ft.
+- In a fight, the captain can bark every round. It costs their standard and bonus action, not the move, and
+  reaches every listener within 60 ft.
+- Listeners whose turn comes after the captain's follow that round's bark, and can't attack until a bark comes.
+- Listeners whose turn comes first act on their own judgement, or "wait" to move their turn to just after the
+  captain's (SRD delay).
+- Care (stabilizing, a draught, a cure) is never held back.
+- When the captain dies, it is every one for themselves for the rest of the generation.
+
+**Skills.** At first level and on levelling, an AI can spend SRD skill points ("skills": {"hide": 4, ...}).
+Points are class base + Int (×4 at first level, +4/+1 for a pure human). Class skills cost 1 a rank; others
+cost 2, up to half the cap.
+
+### Battle test (tools/battle.mjs, 12 nights each)
+| Night | No preparation | Basic squad | Full squad | Full squad + fire |
+|---|---|---|---|---|
+| A bear | 83% won, 3.9 dead | 58%, 4.3 dead | 75%, 5.1 dead | 75%, 6.1 dead |
+| The troll and two bears | 0% won, everyone dead | 17%, 22 dead | 75%, 6.5 dead | **92%, 3.9 dead** |
+
+The full squad: six level-3 fighters in full plate +1 with heavy shields +1 and longswords +1 behind a full
+palisade, six rangers with longbows +1 aiming at legs, feet and arms, three clerics with potions, and the
+captain barking. "Fire" adds two flasks of alchemist's fire each for the tanks and archers. Against the troll it works.
+Against a single bear the squad does no better than staying indoors: standing at the palisade puts people in
+reach of something that would otherwise have to break a door.
