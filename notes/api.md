@@ -153,3 +153,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - HT classes: everyone picks a PC class at level 1 (setFirstClass; AI first_class; Rose types class <name>); plain brain learns picks (sim.lore.classLearn/featLearn bandit). Clergy give 2 draughts each at start. Smoke: .backups/smoke_class.mjs.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT fail state (Rose): >4 townsfolk deaths in one calendar day = town fails immediately (sim.failed).
