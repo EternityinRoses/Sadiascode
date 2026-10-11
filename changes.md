@@ -131,3 +131,5 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **(Hollow Town) Beasts never retreat (Nimbus):** sim.js prowl(): the wounded-beast retreat (under 30% HP, back to the Wildwood, 'slinks back') is gone, and so is the animal-mind version; a beast hunts until it's killed or nobody is left. Backup .backups\20261011-034000__town__sim.js.
 
 - **(Hollow Town) Ogre night (Nimbus):** sim.js invade(): the last night of each generation (day % genDays == 0, so day 3) brings an ogre (35%: two). Node test: 2 ogres on night 3, 14 dead by day 4. Backup .backups\20261011-035000__town__sim.js.
+
+- **(Hollow Town) Reset at dawn (Nimbus):** view.js: the generation ends at 06:00 after its last day (day 4, 06:00 with 3-day generations) instead of midnight, so ogre night plays out. Backup .backups\20261011-040000__town__view.js.

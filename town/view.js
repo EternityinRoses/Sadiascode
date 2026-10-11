@@ -575,7 +575,7 @@ function loop() {
   controls.target.add(delta); camera.position.add(delta); controls.update();
   panelAcc += dt; if (panelAcc > 0.5) { panelAcc = 0; drawPanel(); drawCouncil(); drawLore(); }
   // the generation ends after its last day: everyone learns (plain brains evolve, AI brains get the town's memory), and a new town starts
-  if (!genEnding && !evolving() && !(ffLeft > 0) && S.day > S.genDays) { genEnding = true; paused = true; drawSpeed(); const st = S.endGeneration(); saveLore(); note(`Day ${S.genDays} is over: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...`); setTimeout(() => location.reload(), 5000); }
+  if (!genEnding && !evolving() && !(ffLeft > 0) && (S.day > S.genDays + 1 || S.day > S.genDays && S.hour() >= 6)) { /* the last night (ogres) runs till dawn, then the reset */ genEnding = true; paused = true; drawSpeed(); const st = S.endGeneration(); saveLore(); note(`Day ${S.genDays} is over: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...`); setTimeout(() => location.reload(), 5000); }
   // context buttons
   const where = S.areaOf(me);
   $('cShop').hidden = !(S.business[where] && S.shopOpen(where)); $('cWork').hidden = !['bakery', 'store', 'smithy', 'tavern', 'fields', 'ranch'].includes(where);
