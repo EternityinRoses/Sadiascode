@@ -222,7 +222,7 @@ function personPanel(p) {
   const toMe = p.rel.player && p !== me ? `<br><span class="k">thinks of you:</span> like ${p.rel.player.like.toFixed(2)}, trust ${p.rel.player.trust.toFixed(2)}, worth ~${Math.round(p.rel.player.worth ?? 30)}c${p.rel.player.fear > 0.1 ? ', fear ' + p.rel.player.fear.toFixed(2) : ''}` : '';
   const status = !p.alive ? (p.left ? 'left town' : 'dead') : p.jailedUntil > 0 ? 'in jail' : p.dying ? 'dying' : p.down ? 'unconscious' : p.fight ? 'fighting' : (p.task?.kind || p.state);
   return `<b>${S.fullName(p)}</b> <span class="k">${job} · ${p.gender === 'nb' ? 'nonbinary' : p.gender === 'f' ? 'woman' : 'man'}, ${p.age} · ${p.orient}</span><br>
-    <span class="k">${p.cls} ${p.level}</span> · hp ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${Math.floor(p.nl)} of the missing is bruising)` : ''} · AC ${S.acOf(p)} · ${S.WEAPONS[p.weapon].name.toLowerCase()}${p.armor && p.armor !== 'none' ? ', ' + S.ARMOR[p.armor].name.toLowerCase() : ''}${p.shield && p.shield !== 'none' ? ', ' + p.shield.replace('shield', ' shield') : ''} · <b>${p.coin}c</b>${p.home != null ? ` <span class="k">(+${S.HOUSES[p.home].stash}c at home)</span>` : ''}<br>
+    <span class="k">${p.cls} ${p.level}</span> · hp ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${Math.floor(p.nl)} of the missing is bruising)` : ''}${p.sick?.sym ? ` Â· <span class="sig">sick: ${S.DISEASES[p.sick.key].name.toLowerCase()}</span>` : ''} · AC ${S.acOf(p)} · ${S.WEAPONS[p.weapon].name.toLowerCase()}${p.armor && p.armor !== 'none' ? ', ' + S.ARMOR[p.armor].name.toLowerCase() : ''}${p.shield && p.shield !== 'none' ? ', ' + p.shield.replace('shield', ' shield') : ''} · <b>${p.coin}c</b>${p.home != null ? ` <span class="k">(+${S.HOUSES[p.home].stash}c at home)</span>` : ''}<br>
     <span class="k">standing:</span> <b>${S.rankOf(p)}</b> <span class="k">· town believes ~${Math.round(S.standing(p))}c · really ~${Math.round(S.trueWorth(p))}c${p.items.finery ? ' · fine clothes' : ''}</span><br>
     <span class="k">now:</span> ${status}${p.id === S.mayorId ? ' · <span class="pol">MAYOR</span>' : ''}${p.brain !== 'script' && p.brain !== 'human' ? ' · <span class="pol">AI-played</span>' : ''}<br>
     ${p.spouse ? `<span class="k">married to</span> ${S.people[p.spouse]?.name} · ` : p.widowed ? `<span class="k">widowed</span> · ` : ''}${p.underworld || p.onPayroll ? `<span class="gang">${p.underworld ? 'underworld: ' + (S.SEEDY_ROLES[p.underworld.role] || p.underworld.role) : 'on the take'}</span> · ` : ''}${g ? `<span class="gang">${g.name}${g.boss === p.id ? (g.acting ? ' (acting boss)' : ' (boss)') : g.underboss === p.id ? ' (underboss)' : g.jailedBoss === p.id ? ' (boss, jailed)' : ''}</span> · ` : ''}${p.rank && !g ? `<span class="law">${p.rank}</span> · ` : ''}${p.platform ? `<span class="pol">running: "${p.platform}"</span> · ` : ''}<span class="k">backers</span> ${S.backers(p).length} · <span class="k">power</span> ${S.power(p).toFixed(0)}<br>
@@ -483,7 +483,7 @@ $('forgetLore').onclick = () => { if ($('forgetLore').dataset.sure) { S.importLo
 function drawLore() { const z = S.loreSize(); $('loreStat').textContent = `Town mind: ${z.situations} situations, ${z.scored.toLocaleString()} outcomes, ${z.taught} AI examples, ${z.phrases} phrases, ${z.words} word links · town #${z.runs + 1}`; $('learnMode').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode').classList.toggle('on', !!S.learning); }
 
 // ---------------------------------------------------------------- combat --
-let fightAcc = 0;
+let fightAcc = 0, genEnding = false;
 function drawCombat() {
   const f = S.fights.find(f => f.sides.has('player'));
   $('combat').hidden = !f;
@@ -560,6 +560,8 @@ function loop() {
   const delta = new THREE.Vector3(me.x, 0, me.z).sub(controls.target).multiplyScalar(Math.min(1, dt * 4));
   controls.target.add(delta); camera.position.add(delta); controls.update();
   panelAcc += dt; if (panelAcc > 0.5) { panelAcc = 0; drawPanel(); drawCouncil(); drawLore(); }
+  // the generation ends after its last day: everyone learns (plain brains evolve, AI brains get the town's memory), and a new town starts
+  if (!genEnding && !evolving() && !(ffLeft > 0) && S.day > S.genDays) { genEnding = true; paused = true; drawSpeed(); const st = S.endGeneration(); saveLore(); note(`Day ${S.genDays} is over: generation ${st.gen} ends. Everyone learns from it. A new town begins in a moment...`); setTimeout(() => location.reload(), 5000); }
   // context buttons
   const where = S.areaOf(me);
   $('cShop').hidden = !(S.business[where] && S.shopOpen(where)); $('cWork').hidden = !['bakery', 'store', 'smithy', 'tavern', 'fields', 'ranch'].includes(where);

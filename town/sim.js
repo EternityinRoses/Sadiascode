@@ -817,6 +817,7 @@ function Sim(opts = {}) {
     if (['grain', 'meat', 'fish', 'eggs', 'apple'].reduce((n, k) => n + (p.items[k] || 0), 0) > 3 && p.food > 0.4 && p.town !== 'marrow' && !(p.cd?.fence > sim.t) && (sim.people[sim.business.store.owner]?.coin || 0) > 10) add('fence', 3 + p.traits.greed * 2);
     // the hurt go to the doctor (free, paid by taxes)
     if (p.hp < p.maxhp * 0.6 && doctorIn()) add('treat', 5 + (1 - p.hp / p.maxhp) * 6);
+    if (p.sick?.sym && doctorIn()) add('treat', 7);
     // guards: pursue the wanted (bounties make it pay)
     if (isGuard(p) && inShift(p.job, h)) {
       const wanted = living().filter(q => q !== p && q.jailedUntil <= 0 && openRecord(q).length && hasEvidence(q) && dist2(p, q) < 60);
@@ -1246,6 +1247,19 @@ function Sim(opts = {}) {
     const stat = { gen: n.gen + 1, days: sim.day, people: pop.length, alive: alive.length, deaths: sim.rec.deaths, avgFit: +(fit.reduce((a, b) => a + b, 0) / Math.max(1, fit.length)).toFixed(1), bestFit: +Math.max(0, ...fit).toFixed(1), agree: n.asked ? +(n.agree / n.asked).toFixed(2) : null, taught: n.imitated, words, crimes: sim.rec.crimes, gini: snapshot().gini };
     n.history.push(stat); if (n.history.length > 500) n.history.shift(); n.gen++; n.agree = 0; n.asked = 0;
     stat.animals = aEndGeneration();
+    try {
+      const ppl = everyone().filter(p => p.kind === 'human' && !p.town && p.id !== 'player'), lived = ppl.filter(p => p.alive);
+      const role = p => (p.id === sim.mayorId ? 'the mayor' : p.job === 'none' ? 'a jobless one' : 'a ' + JOBS[p.job].title.toLowerCase()) + (p.underworld ? ' who was also a ' + p.underworld.role : '') + (p.gang ? ' in a gang' : '');
+      const ranked = lived.slice().sort((a, b) => trueWorth(b) - trueWorth(a));
+      const cause = { beasts: 0, people: 0, starvation: 0, disease: 0, other: 0 };
+      for (const b of sim.bodies) { const k = b.killer && sim.animals[b.killer] ? 'beasts' : b.killer ? 'people' : /starv/.test(b.how || '') ? 'starvation' : Object.values(DISEASES).some(D => D.name.toLowerCase() === b.how) ? 'disease' : 'other'; cause[k]++; }
+      const dead = Object.entries(cause).filter(([, n]) => n).map(([k, n]) => `${n} by ${k}`).join(', ') || 'none';
+      const lines = [`Generation ${stat.gen} (${sim.day - 1} days): ${lived.length} of ${ppl.length} lived. Richest: ${ranked.slice(0, 3).map(p => role(p) + ' ~' + Math.round(trueWorth(p)) + 'c').join('; ') || 'nobody'}. Poorest: ${ranked.slice(-2).map(role).join('; ') || 'nobody'}. Deaths: ${dead}. ${sim.rec.arrests} arrests for ${sim.rec.crimes} crimes.`];
+      if (cause.beasts) lines.push('Beasts came out of the Wildwood every night at 22:00 and killed whoever they caught out.');
+      if (cause.disease) lines.push('Sickness killed people; the ones who rested at the Infirmary with the doctor in mostly lived.');
+      if (cause.starvation) lines.push('People starved: food and coin for it mattered.');
+      sim.lore.wisdom = [...(sim.lore.wisdom || []), ...lines].slice(-8);
+    } catch (e) {}
     sim.onGeneration?.(stat); return stat;
   }
   sim.endGeneration = endGeneration;
@@ -1581,7 +1595,7 @@ function Sim(opts = {}) {
         if (p.studied >= 480) { p.studied = 0; const k = pick(['diplomacy', 'sense', 'heal', 'spot', 'bluff', 'intimidate', 'openlock']); p.skills[k]++; log('life', `${fullName(p)} finishes a course of lessons: ${k} +1.`, [p.id]); }
         return;
       }
-      case 'treat': { if (!arrive(p, tk.to, dt)) return; p.state = 'patient'; if (p.hp >= p.maxhp * 0.9 || !doctorIn()) p.task = null; return; }
+      case 'treat': { if (!arrive(p, tk.to, dt)) return; p.state = 'patient'; if (p.hp >= p.maxhp * 0.9 && !p.sick?.sym || !doctorIn()) p.task = null; return; }
       case 'arrest': {
         const q = target(tk.target); if (!q || !q.alive || q.jailedUntil > 0) { p.task = null; return; }
         if (!conscious(q)) { return setTask(p, 'haul', { target: q.id, until: sim.t + 240 }); }
@@ -1658,7 +1672,7 @@ function Sim(opts = {}) {
   }
   sim.forgeWork = forgeWork;
   function eatFrom(p) {
-    for (const k of ['pie', 'meal', 'meat', 'fish', 'bread', 'eggs', 'turnip', 'milk', 'apple', 'berries']) if (p.items[k] > 0) { p.items[k]--; p.food = Math.min(1, p.food + GOODS[k].food); if (GOODS[k].water) p.water = Math.min(1, (p.water ?? 1) + GOODS[k].water); return true; }
+    for (const k of ['pie', 'meal', 'meat', 'fish', 'bread', 'eggs', 'turnip', 'milk', 'apple', 'berries']) if (p.items[k] > 0) { p.items[k]--; if (['meat', 'fish', 'berries'].includes(k) && Math.random() < 0.03) expose(p, 'blinding', 'bad ' + k); p.food = Math.min(1, p.food + GOODS[k].food); if (GOODS[k].water) p.water = Math.min(1, (p.water ?? 1) + GOODS[k].water); return true; }
     return false;
   }
   const priceOf = (bid, item) => Math.max(1, Math.round(GOODS[item].price * (sim.business[bid]?.mult?.[item] ?? 1)));
@@ -2053,7 +2067,7 @@ function Sim(opts = {}) {
   sim.standIns = standIns;
   // who needs carrying to the infirmary: the dying, and the badly hurt left lying (not those in a fight, a cell or already carried)
   function patients() {
-    return living().filter(q => q.kind === 'human' && q.alive && !q.fight && q.jailedUntil <= 0 && !q.carriedBy && areaOf(q) !== 'healer' && (q.dying || (q.down && q.hp < q.maxhp * 0.5)))
+    return living().filter(q => q.kind === 'human' && q.alive && !q.fight && q.jailedUntil <= 0 && !q.carriedBy && areaOf(q) !== 'healer' && (q.dying || (q.down && q.hp < q.maxhp * 0.5) || (q.down && q.sick?.sym)))
       .sort((a, b) => (b.dying ? 1 : 0) - (a.dying ? 1 : 0));
   }
   sim.patients = patients;
@@ -2066,6 +2080,77 @@ function Sim(opts = {}) {
       q.hp = Math.min(q.maxhp, q.hp + dt / 30); q.nl = Math.max(0, Math.min(q.nl, q.maxhp - q.hp));
     }
   }
+  // ---- disease (SRD 3.5, Disease: https://www.dandwiki.com/wiki/SRD:Disease) -------------------
+  // Exposure -> Fort save vs DC, or catch it. After the incubation, a save every day: fail and the damage lands, two
+  // saves in a row (devil chills: three) and it's beaten. A doctor at the Infirmary can roll Heal instead of your save
+  // (SRD long-term care); mummy rot never yields to saves, only to a cleric. Ability damage comes back 1 a day.
+  // Con 0 kills; Str or Dex 0 leaves you helpless; Int, Wis or Cha 0 knocks you out.
+  const DISEASES = {
+    blinding: { name: 'Blinding sickness', via: 'ingested', dc: 16, inc: [1, 3], dmg: { str: [1, 4] }, blind: true },
+    cackle:   { name: 'Cackle fever', via: 'inhaled', dc: 16, inc: [1, 1], dmg: { wis: [1, 6] }, spreads: 2.5 },
+    demon:    { name: 'Demon fever', via: 'injury', dc: 18, inc: [1, 1], dmg: { con: [1, 6] }, drain: true },
+    chills:   { name: 'Devil chills', via: 'injury', dc: 14, inc: [1, 4], dmg: { str: [1, 4] }, saves: 3 },
+    filth:    { name: 'Filth fever', via: 'injury', dc: 12, inc: [1, 3], dmg: { dex: [1, 3], con: [1, 3] } },
+    mindfire: { name: 'Mindfire', via: 'inhaled', dc: 12, inc: [1, 1], dmg: { int: [1, 4] }, spreads: 2.5 },
+    mummy:    { name: 'Mummy rot', via: 'contact', dc: 20, inc: [1, 1], dmg: { con: [1, 6] }, cleric: true },
+    redache:  { name: 'Red ache', via: 'injury', dc: 15, inc: [1, 3], dmg: { str: [1, 6] } },
+    shakes:   { name: 'Shakes', via: 'contact', dc: 13, inc: [1, 1], dmg: { dex: [1, 8] }, spreads: 1.5 },
+    slimy:    { name: 'Slimy doom', via: 'contact', dc: 14, inc: [1, 1], dmg: { con: [1, 4] }, drain: true },
+  };
+  sim.DISEASES = DISEASES;
+  const fortSave = p => d(20) + mod(p.st.con) + (p.cls === 'warrior' ? 2 + Math.floor((p.level || 1) / 2) : Math.floor((p.level || 1) / 3));
+  function expose(p, key, why) {
+    if (!p || !p.alive || p.kind !== 'human' || p.sick || !DISEASES[key]) return false;
+    if (fortSave(p) >= DISEASES[key].dc) return false;
+    const D = DISEASES[key];
+    p.sick = { key, day: sim.day, onset: sim.day + irnd(D.inc[0], D.inc[1]), sym: false, streak: 0, why: why || '' };
+    return true;
+  }
+  sim.expose = expose;
+  function hurtAbility(p, k, amt, perm, D) {
+    p.abDmg ||= {}; p.st[k] -= amt; p.abDmg[k] = (p.abDmg[k] || 0) + amt - perm;
+    if (p.st[k] > 0) return;
+    p.abDmg[k] += p.st[k]; p.st[k] = 0;
+    if (k === 'con') { if (p.brain === 'human') { p.st.con = 1; p.down = 'out'; p.downUntil = sim.t + 1440; log('life', `${p.name} collapses with ${D.name}.`, [p.id]); } else die(p, null, D.name.toLowerCase()); return; }
+    p.down = 'out'; p.downUntil = sim.t + 1440;
+    log('life', `${fullName(p)} is laid low by ${D.name.toLowerCase()} (${k} gone).`, [p.id]);
+  }
+  function diseaseDay() {
+    for (const p of living()) {
+      if (p.kind !== 'human') continue;
+      if (p.abDmg) for (const k of Object.keys(p.abDmg)) if (p.abDmg[k] > 0) { p.abDmg[k]--; p.st[k]++; }
+      const s = p.sick; if (!s) continue;
+      const D = DISEASES[s.key];
+      if (!s.sym) { if (sim.day < s.onset) continue; s.sym = true; log('life', `${fullName(p)} falls ill: ${D.name.toLowerCase()}.`, [p.id]); remember(p, { text: `I fell ill with ${D.name.toLowerCase()}${s.why ? ' (from ' + s.why + ')' : ''}` }); }
+      const atCare = ['healer', 'chapel'].includes(areaOf(p)) || p.state === 'patient';
+      if (D.cleric) { if (atCare && living().some(q => q.job === 'cleric' && free(q) && q.task?.kind === 'work')) { p.sick = null; log('life', `The cleric drives the ${D.name.toLowerCase()} out of ${fullName(p)}.`, [p.id]); continue; } }
+      let r = fortSave(p);
+      const doc = atCare && living().find(q => q.job === 'doctor' && free(q) && areaOf(q) === 'healer');
+      if (doc) r = Math.max(r, d(20) + (doc.skills.heal || 0));
+      if (r >= D.dc) { if (D.cleric) continue; if (++s.streak >= (D.saves || 2)) { p.sick = null; log('life', `${fullName(p)} shakes off the ${D.name.toLowerCase()}${doc ? ' (with ' + doc.name + "'s care)" : ''}.`, [p.id]); remember(p, { text: `I got over ${D.name.toLowerCase()}` }); } continue; }
+      s.streak = 0;
+      for (const [k, [n, sides]] of Object.entries(D.dmg)) {
+        if (!p.alive) break;
+        const amt = roll(n, sides), perm = D.drain && amt >= 2 && fortSave(p) < D.dc ? 1 : 0;
+        hurtAbility(p, k, amt, perm, D);
+        if (D.blind && amt >= 2 && !p.blind && p.alive && fortSave(p) < D.dc) { p.blind = true; p.skills.spot -= 10; log('life', `${fullName(p)} goes blind from ${D.name.toLowerCase()}.`, [p.id]); }
+      }
+    }
+    // now and then something goes round the town on its own: bad air off the marsh, a cough from the caravans
+    if (Math.random() < 0.3) { const pool = living().filter(q => q.kind === 'human' && !q.town && q.id !== 'player' && !q.sick); const q = pool.length && pick(pool); if (q) expose(q, pick(['cackle', 'mindfire', 'shakes', 'filth']), 'the town air'); }
+  }
+  function diseaseHour() {   // the catching kinds pass to whoever is close to the sick
+    for (const p of living()) {
+      const D = p.sick?.sym && DISEASES[p.sick.key]; if (!D?.spreads) continue;
+      for (const q of living()) if (q !== p && q.kind === 'human' && !q.sick && dist2(p, q) < D.spreads && sameSpace(p, q) && Math.random() < 0.15) expose(q, p.sick.key, p.name);
+    }
+  }
+  function sickText(p) {
+    const s = p.sick?.sym ? ` Sick with ${DISEASES[p.sick.key].name.toLowerCase()}${p.sick.key === 'mummy' ? ' (only a cleric can cure it: go to the Chapel or Infirmary while one is working)' : ' (rest at the Infirmary while a doctor is in, to fight it off)'}.` : '';
+    const w = p.abDmg ? Object.entries(p.abDmg).filter(([, v]) => v > 0).map(([k, v]) => `${k} -${v}`) : [];
+    return s + (w.length ? ` Weakened: ${w.join(', ')}.` : '') + (p.blind ? ' Blind.' : '');
+  }
+  sim.sickText = sickText;
   function carry(p, q) { q.carriedBy = p.id; q.x = p.x + 0.3; q.z = p.z + 0.3; }
   function drop(q) { q.carriedBy = null; }
   function doRescue(p, dt) {
@@ -2194,6 +2279,7 @@ function Sim(opts = {}) {
     const soaked = Math.min(dmg, dr); dmg -= soaked;
     if (dmg <= 0) return logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()}, but the ${(ARMOR[t.armor] || ARMOR.none).name.toLowerCase()} takes it all (${total} vs AC ${ac}).`);
     hurt(t, dmg, wantNL, a);
+    if (a.kind === 'animal' && t.kind === 'human' && t.alive && Math.random() < 0.3) expose(t, ({ bear: 'redache', boar: 'redache', direwolf: 'chills', ogre: 'demon' })[a.species] || 'filth', 'a ' + String(a.name).toLowerCase() + ' bite');
     logF(f, `${a.name} hits ${t.name} with ${w.name.toLowerCase()} for ${dmg}${soaked ? ` (${soaked} soaked by armour)` : ''}${wantNL ? ' nonlethal' : ''}${crit ? ' (critical!)' : ''} (${total} vs AC ${ac}). ${status(t)}`);
   }
   sim.attack = attack;
@@ -2377,6 +2463,7 @@ function Sim(opts = {}) {
   // ============================================================ the town ==
   // salaries, rent, taxes, the cart, newcomers and leavers, elections
   function dailyTick() {
+    diseaseDay();
     sim.day++;
     // taxes on sales, collected by the town
     for (const b of Object.values(sim.business)) { const owner = sim.people[b.owner]; if (owner && owner.alive && b.owed >= 1) { const n = pay(owner, 'town', Math.floor(b.owed), 'tax'); b.owed -= n; } b.sales = 0; }
@@ -2617,7 +2704,7 @@ function Sim(opts = {}) {
   function facts(p, short) {
     const g = p.gang && sim.gangs[p.gang];
     return [
-      `You: ${p.name} ${p.surname} (id ${p.id}), ${p.age}, ${p.gender === 'nb' ? 'nonbinary' : p.gender === 'm' ? 'man' : 'woman'}. Health ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${p.nl} bruising)` : ''}. ${p.food < 0.3 ? 'Hungry.' : 'Fed.'}${(p.water ?? 1) < 0.3 ? ' Thirsty.' : ''} Purse ${p.coin}c${p.home != null ? `, savings at home ${HOUSES[p.home].stash}c` : ''}. Carrying ${WEAPONS[p.weapon].name.toLowerCase()} (${WEAPONS[p.weapon].dmg[0]}d${WEAPONS[p.weapon].dmg[1]}${WEAPONS[p.weapon].range ? ', ranged' : ''}), ${(ARMOR[p.armor] || ARMOR.none).name.toLowerCase()} (AC ${acOf(p)}${(ARMOR[p.armor] || ARMOR.none).dr ? ', soaks ' + ARMOR[p.armor].dr : ''})${p.shield && p.shield !== 'none' ? ', ' + SHIELDS[p.shield].name.toLowerCase() : ''}; pack: ${Object.entries(p.items).filter(([, n]) => n > 0).map(([k, n]) => n + ' ' + k).join(', ') || 'empty'}.`,
+      `You: ${p.name} ${p.surname} (id ${p.id}), ${p.age}, ${p.gender === 'nb' ? 'nonbinary' : p.gender === 'm' ? 'man' : 'woman'}. Health ${Math.max(0, p.hp)}/${p.maxhp}${p.nl ? ` (${p.nl} bruising)` : ''}${sickText(p)}. ${p.food < 0.3 ? 'Hungry.' : 'Fed.'}${(p.water ?? 1) < 0.3 ? ' Thirsty.' : ''} Purse ${p.coin}c${p.home != null ? `, savings at home ${HOUSES[p.home].stash}c` : ''}. Carrying ${WEAPONS[p.weapon].name.toLowerCase()} (${WEAPONS[p.weapon].dmg[0]}d${WEAPONS[p.weapon].dmg[1]}${WEAPONS[p.weapon].range ? ', ranged' : ''}), ${(ARMOR[p.armor] || ARMOR.none).name.toLowerCase()} (AC ${acOf(p)}${(ARMOR[p.armor] || ARMOR.none).dr ? ', soaks ' + ARMOR[p.armor].dr : ''})${p.shield && p.shield !== 'none' ? ', ' + SHIELDS[p.shield].name.toLowerCase() : ''}; pack: ${Object.entries(p.items).filter(([, n]) => n > 0).map(([k, n]) => n + ' ' + k).join(', ') || 'empty'}.`,
       `What you're good at: ${Object.entries(p.skills).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => k + ' +' + v).join(', ')}; attack +${babOf(p) + Math.max(mod(p.st.str), mod(p.st.dex))}.`,
       `Job: ${JOBS[p.job].title}${p.id === sim.mayorId ? ' (mayor)' : ''}${p.rank ? ', ' + p.rank : ''}.${inUnderworld(p) ? ` You are in the underworld${p.underworld?.role ? ' (' + (SEEDY_ROLES[p.underworld.role] || p.underworld.role) + ')' : p.onPayroll ? ' (on the take)' : ''}.` : ''}${p.spouse ? ' Married to ' + sim.people[p.spouse]?.name + '.' : ''}${g ? ` In ${g.name}${g.boss === p.id ? ' (boss)' : ''}.` : ''}${openRecord(p).length ? ` The guard has ${openRecord(p).length} charge(s) on you.` : ''}${p.jailedUntil > 0 ? ' You are in a jail cell.' : ''}`,
       `Now: day ${sim.day}, ${sim.clock()}${night() ? ' (night)' : ''}, at ${AREAS[areaOf(p)]?.name || 'the road'}. You can see: ${inView(p) || 'nobody'}.`,
@@ -2640,6 +2727,7 @@ function Sim(opts = {}) {
     `Here is what careers you can do: ${careers()}`,
     `Fighting (D&D 3.5 rules): anyone can attack anyone, with lethal or nonlethal blows. In a fight you take turns: attack, charge, shoot (and reload a crossbow), total defence, intimidate, feint, drink a healing draught, stabilise the dying, coup de grace on the helpless, rob the beaten, run, withdraw, or surrender. Weapons hit far harder than fists, armour soaks blows, the wounded can bleed out, and death is permanent. Guards who win with nonlethal blows take the loser to jail. You choose how you fight with "fighting": {"blows": "lethal"|"nonlethal", "flee_below": 0-1 (run when health falls under this share), "surrender": true|false, "shout": true|false (call for the guard)}.`,
     personaOf(p),
+    sim.lore?.wisdom?.length ? `What Hollow Town remembers from earlier generations (old stories, not your life; learn from them): ${sim.lore.wisdom.join(' ')}` : '',
     sim.playerId ? `Rose of the City (id "player") is a human player, an outsider from the city; she can't die (she is knocked out instead). Treat her like anyone else.` : '',
     `You are one person, living one life. Each message you get is a moment of it: a PLAN moment (decide what to do) or a TALK moment (someone is in front of you). Each says what is available right now and how to reply.`,
   ].filter(Boolean).join('\n');
@@ -2874,6 +2962,7 @@ function Sim(opts = {}) {
       if (sim.beastAt && sim.t >= sim.beastAt) { invade(!sim.invaded); sim.invaded = true; sim.beastAt = null; }
       // every night at 22:00 something comes out of the Wildwood (Rose, 2026-10-10)
       if (sim.lastBeastNight !== sim.day && sim.t % 1440 >= 22 * 60) { sim.lastBeastNight = sim.day; invade(!sim.invaded); sim.invaded = true; }   // (this block runs on the hour, so: 22:00)
+      diseaseHour();
       if (h === 18 && sim.day % 7 === 3) guardVote('the weekly vote');
       if (h === 21 && sim.day % 7 === 5) for (const g of Object.values(sim.gangs)) gangVote(g, 'the weekly reckoning');
       for (const p of living()) if (!waitsForOrders(p) && p.task && (p.agenda?.length && !['jail', 'flee', 'talk', 'tail'].includes(p.task.kind) || !['jail', 'sleep', 'work', 'flee', 'follow', 'caravan', 'fish', 'tail', 'talk'].includes(p.task.kind)) && sim.t - p.task.t0 > 60) p.task = null;   // replan hourly
@@ -3115,8 +3204,8 @@ function Sim(opts = {}) {
       case 'stand': { if (areaOf(me) !== 'hall') return 'Stand for mayor at the town hall.'; if (sim.election.candidates.includes(me.id)) return 'You are already standing.'; if (pay(me, 'town', 5) < 5) return 'The fee is 5c.'; sim.election.candidates.push(me.id); log('politics', `${fullName(me)} stands for mayor.`, [me.id]); return 'You are a candidate.'; }
       case 'report': { if (areaOf(me) !== 'station') return 'Report crimes at the guard station desk.'; const subj = sim.people[extra.about]; if (!subj) return 'Report whom?'; const ev = sim.events.filter(e => e.actor === subj.id && (e.victim === me.id || sees(me, e.at))).slice(-1)[0] || { id: 'pr' + Math.random(), type: extra.crime || 'theft', actor: subj.id, victim: me.id, lie: true }; fileReport(me, ev); return `It's on the record against ${subj.name}.`; }
       case 'carry': { if (!t || t.kind !== 'human' || conscious(t) || !near(1.6)) return 'There\'s nobody down here to carry.'; me.carrying = me.carrying === t.id ? null : t.id; if (!me.carrying) drop(t); return me.carrying ? `You pick up ${t.name}.` : `You set ${t.name} down.`; }
-      case 'loot': { const b = sim.bodies.find(b => !b.buried && dist2(me, b) < 1.6); if (!b) return 'No body here.'; const n = b.coin; b.coin = 0; me.coin += n; deed('theft', me, null, me); return `You go through ${b.name}'s pockets: ${n}c.`; }
-      case 'dig': { const gr = sim.graves.find(g => dist2(me, g.at) < 1.5 && !g.robbed); if (!gr) return 'No grave here.'; gr.robbed = true; me.coin += gr.coin || 0; deed('desecration', me, null, me); return `You dig up ${gr.name}: ${gr.coin || 0}c.`; }
+      case 'loot': { const b = sim.bodies.find(b => !b.buried && dist2(me, b) < 1.6); if (!b) return 'No body here.'; const n = b.coin; b.coin = 0; me.coin += n; if (Math.random() < 0.25) expose(me, 'slimy', 'a corpse'); deed('theft', me, null, me); return `You go through ${b.name}'s pockets: ${n}c.`; }
+      case 'dig': { const gr = sim.graves.find(g => dist2(me, g.at) < 1.5 && !g.robbed); if (!gr) return 'No grave here.'; gr.robbed = true; me.coin += gr.coin || 0; if (Math.random() < 0.3) expose(me, 'mummy', 'an opened grave'); deed('desecration', me, null, me); return `You dig up ${gr.name}: ${gr.coin || 0}c.`; }
     }
     return '';
   };
