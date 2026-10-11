@@ -81,3 +81,7 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **Status:** tested in node (keywords, sentence cuts, lore cleaning, 2-day run with chat; phrases now get reused).
 
 - **(Hollow Town) Cloude option in Settings (Nimbus):** town/index.html: added 'Cloude (in its chat)' to the Mayor and Townsfolk brain menus, which used to show blank for the cloude provider. Backup .backups\20261010-211500__town__index.html.
+
+- **(Hollow Town) Escape button (Nimbus):** town/index.html + view.js: an 'Escape' button (cEscape) that shows only while Rose is jailed and runs playerDo('escape'). Backups .backups\20261010-214000__town__*.
+
+- **(Hollow Town) Talk from jail (Nimbus):** town/sim.js doAs: a jailed but conscious person can still talk, say, bribe, persuade, give, intimidate and lie (jailTalk); moving stays blocked. Backup .backups\20261010-214500__town__sim.js.

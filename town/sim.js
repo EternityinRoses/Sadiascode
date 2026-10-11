@@ -2940,7 +2940,8 @@ function Sim(opts = {}) {
     const t = tid ? (sim.people[tid] || sim.animals[tid]) : null;
     if (CRIME_VERBS.has(kind) && !inUnderworld(me)) return 'That takes a place in the underworld.';
     if (kind === 'escape') { if (!(me.jailedUntil > 0)) return 'You are not locked up.'; const was = me.jailedUntil; tryEscape(me, true); return me.jailedUntil > 0 ? 'The cell holds.' : (was ? 'You are out.' : ''); }
-    if (!me || !free(me)) return 'You can\'t do that right now.';
+    const jailTalk = me && me.jailedUntil > 0 && conscious(me) && ['talk', 'say', 'bribe', 'persuade', 'give', 'intimidate', 'lie'].includes(kind);   // a cell has bars, not a gag
+    if (!me || (!free(me) && !jailTalk)) return 'You can\'t do that right now.';
     const near = (r = 2) => t && dist2(me, t) <= r;
     const d20r = () => d(20);
     switch (kind) {

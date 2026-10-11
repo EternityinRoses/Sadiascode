@@ -281,7 +281,7 @@ $('aLie').onclick = () => {
 $('lieGo').onclick = () => { const c = $('lieCrime').value; doTo('lie', c === 'liar' ? { about: $('lieAbout').value, liar: true } : { about: $('lieAbout').value, crime: c, victim: selected }); $('liebox').hidden = true; };
 // context actions where you stand
 $('cWork').onclick = () => note(S.playerDo('work')); $('cStudy').onclick = () => note(S.playerDo('study'));
-$('cStand').onclick = () => note(S.playerDo('stand')); $('cEat').onclick = () => note(S.playerDo('eat'));
+$('cStand').onclick = () => note(S.playerDo('stand')); $('cEscape').onclick = () => note(S.playerDo('escape')); $('cEat').onclick = () => note(S.playerDo('eat'));
 $('cBurgle').onclick = () => note(S.playerDo('burgle')); $('cLoot').onclick = () => note(S.playerDo('loot')); $('cDig').onclick = () => note(S.playerDo('dig'));
 $('cWait').onclick = () => { for (let i = 0; i < 120; i++) S.step(0.5); note('You wait an hour.'); };
 $('cMode').onclick = () => { me.prefMode = me.prefMode === 'nonlethal' ? 'lethal' : 'nonlethal'; drawPanel(); };
@@ -562,7 +562,7 @@ function loop() {
   // context buttons
   const where = S.areaOf(me);
   $('cShop').hidden = !(S.business[where] && S.shopOpen(where)); $('cWork').hidden = !['bakery', 'store', 'smithy', 'tavern', 'fields', 'ranch'].includes(where);
-  $('cStudy').hidden = where !== 'school'; $('cStand').hidden = where !== 'hall'; $('cReport').hidden = where !== 'station';
+  $('cStudy').hidden = where !== 'school'; $('cStand').hidden = where !== 'hall'; $('cReport').hidden = where !== 'station'; $('cEscape').hidden = !(me.jailedUntil > 0);
   $('cBurgle').hidden = !(S.AREAS[where]?.house && me.home !== S.HOUSES.findIndex(h => h.id === where));
   { const an = selected && S.animals[selected]; $('cFeed').hidden = !(an && an.alive && !an.game && S.dist(me, an) < 2.5); }
   $('cQuit').hidden = me.job === 'none'; $('cDismiss').hidden = !me.party; $('cFish').hidden = S.dist(me, S.SPOTS.pond) > 7; $('cForage').hidden = !['orchard', 'wood'].includes(where);
