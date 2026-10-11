@@ -121,12 +121,14 @@ const KIND_CLASS = { crime: 'sig', law: 'law', politics: 'pol', gang: 'gang', de
 // which tab a line belongs in: crime = crimes that happened and the law; accusations stay under lies/rumors
 const ACCUSE = /committed|robs|steals|lifts|burgl|mugs|arrest|jail|report|wanted|bounty|ambush|slaughters one/i;
 const tabOf = e => e.kind === 'crime' || e.kind === 'law' ? 'crime' : e.kind === 'lie' || e.kind === 'rumor' ? (e.kind === 'rumor' ? 'rumor' : 'lie') : e.kind === 'town' ? 'politics' : e.kind;
-const shows = d => filter === 'all' || d.dataset.tab === filter || d.dataset.kind === filter || filter === 'lie' && d.dataset.kind === 'lie' || filter === 'rumor' && d.dataset.kind === 'rumor';
+const shows = d => filter === 'all' || filter === 'me' && d.classList.contains('me') || d.dataset.tab === filter || d.dataset.kind === filter || filter === 'lie' && d.dataset.kind === 'lie' || filter === 'rumor' && d.dataset.kind === 'rumor';
 function emptyNote() { let n = $('logEmpty'); if (!n) { n = document.createElement('div'); n.id = 'logEmpty'; n.className = 'k'; logEl.appendChild(n); } n.textContent = `Nothing under "${filter}" yet.` + (filter === 'crime' ? ' Most crime happens in the evening and at night.' : ''); n.hidden = filter === 'all' || [...logEl.children].some(d => d !== n && !d.hidden); }
 function logLine(e) {
   const d = document.createElement('div'); d.className = KIND_CLASS[e.kind] || 'base'; d.dataset.kind = e.kind;
   d.textContent = `d${e.day} ${e.clock}  ${e.text}`; d.dataset.tab = tabOf(e); d.hidden = !shows(d);
   if (e.who?.includes('player')) d.classList.add('me');
+  const pick = (e.who || []).find(id => id !== 'player' && (S.people[id] || S.animals[id]));
+  if (pick) { d.classList.add('pick'); d.title = 'Click to select ' + (S.people[pick] || S.animals[pick]).name; d.onclick = () => { selected = pick; drawPanel(); $('sayText')?.focus(); }; }
   logEl.appendChild(d); while (logEl.children.length > 600) logEl.firstChild.remove();
   if ($('logEmpty') && !d.hidden) $('logEmpty').hidden = true;
   if (!d.hidden) logEl.scrollTop = 1e9;
@@ -234,7 +236,7 @@ function personPanel(p) {
 function townPanel() {
   const m = S.people[S.mayorId], c = S.people[S.captainId], h = S.history.slice(-1)[0] || S.snapshot();
   const gangs = Object.values(S.gangs).map(g => `<span class="gang">${g.name}</span> (${S.people[g.boss]?.name}${g.acting ? ' acting' : ''}${g.underboss && S.people[g.underboss] ? ', ' + S.people[g.underboss].name : ''}; ${S.gangMembers(g.id).length})`).join(', ') || 'none';
-  const nextE = Math.ceil(S.day / 7) * 7 === S.day && S.hour() >= 12 ? S.day + 7 : Math.ceil(S.day / 7) * 7;
+  const nextE = S.nextElectionDay ? S.nextElectionDay() : Math.ceil(S.day / 7) * 7;
   return `<b>Day ${S.day}</b> · ${S.clock()} ${S.night() ? '· night' : ''}${S.curfew ? ' · <span class="sig">curfew</span>' : ''}<br>
     <span class="k">Mayor</span> ${m ? S.fullName(m) + (m.brain === 'mayor-ai' ? ' <span class="pol">(Claude)</span>' : '') : '<i>vacant</i>'} · <span class="k">Captain</span> ${c?.name || '<i>none</i>'}${c?.rank === 'acting captain' ? ' <i>(acting)</i>' : ''}${(() => { const sg = S.living().find(q => q.rank === 'sergeant'); return sg ? ' · <span class="k">Sergeant</span> ' + sg.name : ''; })()}<br>
     <span class="k">Treasury</span> <b>${S.treasury}c</b> · tax ${Math.round(S.taxRate * 100)}% · rent ${S.rent}c · head ${S.headTax}c<br>
@@ -347,6 +349,7 @@ S.onChat = async c => {
       try { const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: sp.brain, kind: 'chat', system: S.identityFor(sp), prompt, town: townId, day: S.day, person: sp.id, name: S.fullName(sp), player: c.a === 'player', reply: turn > 0 || !!heard }) }); dec = (await r.json()).decision; } catch (e) {}
       if (dec) { sp.lastTalk = { day: S.day, clock: S.clock(), to: to.id === 'player' ? 'Rose' : to.name, dec }; if (!last) dec.end = false; }
       said = S.applyChat(sp, to, dec);
+      if (!said && to.id === 'player') said = S.plainSay(sp, to, heard);   // their AI didn't answer: they still say something back
     } else said = S.plainSay(sp, to, heard);   // a plain brain answers in its own words
     if (!said) break;
     bubbles[sp.id] = { text: said, until: performance.now() + 7000 };

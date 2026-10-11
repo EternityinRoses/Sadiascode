@@ -3137,7 +3137,7 @@ function Sim(opts = {}) {
         if (!whisper && /^\W*(guard|help)\b.*!|guard!/i.test(text)) hueAndCry(me);
         for (const q of living()) if (q !== me && (whisper ? q === to : inEarshot(q, me))) remember(q, { text: whisper ? `${me.name} whispered to me: "${text}"` : q === to ? `${me.name} said to me: "${text}"` : `${me.name} said: "${text}"` });
         remember(me, { said: (text.toLowerCase().match(/[a-z']{4,}/g) || []).pop() });
-        const listener = aimed ? (thinks(to) && conscious(to) && !to.fight ? to : null) : living().filter(q => q !== me && thinks(q) && conscious(q) && !q.fight && dist2(q, me) < 5 && hears(q, me)).sort((a, b) => dist2(a, me) - dist2(b, me))[0];
+        const listener = aimed ? (thinks(to) && conscious(to) && !to.fight ? to : null) : living().filter(q => q !== me && q.kind === 'human' && thinks(q) && !q.fight && inEarshot(q, me)).sort((a, b) => dist2(a, me) - dist2(b, me))[0];
         if (listener && sim.onChat) sim.onChat({ a: 'player', b: listener.id, heard: text });
         else if (aimed) { if (conscious(to) && !to.fight && !thinks(to)) plainSay(to, me, text); }
         else { const plain = living().filter(q => q !== me && !thinks(q) && q.kind === 'human' && conscious(q) && !q.fight && dist2(q, me) < 5 && hears(q, me)).sort((a, b) => dist2(a, me) - dist2(b, me))[0]; if (plain) plainSay(plain, me, text); }
