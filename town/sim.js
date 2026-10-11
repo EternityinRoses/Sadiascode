@@ -511,7 +511,7 @@ function Sim(opts = {}) {
     const seen = witnesses(at.kind ? P(at.x, at.z) : at, [actor], ['assault', 'mugging', 'murder', 'vandalism'].includes(type));
     if (victim && victim.kind === 'human' && conscious(victim) && !seen.includes(victim) && extra.victimKnows !== false && dist2(victim, at) < 2.5) seen.push(victim);
     if (victim && victim.kind === 'human' && seen.includes(victim)) victim.alert = true;
-    if (['assault', 'mugging', 'murder', 'robbery'].includes(type) && actor.id !== 'player' || ['assault', 'mugging', 'murder', 'robbery'].includes(type)) { const crier = seen.filter(w => w !== actor && w.kind === 'human' && !thinks(w) && w.brain !== 'human' && conscious(w) && !isGuard(w)).find(w => Math.random() < 0.25 + w.traits.honesty * 0.4 - w.traits.caution * 0.1); if (crier) setTimeout0(() => hueAndCry(crier)); }
+    if (['assault', 'mugging', 'murder', 'robbery'].includes(type) && actor.id !== 'player' || ['assault', 'mugging', 'murder', 'robbery'].includes(type)) { const crier = seen.filter(w => w !== actor && w.kind === 'human' && w.brain !== 'human' && conscious(w) && !isGuard(w)).find(w => Math.random() < 0.25 + w.traits.honesty * 0.4 - w.traits.caution * 0.1); if (crier) setTimeout0(() => hueAndCry(crier)); }
     for (const w of seen) { perceive(w, ev, 'saw', null); w.alert = true; if (w.state === 'sleep' && w.brain !== 'human') { w.task = null; w.state = 'idle'; } }
     sim.events.push(ev); if (sim.events.length > 400) sim.events.shift();
     return { ev, seen };

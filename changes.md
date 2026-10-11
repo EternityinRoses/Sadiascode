@@ -89,3 +89,5 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **(Hollow Town) NPCs answer each other (Nimbus):** the per-person chat limit (chat_every_minutes) was also blocking *replies*, so talks died after one line. view.js now sends reply:true for answers; server.py only limits starting a talk. Backups .backups\20261010-215500__town__view.js / server.py.
 
 - **(Hollow Town) Pip attack loop (Nimbus):** sim.js animal 'attack' act: a beast drops its grudge (hurtBy) on someone who's unconscious or jailed instead of starting a new 0-round fight every minute. Backup .backups\20261010-221000__town__sim.js.
+
+- **(Hollow Town) AI witnesses shout for the guard (Nimbus):** sim.js deed(): the hue-and-cry crier no longer skips AI-run people (!thinks), so with the townsfolk on an AI brain, witnesses of assault/murder still call the guard. Backup .backups\20261010-222500__town__sim.js.
