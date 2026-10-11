@@ -173,3 +173,5 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - Hollow Town: game animals give XP when brought down (rabbit and pheasant 25, deer 100, boar 300, shared by the hunting party). More than one blacksmith: the smithy's owner hires up to two hired smiths ('Smith (hired)', 4c a shift, full speed at the forge) before apprentices. The People count on the left panel no longer includes Marrowford's people (the generation already ignored them).
 
 - Hollow Town: a generation is a week again at most: it ends at dawn on day 8 (Days per generation + 1), or sooner if everyone in town is dead. The troll and two bears come on the last night.
+
+- Hollow Town: new occupation, Leatherworker (bench behind the smithy, 7:00-17:00, their own boss). Wolf pelt - armour (4 h), bear pelt or troll hide - armour (6 h); buys a pelt from the store when out; sells each piece to the smithy at 85% (it goes on the smithy's rack), or wears it if it beats their armour, or keeps it. AI: 'become a leatherworker'. Plain folk with no work take it up when they hold a pelt, or when pelts pile up at the store with nobody working them.
