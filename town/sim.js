@@ -437,7 +437,9 @@ function Sim(opts = {}) {
   }
   function invade(first) {
     const day = sim.day + 20, pool = first ? ['bear'] : Object.keys(BEASTS).filter(k => BEASTS[k].from <= day && (k !== 'ogre' || day >= 35));
-    const kind = pick(pool.length ? pool : ['bear']), b = BEASTS[kind], n = first ? 1 : irnd(b.pack[0], b.pack[1] + Math.floor((day - 21) / 14));
+    // the last night of every generation (day 3, 6, ...) brings an ogre, sometimes two (Rose)
+    const finale = !first && sim.day % (sim.genDays || 3) === 0;
+    const kind = finale ? 'ogre' : pick(pool.length ? pool : ['bear']), b = BEASTS[kind], n = first ? 1 : finale ? (Math.random() < 0.35 ? 2 : 1) : irnd(b.pack[0], b.pack[1] + Math.floor((day - 21) / 14));
     const at = pick([P(-104, rnd(-15, 15)), P(-104, rnd(-15, 15)), P(-66, -48), P(-66, 48)]);
     const got = []; for (let i = 0; i < n; i++) got.push(spawnBeast(kind, at));
     sim.beastsSeen = (sim.beastsSeen || 0) + n;
