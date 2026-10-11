@@ -325,3 +325,16 @@ reach of something that would otherwise have to break a door.
 - **Fixed:** a caravan leader who got thirsty was put back on the road every moment and never reached water.
   The smith's old caravan instinct (always "12 pieces to export") pulled the smith off the forge every morning.
   It now counts real surplus.
+
+### Hints removed (before the first real run)
+- The doom preacher persona is gone (it "knew" the Wildwood sends monsters).
+- The win line now reads "You can't do it alone." instead of "It is up to all of you, together, to make sure that
+  doesn't happen."
+- The status line is "Building: the palisade ... the barricade on your house ...", with no "Defences" heading and no
+  note about things battering through.
+- Class and spell texts name animals, not beasts or giants (ranger favoured enemy: animals or people; druid and
+  ranger: calm an animal; alarm: a wild animal sets it ringing).
+- The mayor's bounties are "on anyone (or on animals)", and the "animals" key now works.
+- The mayor persona no longer says the town starts without a mayor.
+- Left as they are: the tools themselves (palisade, barracks, watch-fires, alarm bell) and the underworld's
+  "bandit (ambush carts on the Old Road)" career.
