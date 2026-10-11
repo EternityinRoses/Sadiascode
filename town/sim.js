@@ -182,6 +182,7 @@ const JOBS = {
   rancher:    { title: 'Rancher', place: 'ranch', from: 5, to: 15, wage: 0, owner: 'ranch' },
   ranchhand:  { title: 'Ranch hand', place: 'ranch', from: 5, to: 15, wage: 3, payer: 'ranch' },
   mercenary:  { title: 'Sellsword', place: 'tavern', from: 10, to: 22, wage: 0 },
+  hunter:     { title: 'Hunter', place: 'wood', from: 6, to: 18, wage: 0, hunt: true },   // Rose: their own boss, living off game sold at the store
   factor:     { title: 'Marrowford factor', place: 'marrow', from: 7, to: 19, wage: 0 },
   militia:    { title: 'Marrowford militia', place: 'marrow', from: 6, to: 22, wage: 0 },
   none:       { title: 'No work', place: null, wage: 0 },
@@ -798,7 +799,7 @@ function Sim(opts = {}) {
     if (p.town === 'marrow') { if (p.food < 0.5) p.food = 1; if ((p.water ?? 1) < 0.5) p.water = 1; return [{ kind: 'work', value: 5 }]; }
     const add = (kind, value, o = {}) => out.push({ kind, value, ...o });
     // work
-    if (j && j.place && inShift(p.job, h)) add('work', wageOf(p) * 1.4 + 2 + (j.owner ? 3 : 0), {});
+    if (j && j.place && !j.hunt && inShift(p.job, h)) add('work', wageOf(p) * 1.4 + 2 + (j.owner ? 3 : 0), {});
     // eat
     if ((p.water ?? 1) < 0.45) add('drink', (0.6 - p.water) * 16 + 1 + (p.water < 0.15 ? 40 : 0));
     if (p.food < 0.45) {
@@ -813,13 +814,13 @@ function Sim(opts = {}) {
     }
     // hunting: meat to eat or sell; the boar fights back, so a party helps
     const game = Object.values(sim.animals).filter(a => a.game && a.alive);
-    if (game.length && (p.food < 0.5 || p.traits.greed > 0.6) && h >= 6 && h < 19) {
+    if (game.length && (p.food < 0.5 || p.traits.greed > 0.6 || p.job === 'hunter') && h >= 6 && h < 19) {
       const armed = p.weapon !== 'fists', bow = WEAPONS[p.weapon].range;
       for (const sp of Object.keys(GAME)) {
         const any = game.find(a => a.species === sp); if (!any) continue;
         const meat = GAME[sp].meat * priceOf('store', 'meat'), danger = sp === 'boar' ? 6 : sp === 'deer' ? 1.5 : 0, odds = (bow ? 0.7 : armed ? 0.45 : 0.15) * (sp === 'rabbit' || sp === 'pheasant' ? (bow ? 0.9 : 0.5) : 1);
         const v = meat * odds * (p.food < 0.4 ? 1.6 : 1) * 0.35 - danger * p.traits.caution * (p.party ? 0.4 : 1) - 2.5 - (p.job !== 'none' && JOBS[p.job].from != null && inShift(p.job, h) ? wageOf(p) : 0);
-        if (v > 0) add('hunt', v, { species: sp });
+        const vv = v + (p.job === 'hunter' && inShift('hunter', h) ? 5 : 0); if (vv > 0) add('hunt', vv, { species: sp });
       }
     }
     // sleep
@@ -945,7 +946,7 @@ function Sim(opts = {}) {
     if (p.job === 'undertaker' && inShift(p.job, h) && sim.bodies.some(b => b.collected && !b.buried && sim.t >= b.layUntil)) add('bury', 6);
     // school: anyone free can sit a lesson while the teacher is in
     if (h >= 9 && h < 15 && classInSession() && p.job !== 'teacher' && (p.job === 'none' || !inShift(p.job, h))) add('study', 1 + p.traits.ambition * 2 + (st => 0)(0));
-    if (['grain', 'meat', 'fish', 'eggs', 'apple'].reduce((n, k) => n + (p.items[k] || 0), 0) > 3 && p.food > 0.4 && p.town !== 'marrow' && !(p.cd?.fence > sim.t) && (sim.people[sim.business.store.owner]?.coin || 0) > 10) add('fence', 3 + p.traits.greed * 2);
+    if (['grain', 'meat', 'fish', 'eggs', 'apple', 'bearpelt', 'wolfpelt'].reduce((n, k) => n + (p.items[k] || 0), 0) > (p.job === 'hunter' ? 1 : 3) && p.food > 0.4 && p.town !== 'marrow' && !(p.cd?.fence > sim.t) && (sim.people[sim.business.store.owner]?.coin || 0) > 10) add('fence', 3 + p.traits.greed * 2);
     // the hurt go to the doctor (free, paid by taxes)
     if (p.hp < p.maxhp * 0.6 && doctorIn()) add('treat', 5 + (1 - p.hp / p.maxhp) * 6);
     if (p.sick?.sym && !DISEASES[p.sick.key].cleric && doctorIn() && p.coin >= sim.careFee.healer) add('treat', 7);
@@ -1088,7 +1089,9 @@ function Sim(opts = {}) {
       case 'fish': return { kind: 'fish', value: 0 };
       case 'shout': case 'yell': case 'cry': if (who && sim.bounty[who.id]) return { kind: 'doas', verb: 'tipoff', target: who, value: 0 }; return { kind: 'doas', verb: 'shout', value: 0 };
       case 'point': case 'rat': case 'tip': case 'betray': return who && sim.bounty[who.id] ? { kind: 'doas', verb: 'tipoff', target: who, value: 0 } : null;
-      case 'take': case 'become': case 'join': { if (/underworld|thief|burglar|mugger|robber|extort|bandit|rustler|fence|smuggl|crook|crim/.test(rest)) { const role = Object.keys(SEEDY_ROLES).find(r => rest.includes(r.slice(0, 5))) || 'thief'; return { kind: 'takeup', role, value: 0 }; } if (kind === 'join' && who?.gang) return { kind: 'join', gang: who.gang, value: 0 }; return null; }
+      case 'take': case 'become': case 'join': case 'hunter': { if (/hunt/.test(kind + ' ' + (rest || '')) && !/underworld/.test(rest || '')) return p.job === 'none' ? { kind: 'doas', verb: 'becomehunter', value: 0 } : null; }
+      // falls through
+      case 'takeup_': { if (/underworld|thief|burglar|mugger|robber|extort|bandit|rustler|fence|smuggl|crook|crim/.test(rest)) { const role = Object.keys(SEEDY_ROLES).find(r => rest.includes(r.slice(0, 5))) || 'thief'; return { kind: 'takeup', role, value: 0 }; } if (kind === 'join' && who?.gang) return { kind: 'join', gang: who.gang, value: 0 }; return null; }
       case 'size': case 'sizeup': case 'study': case 'watch': return who ? { kind: 'doas', verb: 'sizeup', target: who, value: 0, reach: 8 } : (kind === 'study' ? { kind: 'study', value: 0 } : null);
       case 'case': { const n = +(rest.match(/\d+/) || [0])[0]; const bid = Object.keys(sim.business).find(b => rest.includes(b)); const owner = who; const hi = n ? n - 1 : owner?.home; if (bid) return { kind: 'doas', verb: 'case', at: SPOTS[bid], extra: { business: bid }, value: 0 }; return hi != null && HOUSES[hi] ? { kind: 'doas', verb: 'case', at: HOUSES[hi].door, extra: { house: hi }, value: 0 } : null; }
       case 'hide': return { kind: 'doas', verb: 'hide', value: 0 };
@@ -1916,7 +1919,7 @@ function Sim(opts = {}) {
     if (!arrive(p, dest, dt, 1.8)) return;
     // sell the cargo to the town's businesses at their price (or stock your own)
     let earned = 0;
-    for (const k of ['grain', 'meat', 'turnip', 'fish', 'eggs', 'apple']) {
+    for (const k of ['grain', 'meat', 'turnip', 'fish', 'eggs', 'apple', 'bearpelt', 'wolfpelt']) {
       const n = Math.max(0, (p.items[k] || 0) - (p.task.fence && k !== 'grain' ? 1 : 0)); if (!n) continue;
       const bid = k === 'grain' ? 'bakery' : 'store', b = sim.business[bid], owner = sim.people[b.owner];
       if (owner === p) { b.stock[k] = (b.stock[k] || 0) + n; p.items[k] = 0; continue; }
@@ -2714,6 +2717,7 @@ function Sim(opts = {}) {
           log('death', `${by.id === 'player' ? 'You' : fullName(by)} ${by.id === 'player' ? 'kill' : 'kills'} the ${t.name.toLowerCase()}!${bounty ? ` The town pays ${bounty}c.` : ''}`, [by.id]);
           for (const q of living()) if (q.kind === 'human' && q !== by && sees(q, t)) { bump(q, by, 'like', 0.1); glimpse(q, by, seen(q, by).worth + 10, 0.2); }
         }
+        if (t.game && by && by.kind === 'human' && by.job === 'none' && !by.town && by.brain !== 'human' && Math.random() < 0.4) { by.job = 'hunter'; log('life', `${fullName(by)} takes up hunting for a living.`, [by.id]); }
         if (t.meat && by && by.kind === 'human') {     // the kill is shared among the hunting party in the fight
           const f = sim.fights.find(f => f.sides.has(by.id)), share = f ? f.order.map(body).filter(q => q && q.kind === 'human' && q.alive && f.sides.get(q.id) === f.sides.get(by.id)) : [by];
           for (let i = 0; i < t.meat; i++) { const q = share[i % share.length]; q.items.meat = (q.items.meat || 0) + 1; }
@@ -3154,7 +3158,7 @@ function Sim(opts = {}) {
   const SEEDY = ['pickpocket (lift coin from people)', 'burglar (houses and shops, at night)', 'mugger (rob people by force)', 'shop robber (hold up a keeper)', 'extortionist (sell a business "insurance")', 'bandit (ambush carts on the Old Road)', 'rustler (take the ranch\'s animals)', 'fence (sell stolen goods)', 'gang boss or member (found or join a crew)', 'sellsword (hire out as muscle)', 'a bribe-taking official (if you hold an office)', 'liar and slanderer'];
   const COMMANDS = ['take up <seedy career> (at the Drowned Lantern after dark)', 'go straight', 'size up <person> (judge their purse, gear and gang)', 'case <house address or business> (underworld: savings, lock, who is in)', 'hide (underworld)', 'wait for <person> (underworld: hidden, until they come near)', 'steal <item> (underworld: shoplift)', 'escape (from a cell)', 'turn in (the belongings of a dead stranger you found, at the guard station)', 'get cured (when sick: the Infirmary doctor tries for 3c, the Chapel cleric cures anything for 6c; only a few patients at a time)', 'shout for the guard (any time)', 'point out <person> to the guard (someone on the bounty board you can see)', 'bribe <person> <coins>', 'intimidate <person>', 'persuade <person>', 'accuse <person> of <crime> (to the person beside you)', 'call <person> a liar (to the person beside you)', 'give <person> <coins>', 'propose to <person>', 'invite <person> (to come with you; add coins to pay them)', 'hire <person> as a bodyguard <coins> (the mayor, guard captain or a gang boss: they follow and fight for you for a day)', 'dismiss (your party)', 'quit (your job)', 'carry <person> (someone who is down)', 'loot (the body, or someone knocked out, beside you: takes everything they carry and wear)', 'dig (rob the grave beside you)', 'feed <animal>', 'report <person> for <crime> (at the guard station)', 'work', 'eat', 'drink', 'sleep', 'buy <item> (at an open shop)', 'sell <item>', 'buy house <address> (10c, at the town hall)', 'rent <address> (a bed from its owner, a night at a time; renews itself while you can pay)', 'move out', 'go to <place, address or person> (e.g. "go to 3 Wick Lane", "go to Guard station")', 'rally <place or address> (the mayor calls the town, the guard captain the guards, a gang boss the crew: they come and hold there about two hours)', 'follow <person>', 'stay', 'visit <person>', 'court <person>', 'boast <person>', 'tavern', 'forage', 'fish', 'hunt <animal>', 'beg', 'apply for work with <person>', 'lease <business> (at the town hall)', 'stand for mayor', 'campaign', 'recruit <person>', 'found a gang', 'coup', 'pickpocket <person>', 'mug <person>', 'burgle', 'rob <shop>', 'extort <business>', 'attack <person>', 'ambush (the Old Road)', 'caravan (to Marrowford)', 'signon (as a sellsword)', 'report <person> (at the guard station)', 'flee'];
   function careers() {
-    const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${sim.wages[k] ?? j.wage}c by the town` : j.wage ? `, ${j.wage}c a shift from the owner` : ''})`);
+    const legit = Object.entries(JOBS).filter(([k, j]) => !['none', 'factor', 'militia', 'mayor', 'captain'].includes(k)).map(([k, j]) => `${j.title} (${AREAS[j.place]?.name || j.place}${j.from != null ? `, ${j.from}:00-${j.to % 24}:00` : ''}${j.hunt ? ', your own boss: hunt game in the Wildwood and sell the meat and pelts at the store ("become a hunter")' : j.owner ? ', runs the business: lease it at the hall or be hired by its owner' : j.payer === 'town' ? `, paid ${sim.wages[k] ?? j.wage}c by the town` : j.wage ? `, ${j.wage}c a shift from the owner` : ''})`);
     return `${legit.join('; ')}; Mayor (elected, ${sim.wages.mayor ?? JOBS.mayor.wage}c); Guard captain (elected by the guards). Outside the law (the underworld): ${SEEDY.join('; ')}. The underworld's tools (pickpocket, mug, burgle, rob, steal, hide, case, wait for, extort, ambush, rustle) come with a place in it: take up a seedy career at the Drowned Lantern after dark ("take up <career>"), found or join a gang, or, as a guard, take someone's money. "go straight" leaves it.`;
   }
   sim.careers = careers;
@@ -3691,6 +3695,7 @@ function Sim(opts = {}) {
         return `${keeper?.name || 'Someone'} catches you reaching for the ${GOODS[item].name.toLowerCase()}! (${r} vs ${sp})`;
       }
       case 'dismiss': { if (!me.party) return 'You have no party.'; disband(me); return 'You send your party home.'; }
+    case 'becomehunter': { if (me.job !== 'none') return 'Quit your work first.'; me.job = 'hunter'; log('life', `${fullName(me)} takes up hunting for a living.`, [me.id]); return 'You take up hunting: game in the Wildwood, sold at the store.'; }
     case 'rentout': { const mine = housesOf(me); if (!mine.length) return 'You own no house.'; const n = clamp(Math.round(extra.amount || 2), 1, 5); for (const i of mine) { HOUSES[i].ask = n; HOUSES[i].askSet = true; } log('trade', `${me.name} asks ${n}c a night for a bed.`, [me.id]); return `You ask ${n}c a night.`; }
     case 'moveout': { if (me.home == null) return 'You have no home.'; if (HOUSES[me.home].owner === me.id) return 'It is your own house.'; evict(me, 'moved out'); return 'You move out.'; }
     case 'buyhouse': return buyHouse(me, extra.house ?? HOUSES.findIndex(h => !h.owner));
