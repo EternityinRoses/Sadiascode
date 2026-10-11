@@ -47,6 +47,15 @@ Backups are named `<time>__<path with __ for slashes>`, e.g. `20261010-135314__D
 - **Files:** `app.py` (`/api/settings` accepts `compact_at`, 50,000 to 1,000,000; `/api/status` returns it), `static/index.html` (a "Context window" number field above Auto-run), `static/app.js` (fills and saves it).
 - **Undo:** `git revert` the commit "Settings: context window (compact_at) field", or just set the field back to 100000.
 
+## (Hollow Town) The mayor is played by Cloude
+- **When / who:** 2026-10-10, Nimbus. Rose: "make the original mayor literally you, like the LLM seat in LoH.exe".
+- **Files (all in git):**
+  - `town/server.py`: new provider `"cloude"` (added to `PROVIDERS`), `ask_model` sends it to new `ask_cloude()`. That drops `request_<id>.json` in `seats\town_mayor\` (made on first use, with a `SEAT.json` saying `"game": "Hollow Town"`) and waits up to 150 s for `reply_<id>.txt`. In `think()` a `cloude` brain plans at most every `cloude_every_minutes` (5).
+  - `town/town_brains.json`: mayor `{"provider": "cloude", "model": "mayor"}`, plus `cloude_every_minutes: 5`. Folk stays on `gpt-oss:20b-cloud` (qwen3.5:4b was tried and lagged, reverted).
+  - `app.py`: new `seat_game(folder)` reads that `"game"` so the turn says "in Hollow Town", not "in Legends of Harpine".
+- **Undo:** set the mayor back in `town_brains.json` (e.g. `{"provider": "ollama", "model": "gpt-oss:120b-cloud", "host": "http://localhost:11434"}`); delete `seats\town_mayor\`. Code: `git revert` the commits, or leave it (unused without a `cloude` brain).
+- **Needs:** Cloude **Restart** (app.py), Cloude running with seats on, and Town.bat restarted.
+
 ## 5. Game log in the seat mailbox (wishlist #3)
 - **When / who:** 2026-10-10, Nimbus
 - **Files (game, not in git):**
