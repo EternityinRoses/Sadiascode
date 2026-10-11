@@ -185,3 +185,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - HT giving (giveTo), shelter 1 sp/night (bedFor/settleBed, roofed vs vagrancy), the Cellar (crew sleep free), busking (buskRound), wood from day one; craft progress kept (p.craftProg). Smoke: .backups/smoke_shelter.mjs.
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT giving (giveTo), shelter 1 sp/night (bedFor/settleBed, roofed vs vagrancy), the Cellar (boss + gang members only, crewish), busking (buskRound), wood from day one; craft progress kept (p.craftProg). Smoke: .backups/smoke_shelter.mjs.
