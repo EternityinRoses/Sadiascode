@@ -263,7 +263,7 @@ function attracted(a, b) {
 const shieldOf = p => { const sh = SHIELDS[p.shield || 'none'] || SHIELDS.none; return WEAPONS[p.weapon]?.hands === 2 && !sh.buckler ? SHIELDS.none : sh; };
 const acOf = p => 10 + (ARMOR[p.armor] || ARMOR.none).ac + shieldOf(p).ac + Math.min(mod(p.st.dex), (ARMOR[p.armor] || ARMOR.none).maxDex) + (p.defending ? 4 : 0) - (p.charged ? 2 : 0) - (p.flatfooted ? Math.max(0, mod(p.st.dex)) : 0);
 const babOf = p => CLASSES[p.cls].bab(p.level);
-const conscious = p => p.alive && !p.down && !p.dying && p.hp > 0 && p.nl < p.hp;
+const conscious = p => p.alive && !p.down && !p.dying && p.hp > 0;   // one health bar (LoH's rule): bruising comes off it too
 const free = p => conscious(p) && !(p.jailedUntil > 0);
 
 // ------------------------------------------------------------- the sim --
@@ -1957,7 +1957,7 @@ function Sim(opts = {}) {
     q.jailedUntil = sim.t + sentence * 24 * 60 / 4;   // a quarter day per point of crime
     q.task = { kind: 'jail', t0: sim.t }; q.state = 'jail';
     const cell = SPOTS.cells.find(c => !living().some(o => o !== q && o.jailedUntil > 0 && dist2(o, c) < 0.5)) || SPOTS.cells[0];
-    place(q, cell); q.down = null; q.nl = 0; if (q.hp < 1) q.hp = 1;
+    place(q, cell); q.down = null; if (q.hp < 1) { q.nl = Math.max(0, q.nl - (1 - q.hp)); q.hp = 1; }
     if (g) { g.stats.arrests++; sim.rec.arrests++; const b = sim.bounty[q.id]; if (b) { pay('town', g, b); delete sim.bounty[q.id]; } }
     log('law', `${fullName(q)} is jailed for ${(sentence / 4).toFixed(1)} days${g ? ' by ' + g.name : ''}.`, [q.id, g?.id].filter(Boolean));
   }
@@ -2063,7 +2063,7 @@ function Sim(opts = {}) {
   function treatPatients(dt) {
     for (const q of living()) if (areaOf(q) === 'healer' && q.kind === 'human' && q.hp < q.maxhp) {
       if (q.dying) { q.dying = false; q.down = 'out'; q.downUntil = sim.t + 60; }
-      q.hp = Math.min(q.maxhp, q.hp + dt / 30); q.nl = Math.max(0, q.nl - dt / 10);
+      q.hp = Math.min(q.maxhp, q.hp + dt / 30); q.nl = Math.max(0, Math.min(q.nl, q.maxhp - q.hp));
     }
   }
   function carry(p, q) { q.carriedBy = p.id; q.x = p.x + 0.3; q.z = p.z + 0.3; }
@@ -2220,15 +2220,18 @@ function Sim(opts = {}) {
       }
       return;
     }
-    if (nonlethal) t.nl += dmg; else t.hp -= dmg;
+    // ONE BAR (as in LoH, src/rules/health.js, Rose 2026-09-19: "you just gave the enemy a second health bar... one that's invisible").
+    // Every blow comes off hp. A blow that can't kill stops at 0: out cold and stable, never dying. nl only remembers
+    // how much of the missing hp is bruising, which comes back with rest; a real wound doesn't.
+    if (nonlethal) { const real = Math.min(dmg, Math.max(0, t.hp)); t.hp -= real; t.nl += real; t.lastHurtBy = by?.id; if (t.hp <= 0 && !t.down) { t.down = 'out'; t.downUntil = sim.t + 30 + dmg * 6; } return; }
+    t.hp -= dmg;
     t.lastHurtBy = by?.id;
     if (t.hp <= -10 && by?.monster) by.kills = (by.kills || 0) + 1;
     if (t.hp <= -10) { if (t.brain === 'human') { t.hp = 0; t.down = 'out'; t.downUntil = sim.t + 30; } else die(t, by, 'killed in a fight'); }
     else if (t.hp <= 0) { if (t.brain === 'human') { t.down = 'out'; t.downUntil = sim.t + 30; } else { t.dying = t.hp < 0; t.down = 'dying'; } }
-    else if (t.nl >= t.hp) { t.down = 'out'; t.downUntil = sim.t + 30 + t.nl * 6; }
   }
   sim.hurt = hurt;
-  const status = t => !t.alive ? `${t.name} is dead.` : t.kind === 'animal' ? '' : t.dying ? `${t.name} is dying.` : t.down === 'out' ? `${t.name} is knocked out.` : t.hp <= 0 ? `${t.name} is disabled.` : t.nl >= t.hp ? `${t.name} is staggered.` : '';
+  const status = t => !t.alive ? `${t.name} is dead.` : t.kind === 'animal' ? '' : t.dying ? `${t.name} is dying.` : t.down === 'out' ? `${t.name} is knocked out.` : t.hp <= 0 ? `${t.name} is disabled.` : '';
   function provoke(f, mover) {
     for (const q of threatened(f, mover)) { if (q.aooUsed === f.round) continue; q.aooUsed = f.round; logF(f, `${q.name} gets an attack of opportunity on ${mover.name}.`); attack(f, q, mover); }
   }
@@ -2416,7 +2419,7 @@ function Sim(opts = {}) {
     // nonlethal heals; injuries mend a little each day
     for (const b of (sim.brews || []).filter(b => sim.t >= b.ready)) sim.business.tavern.stock.ale = (sim.business.tavern.stock.ale || 0) + b.ale;
     sim.brews = (sim.brews || []).filter(b => sim.t < b.ready);
-    for (const p of living()) { p.nl = 0; if (p.hp < p.maxhp && !p.dying) p.hp = Math.min(p.maxhp, p.hp + p.level); }
+    for (const p of living()) { if (!p.dying) p.hp = Math.min(p.maxhp, p.hp + (p.nl || 0)); p.nl = 0; if (p.hp < p.maxhp && !p.dying) p.hp = Math.min(p.maxhp, p.hp + p.level); }
     // people who can't make a life here leave; newcomers arrive
     for (const p of living()) if (p.brain !== 'human' && p.coin <= 0 && (p.home == null ? 1 : HOUSES[p.home].stash) <= 0 && p.job === 'none' && p.food < 0.2 && Math.random() < 0.4 && p.id !== sim.mayorId) { p.alive = false; p.left = true; p.state = 'left'; sim.rec.leavers++; log('life', `${fullName(p)} gives up on Hollow Town and leaves.`, [p.id]); }
     const pop = living().filter(p => p.brain !== 'human' && p.town !== 'marrow').length;
@@ -2888,8 +2891,8 @@ function Sim(opts = {}) {
       if (p.state !== 'sleep' && Math.random() < dtMin / 8) p.yaw = (p.yaw || 0) + rnd(-1.6, 1.6);
       if (p.items.finery && Math.random() < dtMin / 120) showWealth(p, 70, 0.05);
       if (p.food <= 0) { p.starve = (p.starve || 0) + dtMin; if (p.starve > 3 * 1440 && p.hp > 1 && Math.random() < dtMin / 1440) p.hp -= 1; if (p.starve > 21 * 1440) { if (p.brain === 'human') { p.hp = -1; p.down = 'out'; p.downUntil = sim.t + 60; p.food = 0.3; p.starve = 0; } else die(p, null, 'starvation'); } } else p.starve = 0;
-      if (p.nl > 0 && !p.fight && p.down !== 'out') p.nl = Math.max(0, p.nl - dtMin * (p.level || 1) / 60);
-      if (p.down === 'out' && sim.t >= (p.downUntil || 0) && p.hp > 0) { p.down = null; p.nl = Math.min(p.nl, Math.floor(p.hp / 2)); if (p.state === 'idle' || p.state === 'fight') p.task = null; }
+      if (p.nl > 0 && !p.fight && p.down !== 'out') { p.bruiseHeal = (p.bruiseHeal || 0) + dtMin * (p.level || 1) / 60; if (p.bruiseHeal >= 1) { const h = Math.min(p.nl, Math.floor(p.bruiseHeal)); p.bruiseHeal -= Math.floor(p.bruiseHeal); p.nl -= h; p.hp = Math.min(p.maxhp, p.hp + h); } }   // bruising heals 1 hp per level per hour (SRD)
+      if (p.down === 'out' && sim.t >= (p.downUntil || 0) && (p.hp > 0 || !p.dying && (p.nl > 0 || p.brain === 'human'))) { p.down = null; if (p.hp < 1) { p.nl = Math.max(0, p.nl - (1 - p.hp)); p.hp = 1; } if (p.state === 'idle' || p.state === 'fight') p.task = null; }
       if (p.jailedUntil > 0 && waitsForOrders(p) && !p.awaiting && !(p.cd?.jailask > sim.t)) { cool(p, 'jailask', 180); askOrders(p, 'You are locked in a cell at the guard station.'); }
       if (p.jailedUntil > 0 && p.agenda?.length && /^(escape|break)/.test(p.agenda[0].do)) { p.agenda.shift(); tryEscape(p, true); }
       if (p.jailedUntil > 0) { if (sim.t >= p.jailedUntil) { p.jailedUntil = 0; p.task = null; place(p, SPOTS.desk); log('law', `${fullName(p)} is released from jail.`, [p.id]); } else { if (p.brain !== 'human' && night() && Math.random() < dtMin / 600) tryEscape(p); continue; } }
