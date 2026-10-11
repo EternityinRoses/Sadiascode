@@ -165,3 +165,7 @@ A fixed copy is at `fixed/minds.js` on the branch.
 ## Written straight into memory.md (Oct 11); sort these into place
 
 - HT fail = ticker sim.rec.deaths reaches 5 (Rose). Level-up adds only new slots (gainSlots, p.slotMax).
+
+## Written straight into memory.md (Oct 11); sort these into place
+
+- HT OpenRouter provider: key typed in Settings -> town/openrouter.key (gitignored); default anthropic/claude-haiku-5.5:batch.
