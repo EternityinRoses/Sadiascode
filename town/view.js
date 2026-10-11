@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 const $ = id => document.getElementById(id);
-let townSetup = { start: 'blank', personas: null, studentMode: 'blend', genDays: 14, aiBodies: 'orders' };
+let townSetup = { start: 'blank', personas: null, studentMode: 'blend', genDays: 3, aiBodies: 'orders' };
 try { townSetup = { ...townSetup, ...JSON.parse(localStorage.getItem('hollow-setup') || '{}') }; } catch (e) {}
+if (!townSetup.gen3) { townSetup.genDays = 3; townSetup.gen3 = true; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }   // Rose: generations are 3 days
 const S = TownSim.Sim({ start: townSetup.start, personas: townSetup.personas || undefined });
 S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays;
 const me = S.addPlayer('Rose', 'f');
@@ -441,7 +442,7 @@ function drawMind() {
 document.querySelectorAll('[data-mind]').forEach(b => b.onclick = () => { mindTab = b.dataset.mind; drawMind(); });
 $('mindBtn').onclick = () => { $('mind').hidden = false; drawMind(); }; $('mindClose').onclick = () => $('mind').hidden = true; $('sClose').onclick = () => $('settings').hidden = true;
 $('learnMode2').onclick = () => { S.learning = S.learning ? 0 : 1; $('learnMode2').textContent = S.learning ? 'Plain brains learn: on' : 'Plain brains learn: off'; $('learnMode2').classList.toggle('on', !!S.learning); drawLore(); };
-function saveSetup() { townSetup.aiBodies = $('setBodies').value; if (server) S.aiOnly = townSetup.aiBodies === 'orders'; townSetup.studentMode = $('setBrain').value; townSetup.genDays = +$('setGen').value || 14; S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays; townSetup.start = $('setStart').value; const ps = $('setPersonas').value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean); townSetup.personas = ps.length ? ps : null; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }
+function saveSetup() { townSetup.aiBodies = $('setBodies').value; if (server) S.aiOnly = townSetup.aiBodies === 'orders'; townSetup.studentMode = $('setBrain').value; townSetup.genDays = +$('setGen').value || 3; S.studentMode = townSetup.studentMode; S.genDays = townSetup.genDays; townSetup.start = $('setStart').value; const ps = $('setPersonas').value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean); townSetup.personas = ps.length ? ps : null; try { localStorage.setItem('hollow-setup', JSON.stringify(townSetup)); } catch (e) {} }
 $('setStart').onchange = saveSetup; $('setBrain').onchange = saveSetup; $('setBodies').onchange = saveSetup; $('setGen').onchange = saveSetup; $('setPersonas').onchange = saveSetup;
 $('sSave').onclick = async () => {
   saveSetup();

@@ -428,7 +428,7 @@ function Sim(opts = {}) {
     place(an, P(at.x + rnd(-2, 2), at.z + rnd(-3, 3))); return an;
   }
   function invade(first) {
-    const day = sim.day, pool = first ? ['bear'] : Object.keys(BEASTS).filter(k => BEASTS[k].from <= day && (k !== 'ogre' || day >= 35));
+    const day = sim.day + 20, pool = first ? ['bear'] : Object.keys(BEASTS).filter(k => BEASTS[k].from <= day && (k !== 'ogre' || day >= 35));
     const kind = pick(pool.length ? pool : ['bear']), b = BEASTS[kind], n = first ? 1 : irnd(b.pack[0], b.pack[1] + Math.floor((day - 21) / 14));
     const at = pick([P(-104, rnd(-15, 15)), P(-104, rnd(-15, 15)), P(-66, -48), P(-66, 48)]);
     const got = []; for (let i = 0; i < n; i++) got.push(spawnBeast(kind, at));
@@ -1229,7 +1229,7 @@ function Sim(opts = {}) {
   sim.aEndGeneration = aEndGeneration;
   sim.animalMinds = true;
   // ---- generations ---------------------------------------------------------------
-  sim.genDays = 14; sim.sigma = 0.04;
+  sim.genDays = 3; sim.sigma = 0.04;
   function mutateAll() { for (const p of everyone()) if (p.kind === 'human' && p.brain === 'script' && !p.town) { const nz = new Float32Array(NPARAM); for (let k = 0; k < NPARAM; k++) nz[k] = (Math.random() + Math.random() + Math.random() - 1.5) * 2 * sim.sigma; p.noise = nz; } }
   sim.mutateAll = mutateAll;
   // fitness: the most money, and survival (the dead keep a fraction of what they had)
@@ -2426,7 +2426,7 @@ function Sim(opts = {}) {
     if (pop < 30 && Math.random() < 0.6) newcomers(Math.min(5, 30 - pop));
     // elections every seventh day
     if (sim.day % 7 === 0 || !sim.mayorId && sim.day === 4) sim.election.due = true;
-    if (sim.day === 22 && !sim.firstBeast) { sim.firstBeast = true; sim.beastAt = sim.t + 60 * 18; } else if (sim.firstBeast && sim.day >= (sim.nextInvasion || 99)) sim.beastAt = sim.t + 60 * irnd(15, 22);
+    // (beasts now come every night around 22:00, see the step loop)
     { const left = (7 - sim.day % 7) % 7; const n = [...new Set([...(sim.mayorId ? [sim.mayorId] : []), ...sim.election.candidates])].length; if (left <= 3) log('politics', left === 0 ? `Election day. ${n} on the ballot; the vote is at noon.` : `${left} day${left > 1 ? 's' : ''} to the election. ${n} on the ballot.`); }
     sim.history.push(snapshot());
     if (sim.onChronicle) {
@@ -2872,6 +2872,8 @@ function Sim(opts = {}) {
       if (h === 12 && sim.election.due) runElection();
       standIns();
       if (sim.beastAt && sim.t >= sim.beastAt) { invade(!sim.invaded); sim.invaded = true; sim.beastAt = null; }
+      // every night at 22:00 something comes out of the Wildwood (Rose, 2026-10-10)
+      if (sim.lastBeastNight !== sim.day && sim.t % 1440 >= 22 * 60) { sim.lastBeastNight = sim.day; invade(!sim.invaded); sim.invaded = true; }   // (this block runs on the hour, so: 22:00)
       if (h === 18 && sim.day % 7 === 3) guardVote('the weekly vote');
       if (h === 21 && sim.day % 7 === 5) for (const g of Object.values(sim.gangs)) gangVote(g, 'the weekly reckoning');
       for (const p of living()) if (!waitsForOrders(p) && p.task && (p.agenda?.length && !['jail', 'flee', 'talk', 'tail'].includes(p.task.kind) || !['jail', 'sleep', 'work', 'flee', 'follow', 'caravan', 'fish', 'tail', 'talk'].includes(p.task.kind)) && sim.t - p.task.t0 > 60) p.task = null;   // replan hourly
