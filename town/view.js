@@ -164,7 +164,8 @@ async function ask(q) {
     let dec = null;
     if (server) { const p = S.people[q.person]; const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ waiting: !!q.waiting, brain: q.brain, kind: q.kind, system: p ? S.identityFor(p) : null, prompt: q.turn || q.prompt, town: townId, day: S.day, person: q.person, name: p ? S.fullName(p) : q.person }) }); dec = (await r.json()).decision; }
     else if (sample) { const m = S.people[q.person]; mayorThread.push({ role: 'user', content: (mayorThread.length ? '' : S.identityFor(m) + '\n\n') + (q.turn || q.prompt) }); dec = await sample.json(mayorThread.slice(-12).filter((x, i, a) => !(i === 0 && x.role === 'assistant')), { modelTier: 'default' }); mayorThread.push({ role: 'assistant', content: JSON.stringify(dec) }); if (mayorThread.length > 24) { const first = mayorThread[0]; mayorThread.splice(0, mayorThread.length - 12); if (mayorThread[0].role !== 'user') mayorThread.shift(); mayorThread[0] = { role: 'user', content: first.content.split('\n\n')[0] + '\n\n' + mayorThread[0].content }; } }
-    if (dec) { S.applyDecision(S.people[q.person], q.kind, dec); if (q.kind === 'mayor') logLine({ day: S.day, clock: S.clock(), kind: 'politics', text: `(${S.people[q.person].name}'s choices came from ${server ? server.mayor : 'Claude'}.)`, who: [] }); }
+    if (dec) { const pp = S.people[q.person]; if (pp) pp.lastAI = { day: S.day, clock: S.clock(), kind: q.kind, dec };
+      S.applyDecision(S.people[q.person], q.kind, dec); if (q.kind === 'mayor') logLine({ day: S.day, clock: S.clock(), kind: 'politics', text: `(${S.people[q.person].name}'s choices came from ${server ? server.mayor : 'Claude'}.)`, who: [] }); }
     else q.fallback?.();
   } catch (e) { logLine({ day: S.day, clock: S.clock(), kind: 'sig', text: `The mayor's brain didn't answer (${e.code || e.message || e}); the office runs on its fallback today.`, who: [] }); q.fallback?.(); }
   q.done = true; const i = pending.indexOf(q); if (i >= 0) pending.splice(i, 1); drawCouncil();
@@ -332,15 +333,17 @@ const bubbles = {};
 S.onChat = async c => {
   if (!server || server.folk === 'off' && c.a !== 'player') return;
   let sp = c.a === 'player' ? S.people[c.b] : S.people[c.a], to = c.a === 'player' ? S.people.player : S.people[c.b], heard = c.heard || null;
-  for (let turn = 0; turn < (c.a === 'player' ? 1 : 4); turn++) {
+  for (let turn = 0; turn < (c.a === 'player' ? 1 : 3); turn++) {
     if (!sp?.alive || !to?.alive || !S.conscious(sp) || sp.fight) break;
     let dec = null;
     try { const r = await fetch('/brain', { method: 'POST', body: JSON.stringify({ brain: sp.brain, kind: 'chat', system: S.identityFor(sp), prompt: S.chatTurn(sp, to, heard), town: townId, day: S.day, person: sp.id, name: S.fullName(sp), player: c.a === 'player' }) }); dec = (await r.json()).decision; } catch (e) {}
+    if (dec) sp.lastTalk = { day: S.day, clock: S.clock(), to: to.id === 'player' ? 'Rose' : to.name, dec };
     const said = S.applyChat(sp, to, dec); if (!said) break;
     bubbles[sp.id] = { text: said, until: performance.now() + 7000 };
     if (dec.end || to.id === 'player' || !S.thinks(to)) break;
     heard = said; [sp, to] = [to, sp];
   }
+  for (const x of [sp, to]) if (x && x.brain !== 'human' && x.task?.kind === 'talk') x.task = null;   // conversation over: back to their day
 };
 
 // --------------------------------------------------------------- settings --
@@ -417,6 +420,11 @@ function drawMind() {
     const t = selected && (S.people[selected] || S.animals[selected]);
     if (!t || !t.trace?.length) { box.innerHTML = '<p class="k">Click a person in town, then open this tab: their last 20 choices, who made each one (AI teacher, student, or habit), what else they weighed, and the words they had just heard.</p>'; return; }
     box.innerHTML = `<p><b>${t.kind === 'animal' ? t.name : S.fullName(t)}</b> <span class="k">${t.kind === 'animal' ? t.species : S.JOBS[t.job].title}${t.persona ? ' · pushed' : ''}</span></p><table class="why"><tr><th>when</th><th>where</th><th>chose</th><th>by</th><th>also weighed</th><th>heard</th></tr>${t.trace.slice().reverse().map(r => `<tr><td>d${r.day} ${r.clock}</td><td>${r.where}</td><td><b>${r.chose}</b></td><td class="k">${r.by}</td><td class="k">${r.top.slice(1).map(([l, v]) => l + ' ' + v).join(', ')}</td><td class="k">${r.words.join(' ')}</td></tr>`).join('')}</table>`;
+  } else if (mindTab === 'ais') {
+    const ai = S.living().filter(p => p.brain === 'folk-ai' || p.brain === 'mayor-ai').sort((a, b) => (b.persona || b.brain === 'mayor-ai' ? 1 : 0) - (a.persona || a.brain === 'mayor-ai' ? 1 : 0));
+    if (!ai.length) { box.innerHTML = '<p class="k">No AI-run people in this town. On the PC (Town.bat), with townsfolk brains switched on in Settings, everyone gets an AI.</p>'; return; }
+    const st = p => p.aiDownUntil > S.t ? '<span class="sig">on habits (AI didn’t answer)</span>' : p.awaiting ? 'waiting for its AI' : p.agenda?.length ? 'doing its list' : p.task?.kind || p.state;
+    box.innerHTML = `<p class="k">Every AI-run person: their push (if any), what their AI last decided, what they said, and what they're doing now. Pushed people first.</p><table class="why"><tr><th>who</th><th>now</th><th>last plan</th><th>last words</th></tr>${ai.map(p => `<tr><td><b>${p.name}</b><br><span class="k">${p.brain === 'mayor-ai' ? 'mayor brain: keep power' : p.persona ? p.persona.replace(/^You are \[name\], (you are )?/i, '').slice(0, 60) + '…' : S.JOBS[p.job].title}</span></td><td class="k">${st(p)}${p.failed?.length ? '<br>couldn’t: ' + p.failed.join('; ') : ''}</td><td class="k">${p.lastAI ? `d${p.lastAI.day} ${p.lastAI.clock}: ${(p.lastAI.dec.agenda || []).join(' → ') || '(no steps)'}${p.lastAI.dec.note ? '<br><i>' + String(p.lastAI.dec.note).slice(0, 80) + '</i>' : ''}` : '–'}</td><td class="k">${p.lastTalk ? `to ${p.lastTalk.to}: "${String(p.lastTalk.dec.say || '').slice(0, 90)}"${p.lastTalk.dec.do ? ' [' + p.lastTalk.dec.do + ']' : ''}` : '–'}</td></tr>`).join('')}</table>`;
   } else if (mindTab === 'animals') {
     const A = S.lore.animals || {}, acts = {};
     for (const a of Object.values(S.animals)) if (a.alive && a.act) { (acts[a.species] ||= {})[a.act] = (acts[a.species][a.act] || 0) + 1; }

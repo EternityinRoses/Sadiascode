@@ -934,7 +934,7 @@ function Sim(opts = {}) {
       case 'signon': return p.job === 'none' ? { kind: 'signon', value: 0 } : null;
       case 'caravan': return p.coin >= 4 ? { kind: 'caravan', value: 0 } : null;
       case 'ambush': return { kind: 'ambush', value: 0 };
-      case 'burgle': { const hi = HOUSES.findIndex((h, i) => i !== p.home && h.stash > 0); return hi >= 0 ? { kind: 'burgle', house: hi, value: 0 } : null; }
+      case 'burgle': { const hs = HOUSES.map((h, i) => i).filter(i => i !== p.home), hi = hs.sort((a, b) => HOUSES[b].stash - HOUSES[a].stash + rnd(-3, 3))[0]; return hi != null ? { kind: 'burgle', house: hi, value: 0 } : null; }
       case 'beg': return { kind: 'beg', value: 0 };
       case 'coup': { const g = p.gang && sim.gangs[p.gang], b = g && sim.people[g.boss]; return b && b !== p && b.alive && conscious(b) && b.jailedUntil <= 0 ? { kind: 'coup', target: b, value: 0 } : null; }
       case 'stand': case 'run': return !sim.election.candidates.includes(p.id) && p.id !== sim.mayorId && p.coin >= 5 ? { kind: 'stand', value: 0 } : null;
@@ -1757,7 +1757,7 @@ function Sim(opts = {}) {
   function converse(p, q) {
     if (q.brain === 'human') return;
     // two AI-minded people meeting actually talk (each speaks from their own mind)
-    if (thinks(p) && thinks(q) && sim.onChat && sees(p, q) && sees(q, p) && !(p.cd?.chat > sim.t) && !(q.cd?.chat > sim.t)) { cool(p, 'chat', 240); cool(q, 'chat', 240); sim.onChat({ a: p.id, b: q.id }); }
+    if (thinks(p) && thinks(q) && sim.onChat && sees(p, q) && sees(q, p) && !(p.cd?.chat > sim.t) && !(q.cd?.chat > sim.t)) { cool(p, 'chat', 480); cool(q, 'chat', 480); sim.onChat({ a: p.id, b: q.id }); }
     else if (!thinks(p) && sees(p, q) && !(p.cd?.chat > sim.t) && Math.random() < 0.25) { cool(p, 'chat', 180); const l1 = plainSay(p, q, null); if (l1 && !thinks(q)) plainSay(q, p, l1); }
     bump(p, q, 'like', 0.02 * p.traits.sociability); bump(q, p, 'like', 0.02 * q.traits.sociability);
     bump(p, q, 'trust', 0.01); bump(q, p, 'trust', 0.01);
@@ -2665,8 +2665,7 @@ function Sim(opts = {}) {
     log('talk', `${sp.name} to ${to.id === 'player' ? 'you' : to.name}: "${text}"`, [sp.id, to.id]);
     sp.bubble = { text, t: sim.t };
     // talking stops you where you stand (unless you're in a fight or in jail)
-    for (const [x, y] of [[sp, to]]) if (x.brain !== 'human' && conscious(x) && !x.fight && !(x.jailedUntil > 0) && !dec.end) setTask(x, 'talk', { with: y.id, until: sim.t + 20 });
-    if (to.brain !== 'human' && conscious(to) && !to.fight && !(to.jailedUntil > 0) && !dec.end) setTask(to, 'talk', { with: sp.id, until: sim.t + 20 });
+    for (const [x, y] of [[sp, to], [to, sp]]) if (x.brain !== 'human' && conscious(x) && !x.fight && !(x.jailedUntil > 0)) { if (dec.end) { if (x.task?.kind === 'talk') x.task = null; } else setTask(x, 'talk', { with: y.id, until: sim.t + 6 }); }
     heardBy(to, keywords(text)); if (to.brain !== 'human') to.alert = true;
     if (dec.do) { const step = { do: String(dec.do).slice(0, 80) }; (sp.agenda ||= []).unshift(step); if (!sp.fight && !(sp.jailedUntil > 0)) { sp.task = null; choose(sp); } log('life', sp.agenda[0] !== step ? `${sp.name} goes to ${sp.lastStep}.` : `${sp.name} wants to ${step.do}, but can't right now.`, [sp.id]); }
     if (sp.offerFrom && sp.offerFrom.from === to.id && typeof dec.accept === 'boolean') { const of = sp.offerFrom; sp.offerFrom = null; if (dec.accept && canGive(sp, of.offer.want) && canGive(to, of.offer.give)) settleDeal(to, sp, of.offer); else log('trade', `${sp.name} turns down ${to.name}'s ${of.offer.threat ? 'demand' : 'offer'}.`, [sp.id, to.id]); }
@@ -2829,6 +2828,11 @@ function Sim(opts = {}) {
       if (p.fight || p.brain === 'human' || !conscious(p) || p.carriedBy) continue;
       doTask(p, dtMin);
       if (!p.task) choose(p);
+      else if (waitsForOrders(p) && sim.onChat && !(p.cd?.chat > sim.t) && Math.random() < dtMin / 30) {
+        const q = living().find(q => q !== p && thinks(q) && q.brain !== 'human' && conscious(q) && !q.fight && !(q.cd?.chat > sim.t) && dist2(q, p) < 3 && sees(p, q) && sees(q, p));
+        if (q) { cool(p, 'chat', 480); cool(q, 'chat', 480); sim.onChat({ a: p.id, b: q.id }); }
+      }
+      if (!p.task) {}
       else if (waitsForOrders(p)) { if (p.alert) { p.alert = false; const m = p.memory.slice(-1)[0]; askOrders(p, m?.text || (m?.ev ? `${sim.people[m.actor]?.name} ${m.type}${m.victim ? ' against ' + sim.people[m.victim]?.name : ''} (you ${m.how})` : 'something caught your attention')); } }
       else if (p.alert || sim.t >= (p.nextLook || 0)) { p.nextLook = sim.t + 5 + Math.random() * 3; reconsider(p); }
     }
