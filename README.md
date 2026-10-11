@@ -83,3 +83,18 @@ npc_ai/serve.py        HTTP / stdin server
 models/npc_brain.json  trained model
 tests/                 unit tests
 ```
+
+## Running Hollow Town generations headless
+
+`tools/generations.mjs` runs the town's own simulation (`sim.js`) in Node with
+plain brains only: no browser and no AI calls. It carries the learned lore
+from one generation to the next, as the page does. One generation takes
+about 5-25 seconds.
+
+```bash
+node tools/generations.mjs path/to/town 40 path/to/town/lore.json lore.after.json
+REMEMBER=1 node tools/generations.mjs path/to/town 40 -    # towns that already know beasts come
+```
+
+Each line says whether the town won or failed, the day it failed, deaths by
+cause, and how often people barricaded, built the palisade or lit watch-fires.
